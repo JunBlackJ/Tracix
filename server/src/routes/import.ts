@@ -42,20 +42,22 @@ ${rowDump}
 
 IMPORTANT : Ce fichier peut contenir des lignes de titre, sous-titres ou légendes AVANT et APRÈS les vraies données. Tu dois identifier précisément :
 
-1. headerRowIndex : l'index (0-based) de la ligne qui contient les VRAIS noms de colonnes (ex: "Nom Prénom", "Équipe", "GitHub", etc.) — pas les titres de section
+1. headerRowIndex : l'index (0-based) de la ligne qui contient les VRAIS noms de colonnes (ex: "Nom Prénom", "Équipe", "GitHub", etc.) — pas les titres de section ni les sous-groupes de colonnes
 2. dataEndRow : l'index (exclusif) de la première ligne après les données réelles (pour ignorer les sections LÉGENDE, notes, totaux en bas). null si les données vont jusqu'à la fin
-3. memberCol : index de la colonne (relatif à headerRow) contenant le nom complet de la personne
+3. memberCol : index de la colonne contenant le nom complet de la personne
 4. teamCol : index de la colonne équipe/département — null si absente
 5. emailCol : index de la colonne email — null si absente
-6. platformCols : index de TOUTES les colonnes représentant des plateformes/outils/applications
-7. levelMappings : pour chaque valeur d'accès non-standard trouvée dans les données, mappe vers : "admin", "rw", "ro", "req", ou "none"
-   - "A" ou "Admin" → "admin"
-   - "RW", "Oui", "X", "✓", "1", "Yes" → "rw"
-   - "RO", "Lecture" → "ro"
-   - "REQ", "Sur demande" → "req"
-   - "—", "-", "", "Aucun", "Non", "0" → "none"
+6. platformCols : index de TOUTES les colonnes qui représentent des plateformes, outils ou applications (GitHub, Jira, AWS, CyberPanel, etc.).
+   LISTE ABSOLUMENT TOUTES les colonnes plateforme, sans en oublier aucune.
+   EXCLURE : colonnes identité (nom, prénom, email, équipe, rôle, type de compte, statut, identifiant), colonnes méta (date de revue, commentaire, note, observation).
+7. levelMappings : pour chaque valeur d'accès trouvée dans les données, mappe vers : "admin", "rw", "ro", "req", ou "none"
+   - "A", "Admin", "Administrateur" → "admin"
+   - "RW", "Oui", "X", "✓", "1", "Yes", "Écriture" → "rw"
+   - "RO", "Lecture", "Read" → "ro"
+   - "REQ", "Sur demande", "Request" → "req"
+   - "—", "-", "", "Aucun", "Non", "No", "0" → "none"
 8. confidence : "high", "medium" ou "low"
-9. notes : explication courte en français de ce que tu as détecté
+9. notes : explication courte en français — mentionne le nombre de plateformes trouvées et les lignes ignorées
 
 Réponds UNIQUEMENT avec du JSON valide, sans markdown, sans explication :
 {
@@ -77,7 +79,7 @@ Réponds UNIQUEMENT avec du JSON valide, sans markdown, sans explication :
   });
   const message = await client.messages.create({
     model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
-    max_tokens: 1024,
+    max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   });
 

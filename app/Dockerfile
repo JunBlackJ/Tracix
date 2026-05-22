@@ -15,8 +15,8 @@ FROM caddy:2-alpine
 
 COPY --from=builder /app/dist /srv
 
-RUN printf ':${PORT:-3000}\nroot * /srv\ntry_files {path} /index.html\nfile_server\n' > /etc/caddy/Caddyfile
-
-EXPOSE 3000
-
-CMD caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+CMD sh -c 'echo ":{$PORT}" > /etc/caddy/Caddyfile && \
+    echo "root * /srv" >> /etc/caddy/Caddyfile && \
+    echo "try_files {path} /index.html" >> /etc/caddy/Caddyfile && \
+    echo "file_server" >> /etc/caddy/Caddyfile && \
+    caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'

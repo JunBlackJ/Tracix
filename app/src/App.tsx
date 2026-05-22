@@ -27,7 +27,9 @@ function App() {
   const store = useStore();
 
   // Full-screen spinner while restoring session
-  if (store.isLoading) {
+  const isOAuthCallback = window.location.pathname === '/oauth/callback';
+
+  if (store.isLoading && !isOAuthCallback) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -38,7 +40,7 @@ function App() {
     );
   }
 
-  if (!store.isAuthenticated) {
+  if (!store.isAuthenticated || isOAuthCallback) {
     return (
       <BrowserRouter>
         <Routes>

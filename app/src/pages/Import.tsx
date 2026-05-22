@@ -472,11 +472,19 @@ export function Import() {
         setExcludedPlatformCols(new Set());
 
         // Choisit la feuille la plus susceptible d'être la matrice d'habilitation
-        const bestRaw = raws.find((s) => {
-          const flat = s.allRows.flat().join(' ').toLowerCase();
-          return flat.includes('habilitation') || flat.includes('accès') || flat.includes('acces')
-            || flat.includes('nom') || flat.includes('name') || flat.includes('membre');
-        }) ?? raws[0];
+        // Priorité 1 : nom de la feuille contient un mot-clé
+        const byName = raws.find((s) => {
+          const n = s.name.toLowerCase().replace(/[^\w]/g, '');
+          return n.includes('habilitation') || n.includes('acces') || n.includes('access')
+            || n.includes('droits') || n.includes('rights') || n.includes('users') || n.includes('utilisateurs');
+        });
+        // Priorité 2 : feuille avec le plus de colonnes (probablement la matrice)
+        const byColCount = [...raws].sort((a, b) => {
+          const colsA = Math.max(...a.allRows.map((r) => r.length));
+          const colsB = Math.max(...b.allRows.map((r) => r.length));
+          return colsB - colsA;
+        })[0];
+        const bestRaw = byName ?? byColCount ?? raws[0];
         const idx = raws.indexOf(bestRaw);
         setActiveSheet(idx);
         setMapping(detectColumns(initialParsed[idx].headers));

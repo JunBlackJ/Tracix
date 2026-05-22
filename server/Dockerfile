@@ -1,0 +1,17 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY prisma ./prisma
+COPY tsconfig.json ./
+COPY src ./src
+
+RUN node node_modules/typescript/bin/tsc
+RUN node node_modules/.bin/prisma generate
+
+EXPOSE 4000
+
+CMD ["sh", "-c", "node node_modules/.bin/prisma migrate deploy && node dist/index.js"]

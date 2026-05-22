@@ -6,8 +6,9 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, ArrowLeft, ShieldCheck, Eye, EyeOff, Globe, Users,
-  AlertTriangle, CheckCircle2, XCircle, X, Save, Loader2,
+  AlertTriangle, CheckCircle2, XCircle, X, Save, Loader2, Download,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
 import type { Platform, Member, Alert, AccessRight } from '@/types';
 import { PlatformIcon } from '@/components/ui/PlatformIcon';
@@ -68,13 +69,30 @@ function PlateformesList({ platforms, members: _members, alerts, accessRights, o
           <h1 className="text-xl font-bold text-gray-900">Plateformes</h1>
           <p className="text-sm text-gray-500">{platforms.length} plateformes surveillées</p>
         </div>
-        <button
-          onClick={onNew}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors w-fit"
-        >
-          <Plus className="w-4 h-4" />
-          Nouvelle plateforme
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const ws = XLSX.utils.json_to_sheet(platforms.map((p) => ({
+                Nom: p.name, Catégorie: p.category, URL: p.url,
+                Environnement: p.environment, MFA: p.has_mfa ? 'Oui' : 'Non',
+                Responsable: p.responsible, Statut: p.status,
+              })));
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, 'Plateformes');
+              XLSX.writeFile(wb, 'plateformes.xlsx');
+            }}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-4 h-4" /> Exporter
+          </button>
+          <button
+            onClick={onNew}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Nouvelle plateforme
+          </button>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <Search className="w-4 h-4 text-gray-400" />

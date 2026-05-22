@@ -6,8 +6,9 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, ArrowLeft, Shield, AlertTriangle,
-  ChevronRight, TrendingUp, Edit2, X, Save, Loader2, ShieldAlert,
+  ChevronRight, TrendingUp, Edit2, X, Save, Loader2, ShieldAlert, Download,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { api } from '@/lib/api';
 import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
 import type { Member, Platform, Alert, AccessRight, AccountType, MemberStatus, AccessLevel } from '@/types';
@@ -101,13 +102,29 @@ function MembresList({ members, onNew }: { members: Member[]; onNew: () => void 
           <h1 className="text-xl font-bold text-gray-900">Membres</h1>
           <p className="text-sm text-gray-500">{members.length} membres dans l'organisation</p>
         </div>
-        <button
-          onClick={onNew}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors w-fit"
-        >
-          <Plus className="w-4 h-4" />
-          Nouveau membre
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const ws = XLSX.utils.json_to_sheet(members.map((m) => ({
+                Nom: m.full_name, Email: m.email, Équipe: m.team,
+                Type: m.account_type, Statut: m.status, 'Score risque': m.risk_score,
+              })));
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, 'Membres');
+              XLSX.writeFile(wb, 'membres.xlsx');
+            }}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-4 h-4" /> Exporter
+          </button>
+          <button
+            onClick={onNew}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Nouveau membre
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">

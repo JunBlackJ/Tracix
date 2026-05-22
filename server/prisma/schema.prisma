@@ -30,7 +30,8 @@ model Organization {
   alerts        Alert[]
   auditTrails   AuditTrail[]
   categories    Category[]
-  customModules CustomModule[]
+  customModules    CustomModule[]
+  reviewCampaigns  ReviewCampaign[]
 
   @@map("organizations")
 }
@@ -296,6 +297,45 @@ model Alert {
   organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
 
   @@map("alerts")
+}
+
+// ─── Campagnes de revue d'accès ───
+model ReviewCampaign {
+  id              String   @id
+  organization_id String
+  name            String
+  description     String   @default("")
+  status          String   @default("active")  // active | completed | cancelled
+  created_by      String
+  due_date        String   @default("")
+  completed_at    DateTime?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  items        ReviewItem[]
+
+  @@map("review_campaigns")
+}
+
+model ReviewItem {
+  id              String   @id
+  campaign_id     String
+  organization_id String
+  member_id       String
+  platform_id     String
+  access_right_id String
+  original_level  String
+  decision        String   @default("pending")  // pending | confirmed | revoked | modified
+  new_level       String   @default("")
+  comment         String   @default("")
+  reviewed_by     String   @default("")
+  reviewed_at     DateTime?
+  created_at      DateTime @default(now())
+
+  campaign ReviewCampaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+
+  @@map("review_items")
 }
 
 model AuditTrail {

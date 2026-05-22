@@ -19,6 +19,7 @@ import { Rapports } from '@/pages/Rapports';
 import { Parametres } from '@/pages/Parametres';
 import { Import } from '@/pages/Import';
 import { CustomModulePage } from '@/pages/CustomModulePage';
+import { Revues } from '@/pages/Revues';
 import { OAuthCallback } from '@/pages/OAuthCallback';
 import { Rejoindre } from '@/pages/Rejoindre';
 import { useStore } from '@/hooks/useStore';
@@ -210,6 +211,15 @@ function App() {
                 onOrganizationUpdated={store.setOrganization}
                 onCustomModuleCreated={store.upsertCustomModule}
                 onCustomModuleRemoved={store.removeCustomModule}
+              />
+            }
+          />
+          <Route
+            path="/revues"
+            element={
+              <Revues
+                members={store.members}
+                platforms={store.platforms}
               />
             }
           />

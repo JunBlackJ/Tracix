@@ -6,6 +6,7 @@ import type {
   UserApp, Organization, Member, Platform, AccessRight,
   System, NetworkFlow, Subscription, Alert, AuditTrail,
   AccessLevel, Category, ModuleId, CustomModule, CustomEntry,
+  ReviewCampaign, ReviewItem,
 } from '@/types';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
@@ -416,6 +417,30 @@ export const api = {
     },
     batchNetworkFlows(data: { flows: { source: string; destination: string; port?: string; protocol?: string; status?: string; direction?: string }[] }): Promise<{ created: number; skipped: number }> {
       return request('/import/batch-network-flows', { method: 'POST', body: JSON.stringify(data) });
+    },
+  },
+
+  reviews: {
+    list(): Promise<ReviewCampaign[]> {
+      return request('/reviews');
+    },
+    create(data: { name: string; description?: string; due_date?: string; platformIds?: string[]; teamFilter?: string }): Promise<ReviewCampaign> {
+      return request('/reviews', { method: 'POST', body: JSON.stringify(data) });
+    },
+    get(id: string): Promise<ReviewCampaign & { items: ReviewItem[] }> {
+      return request(`/reviews/${id}`);
+    },
+    decide(campaignId: string, itemId: string, data: { decision: 'confirmed' | 'revoked' | 'modified'; new_level?: string; comment?: string }): Promise<ReviewItem> {
+      return request(`/reviews/${campaignId}/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(data) });
+    },
+    bulk(campaignId: string, data: { itemIds: string[]; decision: 'confirmed' | 'revoked'; comment?: string }): Promise<{ processed: number; remaining: number }> {
+      return request(`/reviews/${campaignId}/bulk`, { method: 'POST', body: JSON.stringify(data) });
+    },
+    complete(id: string): Promise<{ success: boolean }> {
+      return request(`/reviews/${id}/complete`, { method: 'POST' });
+    },
+    delete(id: string): Promise<void> {
+      return request(`/reviews/${id}`, { method: 'DELETE' });
     },
   },
 

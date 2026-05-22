@@ -21,6 +21,7 @@ import categoriesRoutes from './routes/categories';
 import customModulesRoutes from './routes/custom-modules';
 import organizationsRoutes from './routes/organizations';
 import invitationsRoutes from './routes/invitations';
+import reviewsRoutes from './routes/reviews';
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use('/api/categories', categoriesRoutes);
 app.use('/api/custom-modules', customModulesRoutes);
 app.use('/api/organizations', organizationsRoutes);
 app.use('/api/invitations', invitationsRoutes);
+app.use('/api/reviews', reviewsRoutes);
 
 // ─── 404 handler ───
 app.use((_req, res) => {

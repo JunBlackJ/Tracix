@@ -98,6 +98,37 @@ export interface AccessRight {
 // ─── Journal des revues d'accès ───
 export type ReviewDecision = 'confirmed' | 'revoked' | 'downgraded' | 'upgraded';
 
+export interface ReviewCampaign {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  status: 'active' | 'completed' | 'cancelled';
+  created_by: string;
+  due_date: string;
+  completed_at: string | null;
+  created_at: string;
+  totalItems: number;
+  pendingItems: number;
+  completedItems: number;
+}
+
+export interface ReviewItem {
+  id: string;
+  campaign_id: string;
+  organization_id: string;
+  member_id: string;
+  platform_id: string;
+  access_right_id: string;
+  original_level: string;
+  decision: 'pending' | 'confirmed' | 'revoked' | 'modified';
+  new_level: string;
+  comment: string;
+  reviewed_by: string;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
 export interface AccessReviewLog {
   id: string;
   organization_id: string;

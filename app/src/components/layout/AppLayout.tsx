@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, Shield, Server, Network, CreditCard,
   Bell, FileText, ScrollText, Settings, LogOut, Menu, X,
   ChevronDown, ShieldCheck, BarChart2, GitBranch, Import,
-  Plus, Building2, Check,
+  Plus, Building2, Check, ClipboardCheck,
 } from 'lucide-react';
 import type { UserApp, Organization, ModuleId, CustomModule, CustomModuleType } from '@/types';
 import type { OrgEntry } from '@/hooks/useStore';
@@ -40,6 +40,7 @@ const CORE_PATHS = new Set(['/dashboard', '/parametres']);
 const ALL_NAV_ITEMS: { path: string; moduleId?: ModuleId; label: string; icon: React.ElementType }[] = [
   { path: '/dashboard',       label: 'Tableau de bord',  icon: LayoutDashboard },
   { path: '/habilitations',   moduleId: 'habilitations',  label: 'Habilitations',    icon: GitBranch },
+  { path: '/revues',          moduleId: 'habilitations',  label: "Revues d'accès",   icon: ClipboardCheck },
   { path: '/membres',         moduleId: 'membres',        label: 'Membres',          icon: Users },
   { path: '/plateformes',     moduleId: 'plateformes',    label: 'Plateformes',      icon: ShieldCheck },
   { path: '/score-de-risque', moduleId: 'score-de-risque',label: 'Score de risque',  icon: BarChart2 },

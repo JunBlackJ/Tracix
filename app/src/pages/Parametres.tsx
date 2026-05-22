@@ -587,7 +587,7 @@ function SsoSection({ organization }: { organization: Organization | null }) {
     setSaving(true);
     try {
       const updated = await api.saml.saveConfig(form);
-      setCfg({ configured: true, ...updated });
+      setCfg({ ...updated, configured: true });
       setShowForm(false);
       toast.success('Configuration SSO enregistrée');
     } catch (err) {

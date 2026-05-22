@@ -16,6 +16,7 @@ export const DEMO_ORG: Organization = {
   max_admin_per_platform: 3,
   access_review_delay_days: 90,
   subscription_alert_days: 30,
+  enabled_modules: ['habilitations','membres','plateformes','score-de-risque','abonnements','alertes','journal','rapports','import'],
   created_at: '2024-01-15T08:30:00Z',
 };
 

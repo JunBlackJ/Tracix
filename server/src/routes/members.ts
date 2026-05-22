@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { updateMemberRiskScore, recomputeAllRiskScores } from '../services/risk.service';
 import { getLimits, checkLimit } from '../services/plan.service';
+import { processOffboarding } from '../services/cron.service';
 
 const router = Router();
 router.use(requireAuth);
@@ -174,6 +175,51 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 
   const updated = await prisma.member.findUnique({ where: { id: member.id } });
   res.json(updated);
+});
+
+// POST /api/members/:id/offboard — déclencher l'offboarding manuellement
+router.post('/:id/offboard', async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+
+  const member = await prisma.member.findFirst({
+    where: { id: req.params.id, organization_id: orgId },
+    include: { accessRights: { where: { level: { not: 'none' } } } },
+  });
+  if (!member) { res.status(404).json({ error: 'Member not found' }); return; }
+
+  // Revoke all active access rights
+  const revokedCount = member.accessRights.length;
+  if (revokedCount > 0) {
+    await prisma.accessRight.updateMany({
+      where: { member_id: member.id, level: { not: 'none' } },
+      data: { level: 'none', notes: `Révoqué lors de l'offboarding par ${req.user!.email}` },
+    });
+  }
+
+  // Set member status to inactif
+  await prisma.member.update({ where: { id: member.id }, data: { status: 'inactif' } });
+
+  // Resolve open member_offboarding alerts
+  await prisma.alert.updateMany({
+    where: { organization_id: orgId, source_id: member.id, type: 'member_offboarding', is_resolved: false },
+    data: { is_resolved: true, resolved_by: req.user!.email, resolved_at: new Date().toISOString() },
+  });
+
+  await createAuditEntry({
+    organizationId: orgId,
+    actor: req.user!.email,
+    action: 'member.offboarded',
+    targetType: 'member',
+    targetId: member.id,
+    targetLabel: member.full_name,
+    oldValue: { status: member.status, access_count: revokedCount },
+    newValue: { status: 'inactif', access_count: 0 },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  const updated = await prisma.member.findUnique({ where: { id: member.id } });
+  res.json({ success: true, revokedCount, member: updated });
 });
 
 // DELETE /api/members/:id

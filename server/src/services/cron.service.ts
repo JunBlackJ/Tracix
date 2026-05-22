@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { generateAlerts } from './alert.service';
 import { sendSubscriptionAlertEmail } from './email.service';
@@ -10,10 +11,13 @@ export function startCronJobs(): void {
 
     const orgs = await prisma.organization.findMany();
     for (const org of orgs) {
-      // 1. Generate new alerts
+      // 1. Auto-offboard departed members
+      await processOffboarding(org.id);
+
+      // 2. Generate new alerts
       await generateAlerts(org.id);
 
-      // 2. Send email notifications for expiring subscriptions
+      // 3. Send email notifications for expiring subscriptions
       await checkSubscriptionEmails(org.id);
     }
 
@@ -21,6 +25,67 @@ export function startCronJobs(): void {
   });
 
   console.log('[Cron] Scheduled daily check at 08:00');
+}
+
+export async function processOffboarding(orgId: string): Promise<number> {
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+
+  const departed = await prisma.member.findMany({
+    where: {
+      organization_id: orgId,
+      status: 'actif',
+      departure_date: { not: null, lte: today },
+    },
+    include: {
+      accessRights: { where: { level: { not: 'none' } } },
+    },
+  });
+
+  let processed = 0;
+  for (const member of departed) {
+    // Revoke all active access rights
+    if (member.accessRights.length > 0) {
+      await prisma.accessRight.updateMany({
+        where: { member_id: member.id, level: { not: 'none' } },
+        data: { level: 'none', notes: 'Révoqué automatiquement — date de départ atteinte' },
+      });
+    }
+
+    // Set member status to inactif
+    await prisma.member.update({
+      where: { id: member.id },
+      data: { status: 'inactif' },
+    });
+
+    // Resolve any open member_offboarding alert for this member
+    await prisma.alert.updateMany({
+      where: { organization_id: orgId, source_id: member.id, type: 'member_offboarding', is_resolved: false },
+      data: { is_resolved: true, resolved_by: 'system', resolved_at: now.toISOString() },
+    });
+
+    // Audit trail
+    await prisma.auditTrail.create({
+      data: {
+        id: uuidv4(),
+        organization_id: orgId,
+        actor: 'system',
+        action: 'member.offboarded',
+        target_type: 'member',
+        target_id: member.id,
+        target_label: member.full_name,
+        old_value: { status: 'actif', access_count: member.accessRights.length },
+        new_value: { status: 'inactif', access_count: 0, reason: 'departure_date_reached' },
+        ip_address: '127.0.0.1',
+        user_agent: 'Tracix-Cron/1.0',
+      },
+    });
+
+    processed++;
+    console.log(`[Cron] Offboarded: ${member.full_name} (${member.accessRights.length} accès révoqués)`);
+  }
+
+  return processed;
 }
 
 async function checkSubscriptionEmails(orgId: string): Promise<void> {

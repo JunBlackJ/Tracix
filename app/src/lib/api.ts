@@ -134,6 +134,9 @@ export const api = {
     risk(id: string): Promise<Member> {
       return request(`/members/${id}/risk`);
     },
+    offboard(id: string): Promise<{ success: boolean; revokedCount: number; member: Member }> {
+      return request(`/members/${id}/offboard`, { method: 'POST' });
+    },
   },
 
   platforms: {

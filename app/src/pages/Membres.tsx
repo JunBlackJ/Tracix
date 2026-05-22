@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, ArrowLeft, Shield, AlertTriangle,
-  ChevronRight, TrendingUp, Edit2, X, Save, Loader2, ShieldAlert, Download,
+  ChevronRight, TrendingUp, Edit2, X, Save, Loader2, ShieldAlert, Download, UserX,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api } from '@/lib/api';
@@ -195,13 +195,21 @@ function MembresList({ members, onNew }: { members: Member[]; onNew: () => void 
                   <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{m.account_type}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
-                    m.status === 'actif' ? 'bg-green-100 text-green-700'
-                    : m.status === 'suspendu' ? 'bg-amber-100 text-amber-700'
-                    : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {m.status}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                      m.status === 'actif' ? 'bg-green-100 text-green-700'
+                      : m.status === 'suspendu' ? 'bg-amber-100 text-amber-700'
+                      : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {m.status}
+                    </span>
+                    {m.status === 'actif' && m.departure_date && new Date(m.departure_date) <= new Date() && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-700 flex items-center gap-1">
+                        <UserX className="w-3 h-3" />
+                        Offboarding
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-center">
                   <RiskBadge score={m.risk_score} size="md" showLabel />
@@ -239,8 +247,25 @@ interface MembreDetailProps {
 
 function MembreDetail({ memberId, onRevokeAccess, onUpdateAccess, members, platforms, alerts, onEdit }: MembreDetailProps) {
   const navigate = useNavigate();
+  const [offboarding, setOffboarding] = useState(false);
   const member = members.find((m) => m.id === memberId);
   if (!member) return <div className="p-8 text-gray-400">Membre non trouvé</div>;
+
+  const isDepartureReached = member.status === 'actif' && member.departure_date && new Date(member.departure_date) <= new Date();
+
+  const handleOffboard = async () => {
+    if (!confirm(`Confirmer l'offboarding de ${member.full_name} ?\n\nTous ses accès seront révoqués et son statut passera à "inactif".`)) return;
+    setOffboarding(true);
+    try {
+      const result = await api.members.offboard(member.id);
+      toast.success(`Offboarding effectué — ${result.revokedCount} accès révoqué(s)`);
+      navigate('/membres');
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setOffboarding(false);
+    }
+  };
 
   const memberAlerts = alerts.filter((a) => a.source_id === memberId && !a.is_resolved);
 
@@ -293,6 +318,16 @@ function MembreDetail({ memberId, onRevokeAccess, onUpdateAccess, members, platf
               <Edit2 className="w-3.5 h-3.5" />
               Modifier
             </button>
+            {isDepartureReached && (
+              <button
+                onClick={handleOffboard}
+                disabled={offboarding}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors"
+              >
+                {offboarding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserX className="w-3.5 h-3.5" />}
+                Offboarding
+              </button>
+            )}
           </div>
         </div>
 

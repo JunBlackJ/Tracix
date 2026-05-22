@@ -4,7 +4,8 @@
 
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Search, Plus, Clock, XCircle, RefreshCw, FileSpreadsheet, X, Save, Loader2, Edit2 } from 'lucide-react';
+import { Search, Plus, Clock, XCircle, RefreshCw, FileSpreadsheet, X, Save, Loader2, Edit2, CreditCard } from 'lucide-react';
+import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { Subscription, BillingCycle, SubscriptionStatus, Category } from '@/types';
@@ -221,10 +222,23 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
                 </tr>
               );
             })}
-            {filtered.length === 0 && (
+            {subscriptions.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  Aucun abonnement ne correspond aux filtres
+                <td colSpan={10}>
+                  <EmptyState
+                    icon={CreditCard}
+                    title="Aucun abonnement"
+                    description="Centralisez vos licences SaaS, abonnements cloud et contrats pour ne plus rater une échéance."
+                    action={{ label: '+ Nouvel abonnement', onClick: () => setShowForm(true) }}
+                    hint="Vous recevrez des alertes automatiques avant chaque renouvellement."
+                  />
+                </td>
+              </tr>
+            )}
+            {subscriptions.length > 0 && filtered.length === 0 && (
+              <tr>
+                <td colSpan={10}>
+                  <FilterEmpty onReset={() => { setSearch(''); setStatusFilter('all'); }} />
                 </td>
               </tr>
             )}

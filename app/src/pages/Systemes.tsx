@@ -4,8 +4,9 @@
 
 import { useState } from 'react';
 import {
-  Search, Plus, AlertTriangle, Clock, X, Save, Loader2,
+  Search, Plus, AlertTriangle, Clock, X, Save, Loader2, HardDrive,
 } from 'lucide-react';
+import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { System, SystemStatus, Criticality } from '@/types';
@@ -126,10 +127,23 @@ export function Systemes({ systems, onSystemCreated }: SystemesProps) {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
+              {systems.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">
-                    Aucun système trouvé
+                  <td colSpan={10}>
+                    <EmptyState
+                      icon={HardDrive}
+                      title="Aucun système"
+                      description="Inventoriez vos serveurs, VMs et équipements pour suivre les patches et dates de fin de support."
+                      action={{ label: '+ Nouveau système', onClick: () => setShowForm(true) }}
+                      hint="Des alertes automatiques vous préviendront avant la fin de support de chaque OS."
+                    />
+                  </td>
+                </tr>
+              )}
+              {systems.length > 0 && filtered.length === 0 && (
+                <tr>
+                  <td colSpan={10}>
+                    <FilterEmpty onReset={() => setSearch('')} />
                   </td>
                 </tr>
               )}

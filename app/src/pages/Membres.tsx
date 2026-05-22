@@ -6,8 +6,9 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, ArrowLeft, Shield, AlertTriangle,
-  ChevronRight, TrendingUp, Edit2, X, Save, Loader2, ShieldAlert, Download, UserX,
+  ChevronRight, TrendingUp, Edit2, X, Save, Loader2, ShieldAlert, Download, UserX, Users,
 } from 'lucide-react';
+import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
 import * as XLSX from 'xlsx';
 import { api } from '@/lib/api';
 import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
@@ -219,10 +220,23 @@ function MembresList({ members, onNew }: { members: Member[]; onNew: () => void 
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {members.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  Aucun membre ne correspond aux filtres
+                <td colSpan={6}>
+                  <EmptyState
+                    icon={Users}
+                    title="Aucun membre"
+                    description="Ajoutez votre premier membre ou importez une liste via le module Import."
+                    action={{ label: '+ Nouveau membre', onClick: onNew }}
+                    hint="Conseil : utilisez l'Import IA pour charger un fichier Excel en quelques secondes."
+                  />
+                </td>
+              </tr>
+            )}
+            {members.length > 0 && filtered.length === 0 && (
+              <tr>
+                <td colSpan={6}>
+                  <FilterEmpty onReset={() => { setSearch(''); setTeamFilter('all'); setTypeFilter('all'); setStatusFilter('all'); }} />
                 </td>
               </tr>
             )}

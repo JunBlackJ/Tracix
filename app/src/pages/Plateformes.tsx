@@ -6,8 +6,9 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, ArrowLeft, ShieldCheck, Eye, EyeOff, Globe, Users,
-  AlertTriangle, CheckCircle2, XCircle, X, Save, Loader2, Download,
+  AlertTriangle, CheckCircle2, XCircle, X, Save, Loader2, Download, Server,
 } from 'lucide-react';
+import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
 import * as XLSX from 'xlsx';
 import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
 import type { Platform, Member, Alert, AccessRight } from '@/types';
@@ -104,6 +105,18 @@ function PlateformesList({ platforms, members: _members, alerts, accessRights, o
           className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 w-64 focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] outline-none"
         />
       </div>
+      {platforms.length === 0 && (
+        <EmptyState
+          icon={Server}
+          title="Aucune plateforme"
+          description="Référencez vos outils SaaS, applications internes et systèmes pour commencer à gérer les accès."
+          action={{ label: '+ Nouvelle plateforme', onClick: onNew }}
+          hint="Conseil : importez votre inventaire via le module Import IA."
+        />
+      )}
+      {platforms.length > 0 && filtered.length === 0 && (
+        <FilterEmpty onReset={() => setSearch('')} />
+      )}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((p) => {
           const access = getPlatformAccess(p.id);

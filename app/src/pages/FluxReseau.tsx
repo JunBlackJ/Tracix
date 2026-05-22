@@ -3,7 +3,8 @@
 // ═══════════════════════════════════════════
 
 import { useState } from 'react';
-import { Search, Plus, CheckCircle2, XCircle, AlertCircle, Clock, X, Save, Loader2 } from 'lucide-react';
+import { Search, Plus, CheckCircle2, XCircle, AlertCircle, Clock, X, Save, Loader2, Network } from 'lucide-react';
+import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { NetworkFlow, FlowDirection, FlowStatus } from '@/types';
@@ -94,6 +95,26 @@ export function FluxReseau({ networkFlows, onFlowCreated }: FluxReseauProps) {
             </tr>
           </thead>
           <tbody>
+            {networkFlows.length === 0 && (
+              <tr>
+                <td colSpan={11}>
+                  <EmptyState
+                    icon={Network}
+                    title="Aucun flux réseau"
+                    description="Documentez les flux autorisés entre vos systèmes pour faciliter les audits et revues de sécurité."
+                    action={{ label: '+ Nouveau flux', onClick: () => setShowForm(true) }}
+                    hint="Importez votre matrice de flux existante via le module Import IA."
+                  />
+                </td>
+              </tr>
+            )}
+            {networkFlows.length > 0 && filtered.length === 0 && (
+              <tr>
+                <td colSpan={11}>
+                  <FilterEmpty onReset={() => { setSearch(''); setStatusFilter('all'); setDirectionFilter('all'); }} />
+                </td>
+              </tr>
+            )}
             {filtered.map((f) => {
               const reviewDays = Math.floor((new Date().getTime() - new Date(f.last_review_date).getTime()) / 86400000);
               return (

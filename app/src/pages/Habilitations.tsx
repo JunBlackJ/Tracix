@@ -6,8 +6,9 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Shield, Search, FileText, RotateCcw, X, ChevronRight, Clock, UserCheck, UserX, Edit3,
-  CheckCircle2, AlertTriangle, Loader2, CheckSquare, Square, ShieldOff, ShieldCheck,
+  CheckCircle2, AlertTriangle, Loader2, CheckSquare, Square, ShieldOff, ShieldCheck, GitBranch,
 } from 'lucide-react';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { ACCESS_LEVEL_CONFIG, getRiskColor } from '@/types';
 import type { AccessLevel, Member, Platform, AccessRight } from '@/types';
 import { api } from '@/lib/api';
@@ -222,8 +223,21 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
         </div>
       </div>
 
+      {/* Empty state — no members at all */}
+      {members.length === 0 && (
+        <div className="bg-white rounded-xl border border-gray-200">
+          <EmptyState
+            icon={GitBranch}
+            title="Aucun membre ni plateforme"
+            description="Ajoutez des membres et des plateformes pour commencer à gérer les droits d'accès."
+            action={{ label: 'Importer des données', onClick: () => navigate('/import') }}
+            hint="Conseil : importez une matrice d'habilitations Excel via le module Import IA."
+          />
+        </div>
+      )}
+
       {/* Matrix */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {members.length > 0 && <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -310,7 +324,7 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
 
       {/* Bulk action bar */}
       {selectedMembers.size > 0 && (

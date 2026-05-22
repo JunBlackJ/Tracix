@@ -35,32 +35,46 @@ router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
     return `  Ligne ${i}: [${cells}]`;
   }).join('\n');
 
-  const prompt = `Tu analyses un fichier Excel pour une application de gestion des habilitations IT. Le fichier suit les droits d'accès des employés sur les plateformes.
+  const prompt = `Tu analyses un fichier Excel pour une application de gestion IT. Identifie d'abord le TYPE du fichier, puis extrais les informations adaptées.
 
 Voici TOUTES les lignes brutes du fichier avec leur index :
 ${rowDump}
 
-IMPORTANT : Ce fichier peut contenir des lignes de titre, sous-titres ou légendes AVANT et APRÈS les vraies données. Tu dois identifier précisément :
+ÉTAPE 1 — Détermine le type du fichier :
+- "access_matrix" : matrice d'habilitations (lignes = personnes, colonnes = plateformes avec niveaux d'accès)
+- "platform_inventory" : inventaire de plateformes/outils (lignes = plateformes, colonnes = caractéristiques : nom, catégorie, URL, statut, responsable, etc.)
+- "member_list" : liste de membres/employés sans colonnes de plateformes
+- "unknown" : structure non reconnue
 
-1. headerRowIndex : l'index (0-based) de la ligne qui contient les VRAIS noms de colonnes (ex: "Nom Prénom", "Équipe", "GitHub", etc.) — pas les titres de section ni les sous-groupes de colonnes
-2. dataEndRow : l'index (exclusif) de la première ligne après les données réelles (pour ignorer les sections LÉGENDE, notes, totaux en bas). null si les données vont jusqu'à la fin
-3. memberCol : index de la colonne contenant le nom complet de la personne
-4. teamCol : index de la colonne équipe/département — null si absente
-5. emailCol : index de la colonne email — null si absente
-6. platformCols : index de TOUTES les colonnes qui représentent des plateformes, outils ou applications (GitHub, Jira, AWS, CyberPanel, etc.).
-   LISTE ABSOLUMENT TOUTES les colonnes plateforme, sans en oublier aucune.
-   EXCLURE : colonnes identité (nom, prénom, email, équipe, rôle, type de compte, statut, identifiant), colonnes méta (date de revue, commentaire, note, observation).
-7. levelMappings : pour chaque valeur d'accès trouvée dans les données, mappe vers : "admin", "rw", "ro", "req", ou "none"
-   - "A", "Admin", "Administrateur" → "admin"
-   - "RW", "Oui", "X", "✓", "1", "Yes", "Écriture" → "rw"
-   - "RO", "Lecture", "Read" → "ro"
-   - "REQ", "Sur demande", "Request" → "req"
-   - "—", "-", "", "Aucun", "Non", "No", "0" → "none"
-8. confidence : "high", "medium" ou "low"
-9. notes : explication courte en français — mentionne le nombre de plateformes trouvées et les lignes ignorées
+ÉTAPE 2 — Selon le type, remplis les champs correspondants :
 
-Réponds UNIQUEMENT avec du JSON valide, sans markdown, sans explication :
+Pour TOUS les types :
+1. headerRowIndex : index (0-based) de la vraie ligne d'en-têtes (ignorer titres de section)
+2. dataEndRow : index exclusif de fin des données réelles (null si jusqu'à la fin)
+3. confidence : "high", "medium" ou "low"
+4. notes : explication courte en français
+
+Pour "access_matrix" uniquement :
+5. memberCol : index colonne nom complet de la personne
+6. teamCol : index colonne équipe — null si absente
+7. emailCol : index colonne email — null si absente
+8. platformCols : index de TOUTES les colonnes plateforme (GitHub, Jira, AWS, etc.) — LISTE ABSOLUMENT TOUTES, sans exception
+9. levelMappings : mappe chaque valeur d'accès vers "admin"/"rw"/"ro"/"req"/"none"
+
+Pour "platform_inventory" uniquement :
+5. nameCol : index colonne nom de la plateforme (obligatoire)
+6. categoryCol : index colonne catégorie/type — null si absent
+7. urlCol : index colonne URL — null si absent
+8. statusCol : index colonne statut/état — null si absent
+
+Pour "member_list" uniquement :
+5. memberCol : index colonne nom complet
+6. teamCol : index colonne équipe — null si absent
+7. emailCol : index colonne email — null si absent
+
+Réponds UNIQUEMENT avec du JSON valide, sans markdown :
 {
+  "fileType": "access_matrix" | "platform_inventory" | "member_list" | "unknown",
   "headerRowIndex": number,
   "dataEndRow": number | null,
   "memberCol": number | null,
@@ -68,6 +82,10 @@ Réponds UNIQUEMENT avec du JSON valide, sans markdown, sans explication :
   "emailCol": number | null,
   "platformCols": number[],
   "levelMappings": Record<string, "admin" | "rw" | "ro" | "req" | "none">,
+  "nameCol": number | null,
+  "categoryCol": number | null,
+  "urlCol": number | null,
+  "statusCol": number | null,
   "confidence": "high" | "medium" | "low",
   "notes": string
 }`;
@@ -268,6 +286,143 @@ router.post('/batch', async (req: Request, res: Response): Promise<void> => {
     created: { members: membersCreated, platforms: platformsCreated, accessRights: accessCreated },
     skipped: { members: skippedMembers, platforms: skippedPlatforms },
   });
+});
+
+// POST /api/import/batch-platforms — import platforms only
+const BatchPlatformsSchema = z.object({
+  platforms: z.array(z.object({
+    name: z.string(),
+    category: z.string().optional().default(''),
+    url: z.string().optional().default(''),
+    status: z.string().optional().default('actif'),
+  })).max(500),
+});
+
+router.post('/batch-platforms', async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+  const { platforms: inPlatforms } = BatchPlatformsSchema.parse(req.body);
+
+  const existing = await prisma.platform.findMany({
+    where: { organization_id: orgId },
+    select: { id: true, name: true },
+  });
+  const byName = new Map(existing.map((p) => [p.name.toLowerCase(), p.id]));
+
+  const org = await prisma.organization.findUnique({ where: { id: orgId } });
+  const limits = getLimits(org?.plan ?? 'free');
+  const slots = limits.platforms === -1 ? inPlatforms.length : Math.max(0, limits.platforms - existing.length);
+
+  const toCreate = inPlatforms.filter((p) => !byName.has(p.name.toLowerCase())).slice(0, slots);
+  const skipped = inPlatforms.filter((p) => !byName.has(p.name.toLowerCase())).length - toCreate.length;
+
+  let created = 0;
+  for (const p of toCreate) {
+    await prisma.platform.create({
+      data: {
+        id: uuidv4(),
+        organization_id: orgId,
+        name: p.name,
+        category: p.category,
+        url: p.url,
+        status: p.status || 'actif',
+      },
+    });
+    created++;
+  }
+
+  await createAuditEntry({
+    organizationId: orgId,
+    actor: req.user!.email,
+    action: 'import.platforms',
+    targetType: 'import',
+    targetId: orgId,
+    targetLabel: 'Import plateformes',
+    oldValue: {},
+    newValue: { created },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ created, skipped });
+});
+
+// POST /api/import/batch-members — import members only
+const BatchMembersSchema = z.object({
+  members: z.array(z.object({
+    full_name: z.string(),
+    email: z.string().optional().default(''),
+    team: z.string().optional().default(''),
+  })).max(500),
+});
+
+router.post('/batch-members', async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+  const { members: inMembers } = BatchMembersSchema.parse(req.body);
+
+  const existing = await prisma.member.findMany({
+    where: { organization_id: orgId },
+    select: { id: true, full_name: true, email: true, username: true },
+  });
+  const byName = new Map(existing.map((m) => [m.full_name.toLowerCase(), m.id]));
+  const byEmail = new Map(existing.map((m) => [m.email.toLowerCase(), m.id]));
+  const usedUsernames = new Set(existing.map((m) => m.username.toLowerCase()));
+
+  const org = await prisma.organization.findUnique({ where: { id: orgId } });
+  const limits = getLimits(org?.plan ?? 'free');
+  const slots = limits.members === -1 ? inMembers.length : Math.max(0, limits.members - existing.length);
+
+  const toCreate = inMembers.filter((m) => {
+    if (byName.has(m.full_name.toLowerCase())) return false;
+    if (m.email && byEmail.has(m.email.toLowerCase())) return false;
+    return true;
+  }).slice(0, slots);
+  const skipped = inMembers.filter((m) => !byName.has(m.full_name.toLowerCase())).length - toCreate.length;
+
+  const makeUsername = (fullName: string): string => {
+    const base = fullName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '') || 'user';
+    let username = base;
+    let i = 2;
+    while (usedUsernames.has(username)) username = `${base}.${i++}`;
+    usedUsernames.add(username);
+    return username;
+  };
+
+  let created = 0;
+  for (const m of toCreate) {
+    const username = makeUsername(m.full_name);
+    const email = m.email.trim() || `${username}@import.local`;
+    await prisma.member.create({
+      data: {
+        id: uuidv4(),
+        organization_id: orgId,
+        full_name: m.full_name,
+        username,
+        email,
+        team: m.team.trim() || 'Non défini',
+        account_type: 'nominatif',
+        status: 'actif',
+        risk_score: 50,
+        risk_factors: [],
+      },
+    });
+    byName.set(m.full_name.toLowerCase(), uuidv4());
+    created++;
+  }
+
+  await createAuditEntry({
+    organizationId: orgId,
+    actor: req.user!.email,
+    action: 'import.members',
+    targetType: 'import',
+    targetId: orgId,
+    targetLabel: 'Import membres',
+    oldValue: {},
+    newValue: { created },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ created, skipped });
 });
 
 export default router;

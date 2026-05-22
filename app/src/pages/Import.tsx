@@ -32,6 +32,7 @@ interface ColumnMapping {
 }
 
 interface AiSuggestion {
+  fileType: 'access_matrix' | 'platform_inventory' | 'member_list' | 'unknown';
   headerRowIndex: number;
   dataEndRow: number | null;
   memberCol: number | null;
@@ -39,6 +40,10 @@ interface AiSuggestion {
   emailCol: number | null;
   platformCols: number[];
   levelMappings: Record<string, 'admin' | 'rw' | 'ro' | 'req' | 'none'>;
+  nameCol: number | null;
+  categoryCol: number | null;
+  urlCol: number | null;
+  statusCol: number | null;
   confidence: 'high' | 'medium' | 'low';
   notes: string;
 }
@@ -46,6 +51,7 @@ interface AiSuggestion {
 interface ImportResult {
   created: { members: number; platforms: number; accessRights: number };
   skipped: { members: number; platforms: number };
+  fileType?: 'access_matrix' | 'platform_inventory' | 'member_list' | 'unknown';
 }
 
 interface BatchPayload {
@@ -226,189 +232,329 @@ function AiModal({
           {/* Rapport */}
           {suggestion && !loading && sheet && (
             <>
-              {/* Confidence + note */}
-              <div className={`flex items-start gap-3 p-4 rounded-xl border-l-4 bg-gray-50 ${CONFIDENCE_BORDER[suggestion.confidence]}`}>
-                <div className={`w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0 ${CONFIDENCE_DOT[suggestion.confidence]}`} />
-                <div>
-                  <p className="text-xs font-bold text-gray-700 mb-0.5">{CONFIDENCE_LABEL_MAP[suggestion.confidence]}</p>
-                  <p className="text-xs text-gray-500 leading-relaxed">{suggestion.notes}</p>
-                </div>
-              </div>
-
-              {/* Structure détectée */}
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Structure du fichier</p>
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                    <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Ligne d'en-têtes</p>
-                    <p className="text-xs font-bold text-gray-800">Ligne {suggestion.headerRowIndex + 1}</p>
-                    {suggestion.headerRowIndex > 0 && (
-                      <p className="text-[10px] text-gray-400 mt-0.5">{suggestion.headerRowIndex} ligne{suggestion.headerRowIndex > 1 ? 's' : ''} de titre ignorée{suggestion.headerRowIndex > 1 ? 's' : ''}</p>
-                    )}
-                  </div>
-                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
-                    <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Données importées</p>
-                    <p className="text-xs font-bold text-gray-800">{sheet.rows.length} lignes</p>
-                    {suggestion.dataEndRow !== null && rawSheet && suggestion.dataEndRow < rawSheet.allRows.length && (
-                      <p className="text-[10px] text-gray-400 mt-0.5">{rawSheet.allRows.length - suggestion.dataEndRow} ligne{rawSheet.allRows.length - suggestion.dataEndRow > 1 ? 's' : ''} de légende ignorée{rawSheet.allRows.length - suggestion.dataEndRow > 1 ? 's' : ''}</p>
-                    )}
+              {/* Badge type + confidence */}
+              <div className="flex items-start gap-3">
+                <div className={`flex items-start gap-3 flex-1 p-4 rounded-xl border-l-4 bg-gray-50 ${CONFIDENCE_BORDER[suggestion.confidence]}`}>
+                  <div className={`w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0 ${CONFIDENCE_DOT[suggestion.confidence]}`} />
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-xs font-bold text-gray-700">{CONFIDENCE_LABEL_MAP[suggestion.confidence]}</p>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        suggestion.fileType === 'access_matrix' ? 'bg-[#534AB7]/10 text-[#534AB7]'
+                        : suggestion.fileType === 'platform_inventory' ? 'bg-emerald-100 text-emerald-700'
+                        : suggestion.fileType === 'member_list' ? 'bg-amber-100 text-amber-700'
+                        : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {suggestion.fileType === 'access_matrix' ? 'Matrice d\'habilitations'
+                          : suggestion.fileType === 'platform_inventory' ? 'Inventaire de plateformes'
+                          : suggestion.fileType === 'member_list' ? 'Liste de membres'
+                          : 'Type inconnu'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{suggestion.notes}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Colonnes détectées */}
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Colonnes détectées</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { icon: Users, label: 'Membres', col: suggestion.memberCol, color: '#534AB7', required: true },
-                    { icon: Building2, label: 'Équipe', col: suggestion.teamCol, color: '#1D9E75', required: false },
-                    { icon: Mail, label: 'Email', col: suggestion.emailCol, color: '#EF9F27', required: false },
-                    { icon: Layers, label: 'Plateformes', col: platformCols.length > 0 ? 0 : null, color: '#E5628A', required: false, override: platformCols.length > 0 ? `${platformCols.length} colonne${platformCols.length > 1 ? 's' : ''}` : null },
-                  ].map(({ icon: Icon, label, col, color, required, override }) => {
-                    const colName = override ?? (col !== null ? `« ${sheet.headers[col!]} »` : null);
-                    return (
-                      <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 bg-white">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}15` }}>
-                          <Icon className="w-4 h-4" style={{ color }} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
-                          {colName
-                            ? <p className="text-xs font-semibold text-gray-800 truncate">{colName}</p>
-                            : <p className="text-xs text-gray-300 italic">Non détecté</p>
-                          }
-                        </div>
-                        {colName
-                          ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                          : <AlertCircle className="w-4 h-4 text-gray-200 flex-shrink-0" />
-                        }
-                      </div>
-                    );
-                  })}
+              {/* Structure */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                  <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Ligne d'en-têtes</p>
+                  <p className="text-xs font-bold text-gray-800">Ligne {suggestion.headerRowIndex + 1}</p>
+                  {suggestion.headerRowIndex > 0 && (
+                    <p className="text-[10px] text-gray-400 mt-0.5">{suggestion.headerRowIndex} ligne{suggestion.headerRowIndex > 1 ? 's' : ''} ignorée{suggestion.headerRowIndex > 1 ? 's' : ''}</p>
+                  )}
+                </div>
+                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                  <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Données</p>
+                  <p className="text-xs font-bold text-gray-800">{sheet.rows.length} lignes</p>
+                  {suggestion.dataEndRow !== null && rawSheet && suggestion.dataEndRow < rawSheet.allRows.length && (
+                    <p className="text-[10px] text-gray-400 mt-0.5">{rawSheet.allRows.length - suggestion.dataEndRow} ligne{rawSheet.allRows.length - suggestion.dataEndRow > 1 ? 's' : ''} ignorée{rawSheet.allRows.length - suggestion.dataEndRow > 1 ? 's' : ''} (bas)</p>
+                  )}
                 </div>
               </div>
 
-              {/* Plateformes */}
-              {allPlatformCols.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                    Plateformes <span className="normal-case font-normal text-gray-300">— cliquez pour exclure</span>
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {allPlatformCols.map(({ h, i }) => {
-                      const excluded = excludedPlatformCols.has(i);
-                      return (
-                        <button key={i} onClick={() => onTogglePlatform(i)}
-                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                            excluded
-                              ? 'border-gray-200 bg-gray-50 text-gray-300 line-through'
-                              : 'border-[#534AB7]/20 bg-[#534AB7]/5 text-[#534AB7] hover:bg-[#534AB7]/10'
-                          }`}>
-                          {h}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Transformations des valeurs */}
-              {Object.entries(suggestion.levelMappings).filter(([, v]) => v !== 'none').length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Valeurs d'accès reconnues</p>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(suggestion.levelMappings)
-                      .filter(([, v]) => v !== 'none')
-                      .map(([raw, normalized]) => (
-                        <div key={raw} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-50 border border-gray-200">
-                          <Tag className="w-3 h-3 text-gray-400" />
-                          <span className="text-xs font-mono text-gray-600">« {raw} »</span>
-                          <ArrowRightLeft className="w-3 h-3 text-gray-400" />
-                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[normalized]}`}>
-                            {LEVEL_LABEL[normalized]}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Aperçu tableau */}
-              {mapping.memberCol !== null && sheet.rows.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aperçu des données transformées</p>
-                  <div className="rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="bg-gray-50 border-b border-gray-200">
-                            <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Membre</th>
-                            {mapping.teamCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Équipe</th>}
-                            {mapping.emailCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Email</th>}
-                            {platformCols.slice(0, 5).map(({ h }) => (
-                              <th key={h} className="px-3 py-2 text-left font-semibold text-[#534AB7] whitespace-nowrap">{h}</th>
-                            ))}
-                            {platformCols.length > 5 && <th className="px-3 py-2 text-gray-400 font-normal whitespace-nowrap">+{platformCols.length - 5}</th>}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sheet.rows.slice(0, 6).map((row, ri) => {
-                            const memberName = String(row[mapping.memberCol!] ?? '').trim();
-                            if (!memberName) return null;
-                            return (
-                              <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50">
-                                <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{memberName}</td>
-                                {mapping.teamCol !== null && <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[mapping.teamCol] ?? '')}</td>}
-                                {mapping.emailCol !== null && <td className="px-3 py-2 text-gray-400 font-mono text-[10px] whitespace-nowrap">{String(row[mapping.emailCol] ?? '')}</td>}
-                                {platformCols.slice(0, 5).map(({ i }) => {
-                                  const rawVal = String(row[i] ?? '');
-                                  const level = normalizeLevel(rawVal, suggestion.levelMappings);
-                                  return (
-                                    <td key={i} className="px-3 py-2 whitespace-nowrap">
-                                      {level !== 'none' ? (
-                                        <div className="flex items-center gap-1">
-                                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[level]}`}>{LEVEL_LABEL[level]}</span>
-                                          {rawVal && rawVal.toLowerCase() !== level && (
-                                            <span className="text-[9px] text-gray-400 font-mono">({rawVal})</span>
-                                          )}
-                                        </div>
-                                      ) : <span className="text-gray-300">—</span>}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+              {/* ── MATRICE D'HABILITATIONS ── */}
+              {suggestion.fileType === 'access_matrix' && (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Colonnes détectées</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { icon: Users, label: 'Membres', col: suggestion.memberCol, color: '#534AB7', required: true },
+                        { icon: Building2, label: 'Équipe', col: suggestion.teamCol, color: '#1D9E75', required: false },
+                        { icon: Mail, label: 'Email', col: suggestion.emailCol, color: '#EF9F27', required: false },
+                        { icon: Layers, label: 'Plateformes', col: platformCols.length > 0 ? 0 : null, color: '#E5628A', required: false, override: platformCols.length > 0 ? `${platformCols.length} colonne${platformCols.length > 1 ? 's' : ''}` : null },
+                      ].map(({ icon: Icon, label, col, color, required, override }) => {
+                        const colName = override ?? (col !== null ? `« ${sheet.headers[col!]} »` : null);
+                        return (
+                          <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 bg-white">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}15` }}>
+                              <Icon className="w-4 h-4" style={{ color }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
+                              {colName ? <p className="text-xs font-semibold text-gray-800 truncate">{colName}</p> : <p className="text-xs text-gray-300 italic">Non détecté</p>}
+                            </div>
+                            {colName ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-gray-200 flex-shrink-0" />}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-1.5">
-                    {payload.members.length} membres · {payload.platforms.length} plateformes · {payload.access.length} droits d'accès détectés
-                  </p>
-                </div>
+                  {allPlatformCols.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                        Plateformes <span className="normal-case font-normal text-gray-300">— cliquez pour exclure</span>
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {allPlatformCols.map(({ h, i }) => {
+                          const excluded = excludedPlatformCols.has(i);
+                          return (
+                            <button key={i} onClick={() => onTogglePlatform(i)}
+                              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${excluded ? 'border-gray-200 bg-gray-50 text-gray-300 line-through' : 'border-[#534AB7]/20 bg-[#534AB7]/5 text-[#534AB7] hover:bg-[#534AB7]/10'}`}>
+                              {h}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {Object.entries(suggestion.levelMappings).filter(([, v]) => v !== 'none').length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Valeurs d'accès reconnues</p>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(suggestion.levelMappings).filter(([, v]) => v !== 'none').map(([raw, normalized]) => (
+                          <div key={raw} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-50 border border-gray-200">
+                            <Tag className="w-3 h-3 text-gray-400" />
+                            <span className="text-xs font-mono text-gray-600">« {raw} »</span>
+                            <ArrowRightLeft className="w-3 h-3 text-gray-400" />
+                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[normalized]}`}>{LEVEL_LABEL[normalized]}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {mapping.memberCol !== null && sheet.rows.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aperçu</p>
+                      <div className="rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-gray-50 border-b border-gray-200">
+                                <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Membre</th>
+                                {mapping.teamCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Équipe</th>}
+                                {mapping.emailCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Email</th>}
+                                {platformCols.slice(0, 5).map(({ h }) => <th key={h} className="px-3 py-2 text-left font-semibold text-[#534AB7] whitespace-nowrap">{h}</th>)}
+                                {platformCols.length > 5 && <th className="px-3 py-2 text-gray-400 font-normal whitespace-nowrap">+{platformCols.length - 5}</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sheet.rows.slice(0, 6).map((row, ri) => {
+                                const memberName = String(row[mapping.memberCol!] ?? '').trim();
+                                if (!memberName) return null;
+                                return (
+                                  <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50">
+                                    <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{memberName}</td>
+                                    {mapping.teamCol !== null && <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[mapping.teamCol] ?? '')}</td>}
+                                    {mapping.emailCol !== null && <td className="px-3 py-2 text-gray-400 font-mono text-[10px] whitespace-nowrap">{String(row[mapping.emailCol] ?? '')}</td>}
+                                    {platformCols.slice(0, 5).map(({ i }) => {
+                                      const rawVal = String(row[i] ?? '');
+                                      const level = normalizeLevel(rawVal, suggestion.levelMappings);
+                                      return (
+                                        <td key={i} className="px-3 py-2 whitespace-nowrap">
+                                          {level !== 'none' ? (
+                                            <div className="flex items-center gap-1">
+                                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[level]}`}>{LEVEL_LABEL[level]}</span>
+                                              {rawVal && rawVal.toLowerCase() !== level && <span className="text-[9px] text-gray-400 font-mono">({rawVal})</span>}
+                                            </div>
+                                          ) : <span className="text-gray-300">—</span>}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1.5">{payload.members.length} membres · {payload.platforms.length} plateformes · {payload.access.length} droits d'accès détectés</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── INVENTAIRE DE PLATEFORMES ── */}
+              {suggestion.fileType === 'platform_inventory' && suggestion.nameCol !== null && (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Colonnes détectées</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { icon: Layers, label: 'Nom', col: suggestion.nameCol, color: '#1D9E75', required: true },
+                        { icon: Tag, label: 'Catégorie', col: suggestion.categoryCol, color: '#534AB7', required: false },
+                        { icon: ArrowRight, label: 'URL', col: suggestion.urlCol, color: '#EF9F27', required: false },
+                        { icon: ShieldCheck, label: 'Statut', col: suggestion.statusCol, color: '#E5628A', required: false },
+                      ].map(({ icon: Icon, label, col, color, required }) => {
+                        const colName = col !== null ? `« ${sheet.headers[col!]} »` : null;
+                        return (
+                          <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 bg-white">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}15` }}>
+                              <Icon className="w-4 h-4" style={{ color }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
+                              {colName ? <p className="text-xs font-semibold text-gray-800 truncate">{colName}</p> : <p className="text-xs text-gray-300 italic">Non détecté</p>}
+                            </div>
+                            {colName ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-gray-200 flex-shrink-0" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aperçu</p>
+                    <div className="rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                              <th className="px-3 py-2 text-left font-semibold text-emerald-700 whitespace-nowrap">Nom</th>
+                              {suggestion.categoryCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Catégorie</th>}
+                              {suggestion.urlCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">URL</th>}
+                              {suggestion.statusCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Statut</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sheet.rows.slice(0, 6).map((row, ri) => {
+                              const name = String(row[suggestion.nameCol!] ?? '').trim();
+                              if (!name) return null;
+                              return (
+                                <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50">
+                                  <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{name}</td>
+                                  {suggestion.categoryCol !== null && <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[suggestion.categoryCol] ?? '')}</td>}
+                                  {suggestion.urlCol !== null && <td className="px-3 py-2 text-gray-400 font-mono text-[10px] whitespace-nowrap">{String(row[suggestion.urlCol] ?? '')}</td>}
+                                  {suggestion.statusCol !== null && <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[suggestion.statusCol] ?? '')}</td>}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1.5">{sheet.rows.filter(r => String(r[suggestion.nameCol!] ?? '').trim()).length} plateformes détectées</p>
+                  </div>
+                </>
+              )}
+
+              {/* ── LISTE DE MEMBRES ── */}
+              {suggestion.fileType === 'member_list' && (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Colonnes détectées</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { icon: Users, label: 'Membres', col: suggestion.memberCol, color: '#534AB7', required: true },
+                        { icon: Building2, label: 'Équipe', col: suggestion.teamCol, color: '#1D9E75', required: false },
+                        { icon: Mail, label: 'Email', col: suggestion.emailCol, color: '#EF9F27', required: false },
+                      ].map(({ icon: Icon, label, col, color, required }) => {
+                        const colName = col !== null ? `« ${sheet.headers[col!]} »` : null;
+                        return (
+                          <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 bg-white">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}15` }}>
+                              <Icon className="w-4 h-4" style={{ color }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
+                              {colName ? <p className="text-xs font-semibold text-gray-800 truncate">{colName}</p> : <p className="text-xs text-gray-300 italic">Non détecté</p>}
+                            </div>
+                            {colName ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-gray-200 flex-shrink-0" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {suggestion.memberCol !== null && sheet.rows.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aperçu</p>
+                      <div className="rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-gray-50 border-b border-gray-200">
+                                <th className="px-3 py-2 text-left font-semibold text-[#534AB7] whitespace-nowrap">Membre</th>
+                                {suggestion.teamCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Équipe</th>}
+                                {suggestion.emailCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Email</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sheet.rows.slice(0, 6).map((row, ri) => {
+                                const name = String(row[suggestion.memberCol!] ?? '').trim();
+                                if (!name) return null;
+                                return (
+                                  <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50">
+                                    <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{name}</td>
+                                    {suggestion.teamCol !== null && <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[suggestion.teamCol] ?? '')}</td>}
+                                    {suggestion.emailCol !== null && <td className="px-3 py-2 text-gray-400 font-mono text-[10px] whitespace-nowrap">{String(row[suggestion.emailCol] ?? '')}</td>}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1.5">{sheet.rows.filter(r => String(r[suggestion.memberCol!] ?? '').trim()).length} membres détectés</p>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
         </div>
 
         {/* Footer */}
-        {!loading && (
+        {!loading && suggestion && (
           <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
             <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
               <RefreshCw className="w-4 h-4" /> Modifier
             </button>
-            <button
-              onClick={onConfirm}
-              disabled={importing || mapping.memberCol === null || payload.members.length === 0}
-              className="flex-1 py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-            >
-              {importing
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</>
-                : <><CheckCircle2 className="w-4 h-4" />Confirmer et importer ({payload.members.length} membres)</>
-              }
-            </button>
+            {suggestion.fileType === 'access_matrix' && (
+              <button
+                onClick={onConfirm}
+                disabled={importing || mapping.memberCol === null || payload.members.length === 0}
+                className="flex-1 py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {importing ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</> : <><CheckCircle2 className="w-4 h-4" />Importer ({payload.members.length} membres · {payload.platforms.length} plateformes)</>}
+              </button>
+            )}
+            {suggestion.fileType === 'platform_inventory' && suggestion.nameCol !== null && (
+              <button
+                onClick={onConfirm}
+                disabled={importing}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {importing ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</> : <><CheckCircle2 className="w-4 h-4" />Importer les plateformes ({sheet?.rows.filter(r => String(r[suggestion.nameCol!] ?? '').trim()).length ?? 0})</>}
+              </button>
+            )}
+            {suggestion.fileType === 'member_list' && suggestion.memberCol !== null && (
+              <button
+                onClick={onConfirm}
+                disabled={importing}
+                className="flex-1 py-2.5 rounded-xl bg-amber-600 text-white text-sm font-bold hover:bg-amber-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {importing ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</> : <><CheckCircle2 className="w-4 h-4" />Importer les membres ({sheet?.rows.filter(r => String(r[suggestion.memberCol!] ?? '').trim()).length ?? 0})</>}
+              </button>
+            )}
+            {(suggestion.fileType === 'unknown' || !suggestion.fileType) && (
+              <div className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-400 text-sm text-center">Type de fichier non reconnu</div>
+            )}
+          </div>
+        )}
+        {!loading && !suggestion && (
+          <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">Fermer</button>
           </div>
         )}
       </div>
@@ -603,31 +749,59 @@ export function Import() {
   };
 
   const handleImport = async () => {
-    if (mapping.memberCol === null) return;
     setImporting(true);
     try {
-      const data = buildPayload();
-      if (data.members.length === 0) throw new Error('Aucun membre trouvé. Vérifiez que la colonne Membres est bien sélectionnée.');
-      const res = await api.import.batch(data);
-      setResult(res);
-      setModalOpen(false);
-      setStep('done');
-    } catch (err) {
-      if (err instanceof Error) {
-        try {
-          const parsed = JSON.parse(err.message);
-          if (parsed?.details) {
-            const msgs = parsed.details.map((d: { field: string; message: string }) => `${d.field}: ${d.message}`).join('; ');
-            setParseError(`Erreur de validation : ${msgs}`);
-          } else {
-            setParseError(err.message);
-          }
-        } catch {
-          setParseError(err.message);
-        }
+      const ft = aiSuggestion?.fileType;
+
+      if (ft === 'platform_inventory' && aiSuggestion?.nameCol !== null) {
+        const rows = currentSheet?.rows ?? [];
+        const nameCol = aiSuggestion!.nameCol!;
+        const catCol = aiSuggestion!.categoryCol;
+        const urlCol = aiSuggestion!.urlCol;
+        const statCol = aiSuggestion!.statusCol;
+        const platforms = rows
+          .map((r) => ({
+            name: String(r[nameCol] ?? '').trim(),
+            category: catCol !== null ? String(r[catCol] ?? '').trim() : '',
+            url: urlCol !== null ? String(r[urlCol] ?? '').trim() : '',
+            status: statCol !== null ? String(r[statCol] ?? '').trim() || 'actif' : 'actif',
+          }))
+          .filter((p) => p.name);
+        if (platforms.length === 0) throw new Error('Aucune plateforme trouvée.');
+        const res = await api.import.batchPlatforms({ platforms });
+        setResult({ created: { members: 0, platforms: res.created, accessRights: 0 }, skipped: { members: 0, platforms: res.skipped }, fileType: 'platform_inventory' });
+        setModalOpen(false);
+        setStep('done');
+
+      } else if (ft === 'member_list' && aiSuggestion?.memberCol !== null) {
+        const rows = currentSheet?.rows ?? [];
+        const mCol = aiSuggestion!.memberCol!;
+        const tCol = aiSuggestion!.teamCol;
+        const eCol = aiSuggestion!.emailCol;
+        const members = rows
+          .map((r) => ({
+            full_name: String(r[mCol] ?? '').trim(),
+            team: tCol !== null ? String(r[tCol] ?? '').trim() : undefined,
+            email: eCol !== null ? String(r[eCol] ?? '').trim() : undefined,
+          }))
+          .filter((m) => m.full_name);
+        if (members.length === 0) throw new Error('Aucun membre trouvé.');
+        const res = await api.import.batchMembers({ members });
+        setResult({ created: { members: res.created, platforms: 0, accessRights: 0 }, skipped: { members: res.skipped, platforms: 0 }, fileType: 'member_list' });
+        setModalOpen(false);
+        setStep('done');
+
       } else {
-        setParseError('Erreur lors de l\'import.');
+        if (mapping.memberCol === null) return;
+        const data = buildPayload();
+        if (data.members.length === 0) throw new Error('Aucun membre trouvé. Vérifiez que la colonne Membres est bien sélectionnée.');
+        const res = await api.import.batch(data);
+        setResult({ ...res, fileType: 'access_matrix' });
+        setModalOpen(false);
+        setStep('done');
       }
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : 'Erreur lors de l\'import.');
     } finally {
       setImporting(false);
     }
@@ -799,12 +973,17 @@ export function Import() {
             </div>
             <h3 className="text-xl font-black text-gray-900 mb-1">Import terminé !</h3>
             <p className="text-sm text-gray-500 mb-6">Vos données sont maintenant disponibles dans l'application.</p>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: 'Membres créés', value: result.created.members, color: '#534AB7' },
-                { label: 'Plateformes créées', value: result.created.platforms, color: '#1D9E75' },
-                { label: 'Droits d\'accès', value: result.created.accessRights, color: '#EF9F27' },
-              ].map((s) => (
+            <div className={`grid gap-3 ${result.fileType === 'platform_inventory' || result.fileType === 'member_list' ? 'grid-cols-1' : 'grid-cols-3'}`}>
+              {(result.fileType === 'platform_inventory'
+                ? [{ label: 'Plateformes créées', value: result.created.platforms, color: '#1D9E75' }]
+                : result.fileType === 'member_list'
+                ? [{ label: 'Membres créés', value: result.created.members, color: '#534AB7' }]
+                : [
+                    { label: 'Membres créés', value: result.created.members, color: '#534AB7' },
+                    { label: 'Plateformes créées', value: result.created.platforms, color: '#1D9E75' },
+                    { label: 'Droits d\'accès', value: result.created.accessRights, color: '#EF9F27' },
+                  ]
+              ).map((s) => (
                 <div key={s.label} className="rounded-xl p-4 border border-gray-100" style={{ backgroundColor: `${s.color}08` }}>
                   <p className="text-2xl font-black" style={{ color: s.color }}>{s.value}</p>
                   <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>

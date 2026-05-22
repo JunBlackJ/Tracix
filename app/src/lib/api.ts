@@ -364,6 +364,7 @@ export const api = {
       return request('/import/batch', { method: 'POST', body: JSON.stringify(data) });
     },
     analyze(data: { rawRows: string[][] }): Promise<{
+      fileType: 'access_matrix' | 'platform_inventory' | 'member_list' | 'unknown';
       headerRowIndex: number;
       dataEndRow: number | null;
       memberCol: number | null;
@@ -371,10 +372,20 @@ export const api = {
       emailCol: number | null;
       platformCols: number[];
       levelMappings: Record<string, 'admin' | 'rw' | 'ro' | 'req' | 'none'>;
+      nameCol: number | null;
+      categoryCol: number | null;
+      urlCol: number | null;
+      statusCol: number | null;
       confidence: 'high' | 'medium' | 'low';
       notes: string;
     }> {
       return request('/import/analyze', { method: 'POST', body: JSON.stringify(data) });
+    },
+    batchPlatforms(data: { platforms: { name: string; category?: string; url?: string; status?: string }[] }): Promise<{ created: number; skipped: number }> {
+      return request('/import/batch-platforms', { method: 'POST', body: JSON.stringify(data) });
+    },
+    batchMembers(data: { members: { full_name: string; email?: string; team?: string }[] }): Promise<{ created: number; skipped: number }> {
+      return request('/import/batch-members', { method: 'POST', body: JSON.stringify(data) });
     },
   },
 

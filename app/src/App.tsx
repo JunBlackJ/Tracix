@@ -195,6 +195,8 @@ function App() {
                 platforms={store.platforms}
                 accessRights={store.accessRights}
                 subscriptions={store.subscriptions}
+                systems={store.systems}
+                alerts={store.alerts}
               />
             }
           />

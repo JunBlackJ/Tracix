@@ -1,0 +1,9 @@
+[phases.build]
+cmds = [
+  "npm ci",
+  "node node_modules/typescript/bin/tsc",
+  "node node_modules/.bin/prisma generate"
+]
+
+[start]
+cmd = "node node_modules/.bin/prisma migrate deploy && node dist/index.js"

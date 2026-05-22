@@ -2,11 +2,11 @@
 // Page Import — Excel intelligent
 // ═══════════════════════════════════════════
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Upload, FileSpreadsheet, X, ChevronRight,
-  Users, ShieldCheck, GitBranch, CheckCircle2,
+  Users, ShieldCheck, CheckCircle2,
   AlertCircle, ArrowRight, Loader2, RefreshCw, Sparkles,
   Tag, Mail, Building2, Layers, ArrowRightLeft,
 } from 'lucide-react';
@@ -47,7 +47,6 @@ interface BatchPayload {
   access: { memberName: string; platformName: string; level: 'admin' | 'rw' | 'ro' | 'req' }[];
 }
 
-// ─── Normalise un niveau d'accès ───
 function normalizeLevel(
   raw: string,
   aiMappings?: Record<string, 'admin' | 'rw' | 'ro' | 'req' | 'none'>
@@ -90,29 +89,302 @@ const LEVEL_STYLE: Record<string, string> = {
 };
 
 const LEVEL_LABEL: Record<string, string> = {
-  admin: 'ADMIN',
-  rw: 'RW',
-  ro: 'RO',
-  req: 'REQ',
+  admin: 'ADMIN', rw: 'RW', ro: 'RO', req: 'REQ',
 };
 
 const CONFIDENCE_BORDER: Record<string, string> = {
-  high: 'border-emerald-200',
-  medium: 'border-amber-200',
-  low: 'border-red-200',
+  high: 'border-emerald-400', medium: 'border-amber-400', low: 'border-red-400',
 };
-
 const CONFIDENCE_DOT: Record<string, string> = {
-  high: 'bg-emerald-400',
-  medium: 'bg-amber-400',
-  low: 'bg-red-400',
+  high: 'bg-emerald-400', medium: 'bg-amber-400', low: 'bg-red-400',
+};
+const CONFIDENCE_LABEL_MAP: Record<string, string> = {
+  high: 'Confiance élevée', medium: 'Confiance moyenne', low: 'Confiance faible',
 };
 
-const CONFIDENCE_LABEL: Record<string, string> = {
-  high: 'Confiance élevée',
-  medium: 'Confiance moyenne',
-  low: 'Confiance faible',
-};
+// ─── Modal IA ───
+interface AiModalProps {
+  open: boolean;
+  loading: boolean;
+  suggestion: AiSuggestion | null;
+  error: string | null;
+  sheet: ParsedSheet;
+  mapping: ColumnMapping;
+  platformCols: { h: string; i: number }[];
+  allPlatformCols: { h: string; i: number }[];
+  excludedPlatformCols: Set<number>;
+  payload: BatchPayload;
+  importing: boolean;
+  onTogglePlatform: (i: number) => void;
+  onConfirm: () => void;
+  onEdit: () => void;
+  onClose: () => void;
+}
+
+function AiModal({
+  open, loading, suggestion, error, sheet, mapping,
+  platformCols, allPlatformCols, excludedPlatformCols, payload,
+  importing, onTogglePlatform, onConfirm, onEdit, onClose,
+}: AiModalProps) {
+  // Fermer avec Escape
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Overlay */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={!loading ? onClose : undefined}
+      />
+
+      {/* Modal */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#534AB7]/10 flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-[#534AB7]" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-gray-900">Analyse IA — {sheet.name}</p>
+            <p className="text-xs text-gray-400">{sheet.rows.length} lignes · {sheet.headers.length} colonnes</p>
+          </div>
+          {!loading && (
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+
+          {/* Loading */}
+          {loading && (
+            <div className="py-6 space-y-4">
+              <div className="flex flex-col items-center gap-3 mb-6">
+                <div className="w-14 h-14 rounded-2xl bg-[#534AB7]/10 flex items-center justify-center">
+                  <Sparkles className="w-7 h-7 text-[#534AB7]" />
+                </div>
+                <p className="text-sm font-semibold text-gray-800">Claude analyse votre fichier…</p>
+              </div>
+              {[
+                'Détection des colonnes membres et équipes',
+                'Identification des plateformes',
+                'Normalisation des valeurs d\'accès',
+              ].map((t, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
+                  <Loader2 className="w-4 h-4 text-[#534AB7] animate-spin flex-shrink-0" style={{ animationDelay: `${i * 200}ms` }} />
+                  <p className="text-sm text-gray-600">{t}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Erreur IA */}
+          {error && !loading && (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
+              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-700">Analyse IA indisponible</p>
+                <p className="text-xs text-amber-600 mt-1">{error}</p>
+                <p className="text-xs text-amber-500 mt-1">La détection automatique a été utilisée à la place.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Rapport */}
+          {suggestion && !loading && (
+            <>
+              {/* Confidence + note */}
+              <div className={`flex items-start gap-3 p-4 rounded-xl border-l-4 bg-gray-50 ${CONFIDENCE_BORDER[suggestion.confidence]}`}>
+                <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${CONFIDENCE_DOT[suggestion.confidence]}`} />
+                <div>
+                  <p className="text-xs font-bold text-gray-700 mb-0.5">{CONFIDENCE_LABEL_MAP[suggestion.confidence]}</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">{suggestion.notes}</p>
+                </div>
+              </div>
+
+              {/* Colonnes détectées */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Colonnes détectées</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { icon: Users, label: 'Membres', col: suggestion.memberCol, color: '#534AB7', required: true },
+                    { icon: Building2, label: 'Équipe', col: suggestion.teamCol, color: '#1D9E75', required: false },
+                    { icon: Mail, label: 'Email', col: suggestion.emailCol, color: '#EF9F27', required: false },
+                    { icon: Layers, label: 'Plateformes', col: platformCols.length > 0 ? 0 : null, color: '#E5628A', required: false, override: platformCols.length > 0 ? `${platformCols.length} colonne${platformCols.length > 1 ? 's' : ''}` : null },
+                  ].map(({ icon: Icon, label, col, color, required, override }) => {
+                    const colName = override ?? (col !== null ? `« ${sheet.headers[col!]} »` : null);
+                    return (
+                      <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 bg-white">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}15` }}>
+                          <Icon className="w-4 h-4" style={{ color }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
+                          {colName ? (
+                            <p className="text-xs font-semibold text-gray-800 truncate">{colName}</p>
+                          ) : (
+                            <p className="text-xs text-gray-300 italic">Non détecté</p>
+                          )}
+                        </div>
+                        {colName
+                          ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                          : <AlertCircle className="w-4 h-4 text-gray-200 flex-shrink-0" />
+                        }
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Plateformes */}
+              {allPlatformCols.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                    Plateformes <span className="normal-case font-normal text-gray-300">— cliquez pour exclure</span>
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allPlatformCols.map(({ h, i }) => {
+                      const excluded = excludedPlatformCols.has(i);
+                      return (
+                        <button key={i} onClick={() => onTogglePlatform(i)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                            excluded
+                              ? 'border-gray-200 bg-gray-50 text-gray-300 line-through'
+                              : 'border-[#534AB7]/20 bg-[#534AB7]/5 text-[#534AB7] hover:bg-[#534AB7]/10'
+                          }`}>
+                          {h}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Transformations */}
+              {Object.entries(suggestion.levelMappings).filter(([, v]) => v !== 'none').length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Valeurs d'accès reconnues</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(suggestion.levelMappings)
+                      .filter(([, v]) => v !== 'none')
+                      .map(([raw, normalized]) => (
+                        <div key={raw} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-50 border border-gray-200">
+                          <Tag className="w-3 h-3 text-gray-400" />
+                          <span className="text-xs font-mono text-gray-600">« {raw} »</span>
+                          <ArrowRightLeft className="w-3 h-3 text-gray-400" />
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[normalized]}`}>
+                            {LEVEL_LABEL[normalized]}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Aperçu tableau */}
+              {mapping.memberCol !== null && sheet.rows.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aperçu des données transformées</p>
+                  <div className="rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-gray-200">
+                            <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Membre</th>
+                            {mapping.teamCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Équipe</th>}
+                            {mapping.emailCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Email</th>}
+                            {platformCols.slice(0, 4).map(({ h }) => (
+                              <th key={h} className="px-3 py-2 text-left font-semibold text-[#534AB7] whitespace-nowrap">{h}</th>
+                            ))}
+                            {platformCols.length > 4 && (
+                              <th className="px-3 py-2 text-gray-400 font-normal">+{platformCols.length - 4}</th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sheet.rows.slice(0, 5).map((row, ri) => {
+                            const memberName = String(row[mapping.memberCol!] ?? '').trim();
+                            if (!memberName) return null;
+                            return (
+                              <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50">
+                                <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{memberName}</td>
+                                {mapping.teamCol !== null && (
+                                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[mapping.teamCol] ?? '')}</td>
+                                )}
+                                {mapping.emailCol !== null && (
+                                  <td className="px-3 py-2 text-gray-400 font-mono text-[10px] whitespace-nowrap">{String(row[mapping.emailCol] ?? '')}</td>
+                                )}
+                                {platformCols.slice(0, 4).map(({ i }) => {
+                                  const rawVal = String(row[i] ?? '');
+                                  const level = normalizeLevel(rawVal, suggestion?.levelMappings);
+                                  return (
+                                    <td key={i} className="px-3 py-2">
+                                      {level !== 'none' ? (
+                                        <div className="flex items-center gap-1">
+                                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[level]}`}>
+                                            {LEVEL_LABEL[level]}
+                                          </span>
+                                          {rawVal && rawVal.toUpperCase() !== level.toUpperCase() && (
+                                            <span className="text-[9px] text-gray-400 font-mono">({rawVal})</span>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-300">—</span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1.5">
+                    {payload.members.length} membres · {payload.platforms.length} plateformes · {payload.access.length} droits d'accès détectés
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!loading && (
+          <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" /> Modifier
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={importing || mapping.memberCol === null || payload.members.length === 0}
+              className="flex-1 py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            >
+              {importing
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</>
+                : <><CheckCircle2 className="w-4 h-4" />Confirmer et importer ({payload.members.length} membres)</>
+              }
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── Composant principal ───
 export function Import() {
@@ -124,13 +396,14 @@ export function Import() {
   const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [excludedPlatformCols, setExcludedPlatformCols] = useState<Set<number>>(new Set());
-  const [step, setStep] = useState<'upload' | 'review' | 'map' | 'done'>('upload');
+  const [step, setStep] = useState<'upload' | 'map' | 'done'>('upload');
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
 
-  const analyzeWithAI = useCallback(async (sheet: ParsedSheet): Promise<AiSuggestion | null> => {
+  const analyzeWithAI = useCallback(async (sheet: ParsedSheet) => {
     setAiLoading(true);
     setAiError(null);
     setAiSuggestion(null);
@@ -140,20 +413,12 @@ export function Import() {
       );
       const suggestion = await api.import.analyze({ headers: sheet.headers, sampleRows });
       setAiSuggestion(suggestion);
-      setMapping({
-        memberCol: suggestion.memberCol,
-        teamCol: suggestion.teamCol,
-        emailCol: suggestion.emailCol,
-      });
+      setMapping({ memberCol: suggestion.memberCol, teamCol: suggestion.teamCol, emailCol: suggestion.emailCol });
       setExcludedPlatformCols(new Set());
-      return suggestion;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erreur IA';
-      setAiError(msg.includes('ANTHROPIC_API_KEY') || msg.includes('AWS')
-        ? 'Credentials AWS non configurés.'
-        : msg);
+      setAiError(msg.includes('AWS') || msg.includes('credential') ? 'Credentials AWS non configurés.' : msg);
       setMapping(detectColumns(sheet.headers));
-      return null;
     } finally {
       setAiLoading(false);
     }
@@ -192,7 +457,10 @@ export function Import() {
         const idx = parsed.indexOf(best);
         setActiveSheet(idx);
         setMapping(detectColumns(best.headers));
-        setStep('review');
+
+        // Ouvre le modal immédiatement (en état loading)
+        setStep('map');
+        setModalOpen(true);
         await analyzeWithAI(best);
       } catch {
         setParseError('Impossible de lire ce fichier. Vérifiez qu\'il s\'agit d\'un .xlsx, .xls ou .csv valide.');
@@ -284,6 +552,7 @@ export function Import() {
       if (data.members.length === 0) throw new Error('Aucun membre trouvé. Vérifiez que la colonne Membres est bien sélectionnée.');
       const res = await api.import.batch(data);
       setResult(res);
+      setModalOpen(false);
       setStep('done');
     } catch (err) {
       if (err instanceof Error) {
@@ -311,6 +580,7 @@ export function Import() {
     setMapping({ memberCol: null, teamCol: null, emailCol: null });
     setAiSuggestion(null); setAiError(null); setAiLoading(false);
     setExcludedPlatformCols(new Set());
+    setModalOpen(false);
     setStep('upload'); setResult(null); setParseError(null);
   };
 
@@ -356,302 +626,32 @@ export function Import() {
           <div className="flex items-center gap-2 p-3 rounded-xl bg-[#534AB7]/5 border border-[#534AB7]/20">
             <Sparkles className="w-4 h-4 text-[#534AB7] flex-shrink-0" />
             <p className="text-xs text-[#534AB7]">
-              <strong>Analyse IA activée</strong> — Claude détecte automatiquement vos colonnes et comprend tout format de valeurs : X, ✓, Oui, Admin, 1…
+              <strong>Analyse IA activée</strong> — Claude détecte automatiquement vos colonnes et comprend tout format : X, ✓, Oui, Admin, 1…
             </p>
           </div>
         </>
       )}
 
-      {/* ── STEP 2 : Rapport IA ── */}
-      {step === 'review' && currentSheet && (
+      {/* ── STEP 2 : Modification manuelle (si modal fermé) ── */}
+      {step === 'map' && currentSheet && !modalOpen && (
         <div className="space-y-4">
-
-          {/* En-tête fichier */}
           <div className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200">
             <FileSpreadsheet className="w-8 h-8 text-green-600 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-900">{file?.name}</p>
               <p className="text-xs text-gray-400">{currentSheet.rows.length} lignes · {currentSheet.headers.length} colonnes</p>
             </div>
-            <button onClick={reset} className="p-1.5 hover:bg-gray-100 rounded-lg">
-              <X className="w-4 h-4 text-gray-400" />
+            <button onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#534AB7] bg-[#534AB7]/5 hover:bg-[#534AB7]/10 rounded-lg transition-colors">
+              <Sparkles className="w-3 h-3" /> Voir rapport IA
             </button>
-          </div>
-
-          {/* Analyse en cours */}
-          {aiLoading && (
-            <div className="bg-white rounded-2xl border border-[#534AB7]/20 p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-[#534AB7]/10 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-[#534AB7]" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">Analyse IA en cours…</p>
-                  <p className="text-xs text-gray-400">Claude examine la structure de votre fichier</p>
-                </div>
-                <Loader2 className="w-5 h-5 text-[#534AB7] animate-spin ml-auto" />
-              </div>
-              <div className="space-y-2">
-                {['Détection des colonnes membres et équipes…', 'Identification des plateformes…', 'Normalisation des valeurs d\'accès…'].map((t, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full border-2 border-[#534AB7]/20 border-t-[#534AB7] animate-spin" style={{ animationDelay: `${i * 150}ms` }} />
-                    <p className="text-xs text-gray-500">{t}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Erreur IA */}
-          {aiError && !aiLoading && (
-            <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
-              <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-amber-700">Analyse IA indisponible — détection automatique utilisée</p>
-                <p className="text-xs text-amber-600 mt-0.5">{aiError}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Rapport IA */}
-          {aiSuggestion && !aiLoading && (
-            <div className={`bg-white rounded-2xl border-2 ${CONFIDENCE_BORDER[aiSuggestion.confidence]} overflow-hidden`}>
-
-              {/* Header rapport */}
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
-                <div className="w-8 h-8 rounded-lg bg-[#534AB7]/10 flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="w-4 h-4 text-[#534AB7]" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-gray-900">Rapport d'analyse IA</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{aiSuggestion.notes}</p>
-                </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100">
-                  <div className={`w-2 h-2 rounded-full ${CONFIDENCE_DOT[aiSuggestion.confidence]}`} />
-                  <span className="text-xs font-medium text-gray-600">{CONFIDENCE_LABEL[aiSuggestion.confidence]}</span>
-                </div>
-              </div>
-
-              <div className="p-5 space-y-5">
-
-                {/* Colonnes détectées */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Colonnes détectées</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      {
-                        icon: Users,
-                        label: 'Membres',
-                        value: aiSuggestion.memberCol !== null ? currentSheet.headers[aiSuggestion.memberCol] : null,
-                        color: '#534AB7',
-                        required: true,
-                      },
-                      {
-                        icon: Building2,
-                        label: 'Équipe',
-                        value: aiSuggestion.teamCol !== null ? currentSheet.headers[aiSuggestion.teamCol] : null,
-                        color: '#1D9E75',
-                        required: false,
-                      },
-                      {
-                        icon: Mail,
-                        label: 'Email',
-                        value: aiSuggestion.emailCol !== null ? currentSheet.headers[aiSuggestion.emailCol] : null,
-                        color: '#EF9F27',
-                        required: false,
-                      },
-                      {
-                        icon: Layers,
-                        label: 'Plateformes',
-                        value: platformCols.length > 0 ? `${platformCols.length} colonne${platformCols.length > 1 ? 's' : ''}` : null,
-                        color: '#E5628A',
-                        required: false,
-                      },
-                    ].map(({ icon: Icon, label, value, color, required }) => (
-                      <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 bg-gray-50">
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}15` }}>
-                          <Icon className="w-3.5 h-3.5" style={{ color }} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
-                          {value ? (
-                            <p className="text-xs font-semibold text-gray-800 truncate">« {value} »</p>
-                          ) : (
-                            <p className="text-xs text-gray-400 italic">Non détecté</p>
-                          )}
-                        </div>
-                        {value ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Plateformes */}
-                {allPlatformCols.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                      Plateformes importées
-                      <span className="ml-1 font-normal normal-case text-gray-400">(cliquez pour exclure)</span>
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {allPlatformCols.map(({ h, i }) => {
-                        const excluded = excludedPlatformCols.has(i);
-                        return (
-                          <button
-                            key={i}
-                            onClick={() => togglePlatformCol(i)}
-                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
-                              excluded
-                                ? 'border-gray-200 bg-gray-50 text-gray-400 line-through'
-                                : 'border-[#534AB7]/20 bg-[#534AB7]/5 text-[#534AB7] hover:bg-[#534AB7]/10'
-                            }`}
-                          >
-                            {h}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Transformations des valeurs */}
-                {Object.keys(aiSuggestion.levelMappings).filter((k) => aiSuggestion.levelMappings[k] !== 'none').length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Valeurs d'accès reconnues</p>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(aiSuggestion.levelMappings)
-                        .filter(([, v]) => v !== 'none')
-                        .map(([raw, normalized]) => (
-                          <div key={raw} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200">
-                            <Tag className="w-3 h-3 text-gray-400" />
-                            <span className="text-xs font-mono text-gray-600">« {raw} »</span>
-                            <ArrowRightLeft className="w-3 h-3 text-gray-400" />
-                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[normalized]}`}>
-                              {LEVEL_LABEL[normalized]}
-                            </span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Aperçu des données transformées */}
-                {mapping.memberCol !== null && currentSheet.rows.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                      Aperçu des données transformées
-                    </p>
-                    <div className="rounded-xl border border-gray-200 overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                              <th className="px-3 py-2 text-left font-semibold text-gray-600">Membre</th>
-                              {mapping.teamCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600">Équipe</th>}
-                              {mapping.emailCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600">Email</th>}
-                              {platformCols.slice(0, 4).map(({ h }) => (
-                                <th key={h} className="px-3 py-2 text-left font-semibold text-[#534AB7]">{h}</th>
-                              ))}
-                              {platformCols.length > 4 && (
-                                <th className="px-3 py-2 text-gray-400 font-normal">+{platformCols.length - 4}</th>
-                              )}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {currentSheet.rows.slice(0, 5).map((row, ri) => {
-                              const memberName = String(row[mapping.memberCol!] ?? '').trim();
-                              if (!memberName) return null;
-                              return (
-                                <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50">
-                                  <td className="px-3 py-2 font-medium text-gray-800">{memberName}</td>
-                                  {mapping.teamCol !== null && (
-                                    <td className="px-3 py-2 text-gray-500">{String(row[mapping.teamCol] ?? '')}</td>
-                                  )}
-                                  {mapping.emailCol !== null && (
-                                    <td className="px-3 py-2 text-gray-400 font-mono text-[10px]">{String(row[mapping.emailCol] ?? '')}</td>
-                                  )}
-                                  {platformCols.slice(0, 4).map(({ i }) => {
-                                    const rawVal = String(row[i] ?? '');
-                                    const level = normalizeLevel(rawVal, aiSuggestion?.levelMappings);
-                                    return (
-                                      <td key={i} className="px-3 py-2">
-                                        {level !== 'none' ? (
-                                          <div className="flex items-center gap-1">
-                                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[level]}`}>
-                                              {LEVEL_LABEL[level]}
-                                            </span>
-                                            {rawVal && rawVal !== level.toUpperCase() && (
-                                              <span className="text-[9px] text-gray-400 font-mono">({rawVal})</span>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <span className="text-gray-300">—</span>
-                                        )}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1.5">
-                      {payload.members.length} membres · {payload.platforms.length} plateformes · {payload.access.length} droits d'accès détectés
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Boutons d'action */}
-          {!aiLoading && (
-            <div className="flex gap-3">
-              <button
-                onClick={() => setStep('map')}
-                className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" /> Modifier les colonnes
-              </button>
-              <button
-                onClick={handleImport}
-                disabled={importing || mapping.memberCol === null || payload.members.length === 0}
-                className="flex-2 px-6 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-              >
-                {importing
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</>
-                  : <><CheckCircle2 className="w-4 h-4" />Confirmer et importer ({payload.members.length} membres)</>
-                }
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── STEP 3 : Modification manuelle ── */}
-      {step === 'map' && currentSheet && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200">
-            <FileSpreadsheet className="w-8 h-8 text-green-600 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">{file?.name}</p>
-              <p className="text-xs text-gray-400">{currentSheet.rows.length} lignes · {currentSheet.headers.length} colonnes</p>
-            </div>
-            <button onClick={reset} className="p-1.5 hover:bg-gray-100 rounded-lg">
+            <button onClick={reset} className="p-1.5 hover:bg-gray-100 rounded-lg ml-1">
               <X className="w-4 h-4 text-gray-400" />
             </button>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">Modifier le mappage des colonnes</h3>
-            <p className="text-xs text-gray-400 mb-4">Corrigez les colonnes si l'IA s'est trompée.</p>
-
+            <h3 className="text-sm font-semibold text-gray-800 mb-1">Mappage des colonnes</h3>
+            <p className="text-xs text-gray-400 mb-4">Corrigez les colonnes si nécessaire.</p>
             <div className="grid sm:grid-cols-3 gap-4 mb-5">
               {([
                 { key: 'memberCol' as const, label: 'Colonne Membres', required: true },
@@ -680,7 +680,7 @@ export function Import() {
               <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                 <p className="text-xs font-semibold text-emerald-700 mb-1.5 flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  {platformCols.length} plateforme{platformCols.length > 1 ? 's' : ''} sélectionnée{platformCols.length > 1 ? 's' : ''}
+                  {platformCols.length} plateforme{platformCols.length > 1 ? 's' : ''}
                   <span className="font-normal text-emerald-600">(cliquez pour exclure)</span>
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -701,8 +701,8 @@ export function Import() {
           </div>
 
           <div className="flex gap-3">
-            <button onClick={() => setStep('review')}
-              className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+            <button onClick={reset}
+              className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-2">
               <ChevronRight className="w-4 h-4 rotate-180" /> Retour
             </button>
             <button
@@ -719,7 +719,7 @@ export function Import() {
         </div>
       )}
 
-      {/* ── STEP 4 : Done ── */}
+      {/* ── STEP 3 : Done ── */}
       {step === 'done' && result && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-emerald-200 p-8 text-center">
@@ -728,7 +728,6 @@ export function Import() {
             </div>
             <h3 className="text-xl font-black text-gray-900 mb-1">Import terminé !</h3>
             <p className="text-sm text-gray-500 mb-6">Vos données sont maintenant disponibles dans l'application.</p>
-
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: 'Membres créés', value: result.created.members, color: '#534AB7' },
@@ -741,7 +740,6 @@ export function Import() {
                 </div>
               ))}
             </div>
-
             {(result.skipped.members > 0 || result.skipped.platforms > 0) && (
               <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-left">
                 <p className="text-xs font-semibold text-amber-700 flex items-center gap-1.5 mb-1">
@@ -756,7 +754,6 @@ export function Import() {
               </div>
             )}
           </div>
-
           <div className="flex gap-3">
             <button onClick={reset}
               className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
@@ -768,6 +765,27 @@ export function Import() {
             </Link>
           </div>
         </div>
+      )}
+
+      {/* ── Modal IA ── */}
+      {currentSheet && (
+        <AiModal
+          open={modalOpen}
+          loading={aiLoading}
+          suggestion={aiSuggestion}
+          error={aiError}
+          sheet={currentSheet}
+          mapping={mapping}
+          platformCols={platformCols}
+          allPlatformCols={allPlatformCols}
+          excludedPlatformCols={excludedPlatformCols}
+          payload={payload}
+          importing={importing}
+          onTogglePlatform={togglePlatformCol}
+          onConfirm={handleImport}
+          onEdit={() => setModalOpen(false)}
+          onClose={() => setModalOpen(false)}
+        />
       )}
     </div>
   );

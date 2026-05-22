@@ -364,20 +364,39 @@ export const api = {
       return request('/import/batch', { method: 'POST', body: JSON.stringify(data) });
     },
     analyze(data: { rawRows: string[][] }): Promise<{
-      fileType: 'access_matrix' | 'platform_inventory' | 'subscription_inventory' | 'member_list' | 'unknown';
+      fileType: 'access_matrix' | 'access_matrix_transposed' | 'platform_inventory' | 'subscription_inventory' | 'system_inventory' | 'network_flow_inventory' | 'member_list' | 'unknown';
       headerRowIndex: number;
+      subHeaderRowIndex: number | null;
       dataEndRow: number | null;
+      warnings: string[];
       memberCol: number | null;
+      firstNameCol: number | null;
+      lastNameCol: number | null;
       teamCol: number | null;
       emailCol: number | null;
       platformCols: number[];
       levelMappings: Record<string, 'admin' | 'rw' | 'ro' | 'req' | 'none'>;
+      memberRow: number | null;
+      platformCol: number | null;
       nameCol: number | null;
       categoryCol: number | null;
       urlCol: number | null;
       vendorCol: number | null;
       renewalCol: number | null;
       statusCol: number | null;
+      costMonthlyCol: number | null;
+      costAnnualCol: number | null;
+      currencyCol: number | null;
+      ipCol: number | null;
+      osCol: number | null;
+      typeCol: number | null;
+      criticalityCol: number | null;
+      responsibleCol: number | null;
+      sourceCol: number | null;
+      destinationCol: number | null;
+      portCol: number | null;
+      protocolCol: number | null;
+      directionCol: number | null;
       confidence: 'high' | 'medium' | 'low';
       notes: string;
     }> {
@@ -391,6 +410,12 @@ export const api = {
     },
     batchMembers(data: { members: { full_name: string; email?: string; team?: string }[] }): Promise<{ created: number; skipped: number }> {
       return request('/import/batch-members', { method: 'POST', body: JSON.stringify(data) });
+    },
+    batchSystems(data: { systems: { name: string; ip_address?: string; os_version?: string; type?: string; criticality?: string; status?: string; responsible?: string }[] }): Promise<{ created: number; skipped: number }> {
+      return request('/import/batch-systems', { method: 'POST', body: JSON.stringify(data) });
+    },
+    batchNetworkFlows(data: { flows: { source: string; destination: string; port?: string; protocol?: string; status?: string; direction?: string }[] }): Promise<{ created: number; skipped: number }> {
+      return request('/import/batch-network-flows', { method: 'POST', body: JSON.stringify(data) });
     },
   },
 

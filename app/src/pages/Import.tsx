@@ -32,28 +32,47 @@ interface ColumnMapping {
 }
 
 interface AiSuggestion {
-  fileType: 'access_matrix' | 'platform_inventory' | 'subscription_inventory' | 'member_list' | 'unknown';
+  fileType: 'access_matrix' | 'access_matrix_transposed' | 'platform_inventory' | 'subscription_inventory' | 'system_inventory' | 'network_flow_inventory' | 'member_list' | 'unknown';
   headerRowIndex: number;
+  subHeaderRowIndex: number | null;
   dataEndRow: number | null;
+  warnings: string[];
   memberCol: number | null;
+  firstNameCol: number | null;
+  lastNameCol: number | null;
   teamCol: number | null;
   emailCol: number | null;
   platformCols: number[];
   levelMappings: Record<string, 'admin' | 'rw' | 'ro' | 'req' | 'none'>;
+  memberRow: number | null;
+  platformCol: number | null;
   nameCol: number | null;
   categoryCol: number | null;
   urlCol: number | null;
   vendorCol: number | null;
   renewalCol: number | null;
   statusCol: number | null;
+  costMonthlyCol: number | null;
+  costAnnualCol: number | null;
+  currencyCol: number | null;
+  ipCol: number | null;
+  osCol: number | null;
+  typeCol: number | null;
+  criticalityCol: number | null;
+  responsibleCol: number | null;
+  sourceCol: number | null;
+  destinationCol: number | null;
+  portCol: number | null;
+  protocolCol: number | null;
+  directionCol: number | null;
   confidence: 'high' | 'medium' | 'low';
   notes: string;
 }
 
 interface ImportResult {
-  created: { members: number; platforms: number; accessRights: number; subscriptions?: number };
-  skipped: { members: number; platforms: number; subscriptions?: number };
-  fileType?: 'access_matrix' | 'platform_inventory' | 'subscription_inventory' | 'member_list' | 'unknown';
+  created: { members: number; platforms: number; accessRights: number; subscriptions?: number; systems?: number; flows?: number };
+  skipped: { members: number; platforms: number; subscriptions?: number; systems?: number };
+  fileType?: string;
 }
 
 interface BatchPayload {
@@ -62,13 +81,77 @@ interface BatchPayload {
   access: { memberName: string; platformName: string; level: 'admin' | 'rw' | 'ro' | 'req' }[];
 }
 
+// ─── Propage les cellules fusionnées (valeur vide = hérite de la cellule au-dessus) ───
+function fillMergedCells(rows: string[][]): string[][] {
+  const filled = rows.map((r) => [...r]);
+  for (let col = 0; col < (filled[0]?.length ?? 0); col++) {
+    let last = '';
+    for (let row = 0; row < filled.length; row++) {
+      const val = String(filled[row][col] ?? '').trim();
+      if (val) { last = val; } else if (last) { filled[row][col] = last; }
+    }
+  }
+  return filled;
+}
+
 // ─── Construit un ParsedSheet depuis un RawSheet + suggestion IA ───
 function applyAiToSheet(raw: RawSheet, ai: AiSuggestion): ParsedSheet {
+  // Matrice transposée : on pivote avant tout
+  if (ai.fileType === 'access_matrix_transposed') {
+    const allRows = raw.allRows;
+    const memberRow = ai.memberRow ?? ai.headerRowIndex;
+    const platCol = ai.platformCol ?? 0;
+    const end = ai.dataEndRow ?? allRows.length;
+    // headers = noms des personnes (depuis la ligne memberRow, sans la colonne plateforme)
+    const memberNames = (allRows[memberRow] ?? []).map(String).filter((_, i) => i !== platCol);
+    // lignes de données = lignes après memberRow jusqu'à dataEndRow
+    const dataRows = allRows.slice(memberRow + 1, end).filter((r) => r.some((c) => String(c).trim() !== ''));
+    // On reconstruit une matrice normale : lignes=personnes, cols=plateformes
+    const pivotHeaders = ['Membre', ...dataRows.map((r) => String(r[platCol] ?? '').trim()).filter(Boolean)];
+    const pivotRows = memberNames.map((name, mi) => {
+      const row: string[] = [name];
+      for (const dataRow of dataRows) {
+        row.push(String(dataRow[mi + (mi >= platCol ? 1 : 0)] ?? ''));
+      }
+      return row;
+    }).filter((r) => r[0]);
+    return { name: raw.name, headers: pivotHeaders, rows: pivotRows };
+  }
+
   const headerRow = raw.allRows[ai.headerRowIndex] ?? [];
   const end = ai.dataEndRow ?? raw.allRows.length;
-  const dataRows = raw.allRows.slice(ai.headerRowIndex + 1, end)
+  let dataRows = raw.allRows.slice(ai.headerRowIndex + 1, end)
     .filter((r) => r.some((c) => String(c).trim() !== ''));
-  return { name: raw.name, headers: headerRow.map(String), rows: dataRows.map((r) => r.map(String)) };
+
+  // Propager les cellules fusionnées (ex: colonne équipe vide sur les lignes 2-5 d'un même groupe)
+  dataRows = fillMergedCells(dataRows);
+
+  // Construire les en-têtes : si double ligne d'en-têtes, fusionner les deux
+  let headers = headerRow.map(String);
+  if (ai.subHeaderRowIndex !== null && ai.subHeaderRowIndex !== undefined) {
+    const subRow = (raw.allRows[ai.subHeaderRowIndex] ?? []).map(String);
+    headers = headers.map((h, i) => {
+      const sub = subRow[i] ?? '';
+      return h && sub && sub !== h ? `${h} — ${sub}` : h || sub;
+    });
+  }
+
+  // Si prénom/nom séparés, ajouter une colonne virtuelle "Prénom Nom" à la fin
+  const rows = dataRows.map((r) => {
+    const row = r.map(String);
+    if (ai.firstNameCol !== null && ai.lastNameCol !== null) {
+      const fn = String(row[ai.firstNameCol] ?? '').trim();
+      const ln = String(row[ai.lastNameCol] ?? '').trim();
+      row.push(`${fn} ${ln}`.trim());
+    }
+    return row;
+  });
+
+  if (ai.firstNameCol !== null && ai.lastNameCol !== null) {
+    headers = [...headers, '_full_name'];
+  }
+
+  return { name: raw.name, headers, rows };
 }
 
 // ─── Détection fallback sans IA ───
@@ -242,15 +325,20 @@ function AiModal({
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="text-xs font-bold text-gray-700">{CONFIDENCE_LABEL_MAP[suggestion.confidence]}</p>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        suggestion.fileType === 'access_matrix' ? 'bg-[#534AB7]/10 text-[#534AB7]'
+                        suggestion.fileType === 'access_matrix' || suggestion.fileType === 'access_matrix_transposed' ? 'bg-[#534AB7]/10 text-[#534AB7]'
                         : suggestion.fileType === 'platform_inventory' ? 'bg-emerald-100 text-emerald-700'
-                        : suggestion.fileType === 'subscription_inventory' ? 'bg-[#534AB7]/10 text-[#534AB7]'
+                        : suggestion.fileType === 'subscription_inventory' ? 'bg-blue-100 text-blue-700'
+                        : suggestion.fileType === 'system_inventory' ? 'bg-orange-100 text-orange-700'
+                        : suggestion.fileType === 'network_flow_inventory' ? 'bg-rose-100 text-rose-700'
                         : suggestion.fileType === 'member_list' ? 'bg-amber-100 text-amber-700'
                         : 'bg-gray-100 text-gray-500'
                       }`}>
                         {suggestion.fileType === 'access_matrix' ? 'Matrice d\'habilitations'
+                          : suggestion.fileType === 'access_matrix_transposed' ? 'Matrice inversée (pivotée)'
                           : suggestion.fileType === 'platform_inventory' ? 'Inventaire de plateformes'
                           : suggestion.fileType === 'subscription_inventory' ? 'Inventaire d\'abonnements'
+                          : suggestion.fileType === 'system_inventory' ? 'Inventaire de systèmes'
+                          : suggestion.fileType === 'network_flow_inventory' ? 'Flux réseau'
                           : suggestion.fileType === 'member_list' ? 'Liste de membres'
                           : 'Type inconnu'}
                       </span>
@@ -265,8 +353,11 @@ function AiModal({
                 <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
                   <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Ligne d'en-têtes</p>
                   <p className="text-xs font-bold text-gray-800">Ligne {suggestion.headerRowIndex + 1}</p>
+                  {suggestion.subHeaderRowIndex !== null && suggestion.subHeaderRowIndex !== undefined && (
+                    <p className="text-[10px] text-amber-500 mt-0.5">Double en-tête détecté (L{suggestion.subHeaderRowIndex + 1}) — fusionné</p>
+                  )}
                   {suggestion.headerRowIndex > 0 && (
-                    <p className="text-[10px] text-gray-400 mt-0.5">{suggestion.headerRowIndex} ligne{suggestion.headerRowIndex > 1 ? 's' : ''} ignorée{suggestion.headerRowIndex > 1 ? 's' : ''}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{suggestion.headerRowIndex} ligne{suggestion.headerRowIndex > 1 ? 's' : ''} de titre ignorée{suggestion.headerRowIndex > 1 ? 's' : ''}</p>
                   )}
                 </div>
                 <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
@@ -277,6 +368,18 @@ function AiModal({
                   )}
                 </div>
               </div>
+
+              {/* Warnings */}
+              {suggestion.warnings?.length > 0 && (
+                <div className="space-y-1">
+                  {suggestion.warnings.map((w, i) => (
+                    <div key={i} className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700">{w}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* ── MATRICE D'HABILITATIONS ── */}
               {suggestion.fileType === 'access_matrix' && (
@@ -453,6 +556,70 @@ function AiModal({
                 </>
               )}
 
+              {/* ── MATRICE TRANSPOSÉE (traitement identique à access_matrix après pivot) ── */}
+              {suggestion.fileType === 'access_matrix_transposed' && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-[#534AB7]/5 border border-[#534AB7]/20">
+                  <Sparkles className="w-3.5 h-3.5 text-[#534AB7] flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-[#534AB7]">Matrice inversée détectée — pivotée automatiquement pour l'import (plateformes → colonnes, personnes → lignes)</p>
+                </div>
+              )}
+
+              {/* ── INVENTAIRE DE SYSTÈMES ── */}
+              {suggestion.fileType === 'system_inventory' && suggestion.nameCol !== null && (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Colonnes détectées</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Hostname/Nom', col: suggestion.nameCol, required: true },
+                        { label: 'Adresse IP', col: suggestion.ipCol, required: false },
+                        { label: 'OS', col: suggestion.osCol, required: false },
+                        { label: 'Type', col: suggestion.typeCol, required: false },
+                        { label: 'Criticité', col: suggestion.criticalityCol, required: false },
+                        { label: 'Statut', col: suggestion.statusCol, required: false },
+                      ].map(({ label, col, required }) => (
+                        <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 bg-white">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
+                            {col !== null ? <p className="text-xs font-semibold text-gray-800 truncate">« {sheet.headers[col!]} »</p> : <p className="text-xs text-gray-300 italic">Non détecté</p>}
+                          </div>
+                          {col !== null ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-gray-200 flex-shrink-0" />}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400">{sheet.rows.filter(r => String(r[suggestion.nameCol!] ?? '').trim()).length} systèmes détectés</p>
+                </>
+              )}
+
+              {/* ── FLUX RÉSEAU ── */}
+              {suggestion.fileType === 'network_flow_inventory' && suggestion.sourceCol !== null && suggestion.destinationCol !== null && (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Colonnes détectées</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Source', col: suggestion.sourceCol, required: true },
+                        { label: 'Destination', col: suggestion.destinationCol, required: true },
+                        { label: 'Port', col: suggestion.portCol, required: false },
+                        { label: 'Protocole', col: suggestion.protocolCol, required: false },
+                        { label: 'Direction', col: suggestion.directionCol, required: false },
+                        { label: 'Statut', col: suggestion.statusCol, required: false },
+                      ].map(({ label, col, required }) => (
+                        <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 bg-white">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
+                            {col !== null ? <p className="text-xs font-semibold text-gray-800 truncate">« {sheet.headers[col!]} »</p> : <p className="text-xs text-gray-300 italic">Non détecté</p>}
+                          </div>
+                          {col !== null ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-gray-200 flex-shrink-0" />}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400">{sheet.rows.filter(r => String(r[suggestion.sourceCol!] ?? '').trim()).length} flux détectés</p>
+                </>
+              )}
+
               {/* ── INVENTAIRE D'ABONNEMENTS ── */}
               {suggestion.fileType === 'subscription_inventory' && suggestion.nameCol !== null && (
                 <>
@@ -600,12 +767,27 @@ function AiModal({
               </button>
             )}
             {suggestion.fileType === 'platform_inventory' && suggestion.nameCol !== null && (
-              <button
-                onClick={onConfirm}
-                disabled={importing}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-              >
+              <button onClick={onConfirm} disabled={importing}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
                 {importing ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</> : <><CheckCircle2 className="w-4 h-4" />Importer les plateformes ({sheet?.rows.filter(r => String(r[suggestion.nameCol!] ?? '').trim()).length ?? 0})</>}
+              </button>
+            )}
+            {suggestion.fileType === 'access_matrix_transposed' && (
+              <button onClick={onConfirm} disabled={importing || payload.members.length === 0}
+                className="flex-1 py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                {importing ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</> : <><CheckCircle2 className="w-4 h-4" />Importer matrice pivotée ({payload.members.length} membres)</>}
+              </button>
+            )}
+            {suggestion.fileType === 'system_inventory' && suggestion.nameCol !== null && (
+              <button onClick={onConfirm} disabled={importing}
+                className="flex-1 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-bold hover:bg-orange-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                {importing ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</> : <><CheckCircle2 className="w-4 h-4" />Importer les systèmes ({sheet?.rows.filter(r => String(r[suggestion.nameCol!] ?? '').trim()).length ?? 0})</>}
+              </button>
+            )}
+            {suggestion.fileType === 'network_flow_inventory' && suggestion.sourceCol !== null && (
+              <button onClick={onConfirm} disabled={importing}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white text-sm font-bold hover:bg-rose-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                {importing ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</> : <><CheckCircle2 className="w-4 h-4" />Importer les flux réseau ({sheet?.rows.filter(r => String(r[suggestion.sourceCol!] ?? '').trim()).length ?? 0})</>}
               </button>
             )}
             {suggestion.fileType === 'subscription_inventory' && suggestion.nameCol !== null && (
@@ -674,7 +856,13 @@ export function Import() {
         next[sheetIndex] = parsed;
         return next;
       });
-      setMapping({ memberCol: suggestion.memberCol, teamCol: suggestion.teamCol, emailCol: suggestion.emailCol });
+      // Si prénom/nom séparés, pointer vers la colonne virtuelle _full_name ajoutée en fin de tableau
+      const effectiveMemberCol = (suggestion.firstNameCol !== null && suggestion.lastNameCol !== null)
+        ? parsed.headers.length - 1  // colonne virtuelle ajoutée en dernier
+        : suggestion.memberCol;
+      // Pour la matrice transposée, col membre = 0 (premier col de la matrice pivotée)
+      const memberColFinal = suggestion.fileType === 'access_matrix_transposed' ? 0 : effectiveMemberCol;
+      setMapping({ memberCol: memberColFinal, teamCol: suggestion.teamCol, emailCol: suggestion.emailCol });
       setExcludedPlatformCols(new Set());
       return suggestion;
     } catch (err) {
@@ -855,6 +1043,37 @@ export function Import() {
         setResult({ created: { members: 0, platforms: res.created, accessRights: 0 }, skipped: { members: 0, platforms: res.skipped }, fileType: 'platform_inventory' });
         setModalOpen(false);
         setStep('done');
+
+      } else if (ft === 'system_inventory' && aiSuggestion?.nameCol !== null) {
+        const rows = currentSheet?.rows ?? [];
+        const systems = rows.map((r) => ({
+          name: String(r[aiSuggestion!.nameCol!] ?? '').trim(),
+          ip_address: aiSuggestion!.ipCol !== null ? String(r[aiSuggestion!.ipCol!] ?? '').trim() : undefined,
+          os_version: aiSuggestion!.osCol !== null ? String(r[aiSuggestion!.osCol!] ?? '').trim() : undefined,
+          type: aiSuggestion!.typeCol !== null ? String(r[aiSuggestion!.typeCol!] ?? '').trim() : undefined,
+          criticality: aiSuggestion!.criticalityCol !== null ? String(r[aiSuggestion!.criticalityCol!] ?? '').trim() : undefined,
+          status: aiSuggestion!.statusCol !== null ? String(r[aiSuggestion!.statusCol!] ?? '').trim() : undefined,
+          responsible: aiSuggestion!.responsibleCol !== null ? String(r[aiSuggestion!.responsibleCol!] ?? '').trim() : undefined,
+        })).filter((s) => s.name);
+        if (systems.length === 0) throw new Error('Aucun système trouvé.');
+        const res = await api.import.batchSystems({ systems });
+        setResult({ created: { members: 0, platforms: 0, accessRights: 0, systems: res.created }, skipped: { members: 0, platforms: 0, systems: res.skipped }, fileType: 'system_inventory' });
+        setModalOpen(false); setStep('done');
+
+      } else if (ft === 'network_flow_inventory' && aiSuggestion?.sourceCol !== null) {
+        const rows = currentSheet?.rows ?? [];
+        const flows = rows.map((r) => ({
+          source: String(r[aiSuggestion!.sourceCol!] ?? '').trim(),
+          destination: aiSuggestion!.destinationCol !== null ? String(r[aiSuggestion!.destinationCol!] ?? '').trim() : '',
+          port: aiSuggestion!.portCol !== null ? String(r[aiSuggestion!.portCol!] ?? '').trim() : undefined,
+          protocol: aiSuggestion!.protocolCol !== null ? String(r[aiSuggestion!.protocolCol!] ?? '').trim() : undefined,
+          status: aiSuggestion!.statusCol !== null ? String(r[aiSuggestion!.statusCol!] ?? '').trim() : undefined,
+          direction: aiSuggestion!.directionCol !== null ? String(r[aiSuggestion!.directionCol!] ?? '').trim() : undefined,
+        })).filter((f) => f.source);
+        if (flows.length === 0) throw new Error('Aucun flux trouvé.');
+        const res = await api.import.batchNetworkFlows({ flows });
+        setResult({ created: { members: 0, platforms: 0, accessRights: 0, flows: res.created }, skipped: { members: 0, platforms: 0 }, fileType: 'network_flow_inventory' });
+        setModalOpen(false); setStep('done');
 
       } else if (ft === 'subscription_inventory' && aiSuggestion?.nameCol !== null) {
         const rows = currentSheet?.rows ?? [];
@@ -1078,11 +1297,15 @@ export function Import() {
             </div>
             <h3 className="text-xl font-black text-gray-900 mb-1">Import terminé !</h3>
             <p className="text-sm text-gray-500 mb-6">Vos données sont maintenant disponibles dans l'application.</p>
-            <div className={`grid gap-3 ${result.fileType === 'platform_inventory' || result.fileType === 'member_list' || result.fileType === 'subscription_inventory' ? 'grid-cols-1' : 'grid-cols-3'}`}>
+            <div className={`grid gap-3 ${ ['platform_inventory','member_list','subscription_inventory','system_inventory','network_flow_inventory'].includes(result.fileType ?? '') ? 'grid-cols-1' : 'grid-cols-3'}`}>
               {(result.fileType === 'platform_inventory'
                 ? [{ label: 'Plateformes créées', value: result.created.platforms, color: '#1D9E75' }]
                 : result.fileType === 'subscription_inventory'
-                ? [{ label: 'Abonnements créés', value: result.created.subscriptions ?? 0, color: '#534AB7' }]
+                ? [{ label: 'Abonnements créés', value: result.created.subscriptions ?? 0, color: '#2563eb' }]
+                : result.fileType === 'system_inventory'
+                ? [{ label: 'Systèmes créés', value: result.created.systems ?? 0, color: '#ea580c' }]
+                : result.fileType === 'network_flow_inventory'
+                ? [{ label: 'Flux réseau créés', value: result.created.flows ?? 0, color: '#e11d48' }]
                 : result.fileType === 'member_list'
                 ? [{ label: 'Membres créés', value: result.created.members, color: '#534AB7' }]
                 : [

@@ -35,67 +35,104 @@ router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
     return `  Ligne ${i}: [${cells}]`;
   }).join('\n');
 
-  const prompt = `Tu analyses un fichier Excel pour une application de gestion IT. Identifie d'abord le TYPE du fichier, puis extrais les informations adaptées.
+  const prompt = `Tu analyses un fichier Excel pour une application de gestion IT. Identifie le TYPE puis extrais les informations adaptées.
 
 Voici TOUTES les lignes brutes du fichier avec leur index :
 ${rowDump}
 
-ÉTAPE 1 — Détermine le type du fichier :
-- "access_matrix" : matrice d'habilitations (lignes = personnes, colonnes = plateformes avec niveaux d'accès)
-- "platform_inventory" : inventaire de plateformes/outils (lignes = plateformes, colonnes = caractéristiques : nom, catégorie, URL, statut, responsable, etc.)
-- "subscription_inventory" : inventaire d'abonnements/licences (lignes = abonnements, colonnes = nom, fournisseur, coût, date de renouvellement, statut, etc.)
-- "member_list" : liste de membres/employés sans colonnes de plateformes
+ÉTAPE 1 — Type du fichier (choisis UN seul) :
+- "access_matrix" : matrice d'habilitations classique (lignes=personnes, colonnes=plateformes avec niveaux d'accès)
+- "access_matrix_transposed" : matrice inversée (lignes=plateformes, colonnes=personnes avec niveaux d'accès)
+- "platform_inventory" : inventaire de plateformes/outils (lignes=plateformes, colonnes=caractéristiques)
+- "subscription_inventory" : inventaire d'abonnements/licences (lignes=abonnements, colonnes=nom, fournisseur, coût, renouvellement, etc.)
+- "system_inventory" : inventaire de serveurs/systèmes (hostname, IP, OS, criticité, responsable, etc.)
+- "network_flow_inventory" : inventaire de flux réseau (source, destination, port, protocole, statut, etc.)
+- "member_list" : liste de membres/employés uniquement
 - "unknown" : structure non reconnue
 
-ÉTAPE 2 — Selon le type, remplis les champs correspondants :
+ÉTAPE 2 — Champs COMMUNS à tous les types :
+- headerRowIndex : index (0-based) de la vraie ligne d'en-têtes — ignorer les titres de section au-dessus
+- subHeaderRowIndex : si les en-têtes sont sur 2 lignes (ex: ligne 3=groupe "GitHub", ligne 4="Admin/RW/RO"), donne l'index de la 2e ligne. null sinon
+- dataEndRow : index exclusif de fin des données réelles (null=jusqu'à la fin)
+- warnings : tableau de strings — signaler doublons de noms, lignes vides au milieu, sous-totaux, valeurs suspectes
+- confidence : "high" | "medium" | "low"
+- notes : explication courte en français
 
-Pour TOUS les types :
-1. headerRowIndex : index (0-based) de la vraie ligne d'en-têtes (ignorer titres de section)
-2. dataEndRow : index exclusif de fin des données réelles (null si jusqu'à la fin)
-3. confidence : "high", "medium" ou "low"
-4. notes : explication courte en français
+ÉTAPE 3 — Champs SPÉCIFIQUES selon le type :
 
-Pour "access_matrix" uniquement :
-5. memberCol : index colonne nom complet de la personne
-6. teamCol : index colonne équipe — null si absente
-7. emailCol : index colonne email — null si absente
-8. platformCols : index de TOUTES les colonnes plateforme (GitHub, Jira, AWS, etc.) — LISTE ABSOLUMENT TOUTES, sans exception
-9. levelMappings : mappe chaque valeur d'accès vers "admin"/"rw"/"ro"/"req"/"none"
+"access_matrix" :
+- memberCol : colonne nom complet — null si prénom/nom séparés
+- firstNameCol : colonne prénom — null si nom complet dans memberCol
+- lastNameCol : colonne nom de famille — null si nom complet dans memberCol
+- teamCol, emailCol
+- platformCols : TOUTES les colonnes plateforme sans exception
+- levelMappings : "admin"|"rw"|"ro"|"req"|"none" pour chaque valeur trouvée
 
-Pour "platform_inventory" uniquement :
-5. nameCol : index colonne nom de la plateforme (obligatoire)
-6. categoryCol : index colonne catégorie/type — null si absent
-7. urlCol : index colonne URL — null si absent
-8. statusCol : index colonne statut/état — null si absent
+"access_matrix_transposed" :
+- memberRow : index de la ligne contenant les noms des personnes (souvent = headerRowIndex)
+- platformCol : index de la colonne contenant les noms des plateformes
+- levelMappings
 
-Pour "subscription_inventory" uniquement :
-5. nameCol : index colonne nom de l'abonnement (obligatoire)
-6. categoryCol : index colonne catégorie — null si absent
-7. vendorCol : index colonne fournisseur/vendor — null si absent
-8. renewalCol : index colonne date de renouvellement — null si absent
-9. statusCol : index colonne statut — null si absent
+"platform_inventory" :
+- nameCol (obligatoire), categoryCol, urlCol, statusCol
 
-Pour "member_list" uniquement :
-5. memberCol : index colonne nom complet
-6. teamCol : index colonne équipe — null si absent
-7. emailCol : index colonne email — null si absent
+"subscription_inventory" :
+- nameCol (obligatoire), categoryCol, vendorCol, renewalCol, statusCol
+- costMonthlyCol : colonne coût mensuel — null si absent
+- costAnnualCol : colonne coût annuel — null si absent
+- currencyCol : colonne devise — null si absent
 
-Réponds UNIQUEMENT avec du JSON valide, sans markdown :
+"system_inventory" :
+- nameCol : hostname/nom système (obligatoire)
+- ipCol : adresse IP — null si absent
+- osCol : système d'exploitation — null si absent
+- typeCol : type (serveur, VM, etc.) — null si absent
+- criticalityCol : criticité — null si absent
+- statusCol, responsibleCol
+
+"network_flow_inventory" :
+- sourceCol : source (obligatoire), destinationCol (obligatoire)
+- portCol, protocolCol, statusCol, directionCol
+
+"member_list" :
+- memberCol : nom complet — null si prénom/nom séparés
+- firstNameCol, lastNameCol, teamCol, emailCol
+
+Réponds UNIQUEMENT avec du JSON valide, sans markdown. Tous les champs non applicables au type détecté valent null ou [] :
 {
-  "fileType": "access_matrix" | "platform_inventory" | "subscription_inventory" | "member_list" | "unknown",
+  "fileType": string,
   "headerRowIndex": number,
+  "subHeaderRowIndex": number | null,
   "dataEndRow": number | null,
+  "warnings": string[],
   "memberCol": number | null,
+  "firstNameCol": number | null,
+  "lastNameCol": number | null,
   "teamCol": number | null,
   "emailCol": number | null,
   "platformCols": number[],
-  "levelMappings": Record<string, "admin" | "rw" | "ro" | "req" | "none">,
+  "levelMappings": {},
+  "memberRow": number | null,
+  "platformCol": number | null,
   "nameCol": number | null,
   "categoryCol": number | null,
   "urlCol": number | null,
   "vendorCol": number | null,
   "renewalCol": number | null,
   "statusCol": number | null,
+  "costMonthlyCol": number | null,
+  "costAnnualCol": number | null,
+  "currencyCol": number | null,
+  "ipCol": number | null,
+  "osCol": number | null,
+  "typeCol": number | null,
+  "criticalityCol": number | null,
+  "responsibleCol": number | null,
+  "sourceCol": number | null,
+  "destinationCol": number | null,
+  "portCol": number | null,
+  "protocolCol": number | null,
+  "directionCol": number | null,
   "confidence": "high" | "medium" | "low",
   "notes": string
 }`;
@@ -107,7 +144,7 @@ Réponds UNIQUEMENT avec du JSON valide, sans markdown :
   });
   const message = await client.messages.create({
     model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
-    max_tokens: 2048,
+    max_tokens: 3000,
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -489,6 +526,94 @@ router.post('/batch-members', async (req: Request, res: Response): Promise<void>
   });
 
   res.json({ created, skipped });
+});
+
+// POST /api/import/batch-systems
+const BatchSystemsSchema = z.object({
+  systems: z.array(z.object({
+    name: z.string(),
+    ip_address: z.string().optional().default(''),
+    os_version: z.string().optional().default(''),
+    type: z.string().optional().default(''),
+    criticality: z.string().optional().default('normale'),
+    status: z.string().optional().default('actif'),
+    responsible: z.string().optional().default(''),
+  })).max(500),
+});
+
+router.post('/batch-systems', async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+  const { systems: inSystems } = BatchSystemsSchema.parse(req.body);
+
+  const existing = await prisma.system.findMany({ where: { organization_id: orgId }, select: { hostname: true } });
+  const existingNames = new Set(existing.map((s) => s.hostname.toLowerCase()));
+
+  let created = 0;
+  let skipped = 0;
+  let sysCounter = existing.length + 1;
+  for (const s of inSystems) {
+    if (existingNames.has(s.name.toLowerCase())) { skipped++; continue; }
+    await prisma.system.create({
+      data: {
+        id: uuidv4(),
+        organization_id: orgId,
+        system_id: `SYS-${String(sysCounter++).padStart(3, '0')}`,
+        hostname: s.name,
+        ip_address: s.ip_address,
+        os_version: s.os_version,
+        type: s.type,
+        criticality: s.criticality || 'normale',
+        status: s.status || 'actif',
+        tech_responsible: s.responsible,
+      },
+    });
+    existingNames.add(s.name.toLowerCase());
+    created++;
+  }
+
+  await createAuditEntry({ organizationId: orgId, actor: req.user!.email, action: 'import.systems', targetType: 'import', targetId: orgId, targetLabel: 'Import systèmes', oldValue: {}, newValue: { created }, ipAddress: getClientIp(req), userAgent: req.headers['user-agent'] ?? '' });
+  res.json({ created, skipped });
+});
+
+// POST /api/import/batch-network-flows
+const BatchNetworkFlowsSchema = z.object({
+  flows: z.array(z.object({
+    source: z.string(),
+    destination: z.string(),
+    port: z.string().optional().default(''),
+    protocol: z.string().optional().default(''),
+    status: z.string().optional().default('autorisé'),
+    direction: z.string().optional().default('entrant'),
+  })).max(500),
+});
+
+router.post('/batch-network-flows', async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+  const { flows: inFlows } = BatchNetworkFlowsSchema.parse(req.body);
+
+  const existing = await prisma.networkFlow.findMany({ where: { organization_id: orgId }, select: { flow_id: true } });
+  let flowCounter = existing.length + 1;
+
+  let created = 0;
+  for (const f of inFlows) {
+    await prisma.networkFlow.create({
+      data: {
+        id: uuidv4(),
+        organization_id: orgId,
+        flow_id: `FLOW-${String(flowCounter++).padStart(3, '0')}`,
+        source_host: f.source,
+        destination_host: f.destination,
+        port: f.port,
+        protocol: f.protocol,
+        status: f.status || 'autorisé',
+        direction: f.direction || 'entrant',
+      },
+    });
+    created++;
+  }
+
+  await createAuditEntry({ organizationId: orgId, actor: req.user!.email, action: 'import.network-flows', targetType: 'import', targetId: orgId, targetLabel: 'Import flux réseau', oldValue: {}, newValue: { created }, ipAddress: getClientIp(req), userAgent: req.headers['user-agent'] ?? '' });
+  res.json({ created, skipped: 0 });
 });
 
 export default router;

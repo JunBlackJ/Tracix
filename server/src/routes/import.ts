@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
+import AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
@@ -9,6 +10,81 @@ import { recomputeAllRiskScores } from '../services/risk.service';
 
 const router = Router();
 router.use(requireAuth);
+
+// ─── POST /api/import/analyze — AI column detection ───
+const AnalyzeSchema = z.object({
+  headers: z.array(z.string()).min(1).max(100),
+  sampleRows: z.array(z.array(z.string())).max(10),
+});
+
+router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
+  const awsRegion = process.env.AWS_REGION;
+  const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  if (!awsRegion || !awsAccessKeyId || !awsSecretAccessKey) {
+    res.status(503).json({ error: 'AWS credentials not configured (AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)' });
+    return;
+  }
+
+  const { headers, sampleRows } = AnalyzeSchema.parse(req.body);
+
+  const headerList = headers.map((h: string, i: number) => `  [${i}] "${h}"`).join('\n');
+  const sampleTable = sampleRows.slice(0, 5).map((row: string[]) =>
+    '  | ' + headers.map((_: string, i: number) => String(row[i] ?? '').substring(0, 30)).join(' | ') + ' |'
+  ).join('\n');
+
+  const prompt = `You are analyzing an Excel file for an IT access management application. The file tracks which employees have access to which platforms/tools.
+
+Headers (with their column index):
+${headerList}
+
+Sample data rows:
+${sampleTable}
+
+Identify:
+1. memberCol: index of the column containing the person's full name (could be "Nom", "Name", "Collaborateur", "Prénom Nom", etc.)
+2. teamCol: index of the team/department column (could be "Équipe", "Service", "Department", "Pôle", etc.) — null if absent
+3. emailCol: index of the email column — null if absent
+4. platformCols: indexes of ALL remaining columns that represent platforms/tools/applications (GitHub, Jira, Notion, AWS, etc.)
+5. levelMappings: for any non-standard access level values found in the sample data, map them to one of: "admin", "rw" (read-write/editor), "ro" (read-only/viewer), "req" (requested), "none" (no access / empty)
+   Common patterns: "X", "✓", "Oui", "Yes", "1", "true" → typically "rw" or check context; "A" or "Admin" → "admin"; blank/"-"/"Non"/"No"/"0" → "none"
+6. confidence: your confidence level ("high", "medium", or "low")
+7. notes: a short explanation in French about what you detected, or any ambiguity
+
+Respond with ONLY valid JSON matching this TypeScript interface, no markdown, no explanation:
+{
+  "memberCol": number | null,
+  "teamCol": number | null,
+  "emailCol": number | null,
+  "platformCols": number[],
+  "levelMappings": Record<string, "admin" | "rw" | "ro" | "req" | "none">,
+  "confidence": "high" | "medium" | "low",
+  "notes": string
+}`;
+
+  const client = new AnthropicBedrock({
+    awsRegion,
+    awsAccessKey: awsAccessKeyId,
+    awsSecretKey: awsSecretAccessKey,
+  });
+  const message = await client.messages.create({
+    model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    max_tokens: 1024,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const text = (message.content.find((b) => b.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '{}';
+
+  let analysis: unknown;
+  try {
+    analysis = JSON.parse(text.trim());
+  } catch {
+    res.status(500).json({ error: 'Invalid AI response', raw: text });
+    return;
+  }
+
+  res.json(analysis);
+});
 
 const BatchSchema = z.object({
   members: z.array(z.object({

@@ -360,6 +360,17 @@ export const api = {
     }): Promise<{ created: { members: number; platforms: number; accessRights: number }; skipped: { members: number; platforms: number } }> {
       return request('/import/batch', { method: 'POST', body: JSON.stringify(data) });
     },
+    analyze(data: { headers: string[]; sampleRows: string[][] }): Promise<{
+      memberCol: number | null;
+      teamCol: number | null;
+      emailCol: number | null;
+      platformCols: number[];
+      levelMappings: Record<string, 'admin' | 'rw' | 'ro' | 'req' | 'none'>;
+      confidence: 'high' | 'medium' | 'low';
+      notes: string;
+    }> {
+      return request('/import/analyze', { method: 'POST', body: JSON.stringify(data) });
+    },
   },
 
   categories: {

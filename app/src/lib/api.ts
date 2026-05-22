@@ -461,4 +461,19 @@ export const api = {
       return request(`/categories/${id}`, { method: 'DELETE' });
     },
   },
+
+  reports: {
+    generate(data: Record<string, unknown>): Promise<{
+      executiveSummary: string;
+      accessControl: string;
+      riskAnalysis: string;
+      subscriptionGovernance: string;
+      systemCompliance: string;
+      alertsSummary: string;
+      recommendations: string;
+      conclusion: string;
+    }> {
+      return request('/reports/generate', { method: 'POST', body: JSON.stringify(data) });
+    },
+  },
 };

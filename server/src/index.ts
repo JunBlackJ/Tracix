@@ -22,6 +22,7 @@ import customModulesRoutes from './routes/custom-modules';
 import organizationsRoutes from './routes/organizations';
 import invitationsRoutes from './routes/invitations';
 import reviewsRoutes from './routes/reviews';
+import reportsRoutes from './routes/reports';
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use('/api/custom-modules', customModulesRoutes);
 app.use('/api/organizations', organizationsRoutes);
 app.use('/api/invitations', invitationsRoutes);
 app.use('/api/reviews', reviewsRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // ─── 404 handler ───
 app.use((_req, res) => {

@@ -73,13 +73,16 @@ Respond with ONLY valid JSON matching this TypeScript interface, no markdown, no
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const text = (message.content.find((b) => b.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '{}';
+  const raw = (message.content.find((b) => b.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '{}';
+
+  // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
+  const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
 
   let analysis: unknown;
   try {
-    analysis = JSON.parse(text.trim());
+    analysis = JSON.parse(text);
   } catch {
-    res.status(500).json({ error: 'Invalid AI response', raw: text });
+    res.status(500).json({ error: 'Invalid AI response', raw });
     return;
   }
 

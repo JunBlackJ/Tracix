@@ -43,6 +43,7 @@ ${rowDump}
 ÉTAPE 1 — Détermine le type du fichier :
 - "access_matrix" : matrice d'habilitations (lignes = personnes, colonnes = plateformes avec niveaux d'accès)
 - "platform_inventory" : inventaire de plateformes/outils (lignes = plateformes, colonnes = caractéristiques : nom, catégorie, URL, statut, responsable, etc.)
+- "subscription_inventory" : inventaire d'abonnements/licences (lignes = abonnements, colonnes = nom, fournisseur, coût, date de renouvellement, statut, etc.)
 - "member_list" : liste de membres/employés sans colonnes de plateformes
 - "unknown" : structure non reconnue
 
@@ -67,6 +68,13 @@ Pour "platform_inventory" uniquement :
 7. urlCol : index colonne URL — null si absent
 8. statusCol : index colonne statut/état — null si absent
 
+Pour "subscription_inventory" uniquement :
+5. nameCol : index colonne nom de l'abonnement (obligatoire)
+6. categoryCol : index colonne catégorie — null si absent
+7. vendorCol : index colonne fournisseur/vendor — null si absent
+8. renewalCol : index colonne date de renouvellement — null si absent
+9. statusCol : index colonne statut — null si absent
+
 Pour "member_list" uniquement :
 5. memberCol : index colonne nom complet
 6. teamCol : index colonne équipe — null si absent
@@ -74,7 +82,7 @@ Pour "member_list" uniquement :
 
 Réponds UNIQUEMENT avec du JSON valide, sans markdown :
 {
-  "fileType": "access_matrix" | "platform_inventory" | "member_list" | "unknown",
+  "fileType": "access_matrix" | "platform_inventory" | "subscription_inventory" | "member_list" | "unknown",
   "headerRowIndex": number,
   "dataEndRow": number | null,
   "memberCol": number | null,
@@ -85,6 +93,8 @@ Réponds UNIQUEMENT avec du JSON valide, sans markdown :
   "nameCol": number | null,
   "categoryCol": number | null,
   "urlCol": number | null,
+  "vendorCol": number | null,
+  "renewalCol": number | null,
   "statusCol": number | null,
   "confidence": "high" | "medium" | "low",
   "notes": string
@@ -337,6 +347,62 @@ router.post('/batch-platforms', async (req: Request, res: Response): Promise<voi
     targetType: 'import',
     targetId: orgId,
     targetLabel: 'Import plateformes',
+    oldValue: {},
+    newValue: { created },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ created, skipped });
+});
+
+// POST /api/import/batch-subscriptions — import subscriptions only
+const BatchSubscriptionsSchema = z.object({
+  subscriptions: z.array(z.object({
+    name: z.string(),
+    vendor: z.string().optional().default(''),
+    category: z.string().optional().default(''),
+    renewal_date: z.string().optional().default(''),
+    status: z.string().optional().default('actif'),
+  })).max(500),
+});
+
+router.post('/batch-subscriptions', async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+  const { subscriptions: inSubs } = BatchSubscriptionsSchema.parse(req.body);
+
+  const existing = await prisma.subscription.findMany({
+    where: { organization_id: orgId },
+    select: { id: true, name: true },
+  });
+  const byName = new Map(existing.map((s) => [s.name.toLowerCase(), s.id]));
+
+  const toCreate = inSubs.filter((s) => !byName.has(s.name.toLowerCase()));
+  const skipped = inSubs.length - toCreate.length;
+
+  let created = 0;
+  for (const s of toCreate) {
+    await prisma.subscription.create({
+      data: {
+        id: uuidv4(),
+        organization_id: orgId,
+        name: s.name,
+        vendor: s.vendor,
+        category: s.category,
+        renewal_date: s.renewal_date,
+        status: s.status || 'actif',
+      },
+    });
+    created++;
+  }
+
+  await createAuditEntry({
+    organizationId: orgId,
+    actor: req.user!.email,
+    action: 'import.subscriptions',
+    targetType: 'import',
+    targetId: orgId,
+    targetLabel: 'Import abonnements',
     oldValue: {},
     newValue: { created },
     ipAddress: getClientIp(req),

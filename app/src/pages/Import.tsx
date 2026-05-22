@@ -32,7 +32,7 @@ interface ColumnMapping {
 }
 
 interface AiSuggestion {
-  fileType: 'access_matrix' | 'platform_inventory' | 'member_list' | 'unknown';
+  fileType: 'access_matrix' | 'platform_inventory' | 'subscription_inventory' | 'member_list' | 'unknown';
   headerRowIndex: number;
   dataEndRow: number | null;
   memberCol: number | null;
@@ -43,15 +43,17 @@ interface AiSuggestion {
   nameCol: number | null;
   categoryCol: number | null;
   urlCol: number | null;
+  vendorCol: number | null;
+  renewalCol: number | null;
   statusCol: number | null;
   confidence: 'high' | 'medium' | 'low';
   notes: string;
 }
 
 interface ImportResult {
-  created: { members: number; platforms: number; accessRights: number };
-  skipped: { members: number; platforms: number };
-  fileType?: 'access_matrix' | 'platform_inventory' | 'member_list' | 'unknown';
+  created: { members: number; platforms: number; accessRights: number; subscriptions?: number };
+  skipped: { members: number; platforms: number; subscriptions?: number };
+  fileType?: 'access_matrix' | 'platform_inventory' | 'subscription_inventory' | 'member_list' | 'unknown';
 }
 
 interface BatchPayload {
@@ -242,11 +244,13 @@ function AiModal({
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         suggestion.fileType === 'access_matrix' ? 'bg-[#534AB7]/10 text-[#534AB7]'
                         : suggestion.fileType === 'platform_inventory' ? 'bg-emerald-100 text-emerald-700'
+                        : suggestion.fileType === 'subscription_inventory' ? 'bg-[#534AB7]/10 text-[#534AB7]'
                         : suggestion.fileType === 'member_list' ? 'bg-amber-100 text-amber-700'
                         : 'bg-gray-100 text-gray-500'
                       }`}>
                         {suggestion.fileType === 'access_matrix' ? 'Matrice d\'habilitations'
                           : suggestion.fileType === 'platform_inventory' ? 'Inventaire de plateformes'
+                          : suggestion.fileType === 'subscription_inventory' ? 'Inventaire d\'abonnements'
                           : suggestion.fileType === 'member_list' ? 'Liste de membres'
                           : 'Type inconnu'}
                       </span>
@@ -449,6 +453,72 @@ function AiModal({
                 </>
               )}
 
+              {/* ── INVENTAIRE D'ABONNEMENTS ── */}
+              {suggestion.fileType === 'subscription_inventory' && suggestion.nameCol !== null && (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Colonnes détectées</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { icon: Tag, label: 'Nom', col: suggestion.nameCol, color: '#534AB7', required: true },
+                        { icon: Building2, label: 'Fournisseur', col: suggestion.vendorCol, color: '#1D9E75', required: false },
+                        { icon: Tag, label: 'Catégorie', col: suggestion.categoryCol, color: '#EF9F27', required: false },
+                        { icon: ArrowRight, label: 'Renouvellement', col: suggestion.renewalCol, color: '#E5628A', required: false },
+                        { icon: ShieldCheck, label: 'Statut', col: suggestion.statusCol, color: '#6B7280', required: false },
+                      ].map(({ icon: Icon, label, col, color, required }) => {
+                        const colName = col !== null ? `« ${sheet.headers[col!]} »` : null;
+                        return (
+                          <div key={label} className="flex items-center gap-2.5 p-3 rounded-xl border border-gray-100 bg-white">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}15` }}>
+                              <Icon className="w-4 h-4" style={{ color }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
+                              {colName ? <p className="text-xs font-semibold text-gray-800 truncate">{colName}</p> : <p className="text-xs text-gray-300 italic">Non détecté</p>}
+                            </div>
+                            {colName ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-gray-200 flex-shrink-0" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aperçu</p>
+                    <div className="rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                              <th className="px-3 py-2 text-left font-semibold text-[#534AB7] whitespace-nowrap">Nom</th>
+                              {suggestion.vendorCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Fournisseur</th>}
+                              {suggestion.categoryCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Catégorie</th>}
+                              {suggestion.renewalCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Renouvellement</th>}
+                              {suggestion.statusCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Statut</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sheet.rows.slice(0, 6).map((row, ri) => {
+                              const name = String(row[suggestion.nameCol!] ?? '').trim();
+                              if (!name) return null;
+                              return (
+                                <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50">
+                                  <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{name}</td>
+                                  {suggestion.vendorCol !== null && <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[suggestion.vendorCol] ?? '')}</td>}
+                                  {suggestion.categoryCol !== null && <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[suggestion.categoryCol] ?? '')}</td>}
+                                  {suggestion.renewalCol !== null && <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{String(row[suggestion.renewalCol] ?? '')}</td>}
+                                  {suggestion.statusCol !== null && <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[suggestion.statusCol] ?? '')}</td>}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1.5">{sheet.rows.filter(r => String(r[suggestion.nameCol!] ?? '').trim()).length} abonnements détectés</p>
+                  </div>
+                </>
+              )}
+
               {/* ── LISTE DE MEMBRES ── */}
               {suggestion.fileType === 'member_list' && (
                 <>
@@ -536,6 +606,15 @@ function AiModal({
                 className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
                 {importing ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</> : <><CheckCircle2 className="w-4 h-4" />Importer les plateformes ({sheet?.rows.filter(r => String(r[suggestion.nameCol!] ?? '').trim()).length ?? 0})</>}
+              </button>
+            )}
+            {suggestion.fileType === 'subscription_inventory' && suggestion.nameCol !== null && (
+              <button
+                onClick={onConfirm}
+                disabled={importing}
+                className="flex-1 py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {importing ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</> : <><CheckCircle2 className="w-4 h-4" />Importer les abonnements ({sheet?.rows.filter(r => String(r[suggestion.nameCol!] ?? '').trim()).length ?? 0})</>}
               </button>
             )}
             {suggestion.fileType === 'member_list' && suggestion.memberCol !== null && (
@@ -640,12 +719,16 @@ export function Import() {
         setAiSuggestion(null);
         setExcludedPlatformCols(new Set());
 
-        // Choisit la feuille la plus susceptible d'être la matrice d'habilitation
-        // Priorité 1 : nom de la feuille contient un mot-clé
+        // Choisit la feuille la plus susceptible de contenir des données utiles
+        // Priorité 1 : nom de la feuille contient un mot-clé reconnu
         const byName = raws.find((s) => {
           const n = s.name.toLowerCase().replace(/[^\w]/g, '');
           return n.includes('habilitation') || n.includes('acces') || n.includes('access')
-            || n.includes('droits') || n.includes('rights') || n.includes('users') || n.includes('utilisateurs');
+            || n.includes('droits') || n.includes('rights') || n.includes('users') || n.includes('utilisateurs')
+            || n.includes('plateforme') || n.includes('platform') || n.includes('outil')
+            || n.includes('abonnement') || n.includes('subscription') || n.includes('licence') || n.includes('license')
+            || n.includes('membre') || n.includes('member') || n.includes('employe') || n.includes('collaborateur')
+            || n.includes('systeme') || n.includes('system') || n.includes('inventaire') || n.includes('inventory');
         });
         // Priorité 2 : feuille avec le plus de colonnes (probablement la matrice)
         const byColCount = [...raws].sort((a, b) => {
@@ -770,6 +853,28 @@ export function Import() {
         if (platforms.length === 0) throw new Error('Aucune plateforme trouvée.');
         const res = await api.import.batchPlatforms({ platforms });
         setResult({ created: { members: 0, platforms: res.created, accessRights: 0 }, skipped: { members: 0, platforms: res.skipped }, fileType: 'platform_inventory' });
+        setModalOpen(false);
+        setStep('done');
+
+      } else if (ft === 'subscription_inventory' && aiSuggestion?.nameCol !== null) {
+        const rows = currentSheet?.rows ?? [];
+        const nCol = aiSuggestion!.nameCol!;
+        const vCol = aiSuggestion!.vendorCol;
+        const cCol = aiSuggestion!.categoryCol;
+        const rCol = aiSuggestion!.renewalCol;
+        const sCol = aiSuggestion!.statusCol;
+        const subscriptions = rows
+          .map((r) => ({
+            name: String(r[nCol] ?? '').trim(),
+            vendor: vCol !== null ? String(r[vCol] ?? '').trim() : undefined,
+            category: cCol !== null ? String(r[cCol] ?? '').trim() : undefined,
+            renewal_date: rCol !== null ? String(r[rCol] ?? '').trim() : undefined,
+            status: sCol !== null ? String(r[sCol] ?? '').trim() || 'actif' : 'actif',
+          }))
+          .filter((s) => s.name);
+        if (subscriptions.length === 0) throw new Error('Aucun abonnement trouvé.');
+        const res = await api.import.batchSubscriptions({ subscriptions });
+        setResult({ created: { members: 0, platforms: 0, accessRights: 0, subscriptions: res.created }, skipped: { members: 0, platforms: 0, subscriptions: res.skipped }, fileType: 'subscription_inventory' });
         setModalOpen(false);
         setStep('done');
 
@@ -973,9 +1078,11 @@ export function Import() {
             </div>
             <h3 className="text-xl font-black text-gray-900 mb-1">Import terminé !</h3>
             <p className="text-sm text-gray-500 mb-6">Vos données sont maintenant disponibles dans l'application.</p>
-            <div className={`grid gap-3 ${result.fileType === 'platform_inventory' || result.fileType === 'member_list' ? 'grid-cols-1' : 'grid-cols-3'}`}>
+            <div className={`grid gap-3 ${result.fileType === 'platform_inventory' || result.fileType === 'member_list' || result.fileType === 'subscription_inventory' ? 'grid-cols-1' : 'grid-cols-3'}`}>
               {(result.fileType === 'platform_inventory'
                 ? [{ label: 'Plateformes créées', value: result.created.platforms, color: '#1D9E75' }]
+                : result.fileType === 'subscription_inventory'
+                ? [{ label: 'Abonnements créés', value: result.created.subscriptions ?? 0, color: '#534AB7' }]
                 : result.fileType === 'member_list'
                 ? [{ label: 'Membres créés', value: result.created.members, color: '#534AB7' }]
                 : [

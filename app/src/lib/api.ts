@@ -364,7 +364,7 @@ export const api = {
       return request('/import/batch', { method: 'POST', body: JSON.stringify(data) });
     },
     analyze(data: { rawRows: string[][] }): Promise<{
-      fileType: 'access_matrix' | 'platform_inventory' | 'member_list' | 'unknown';
+      fileType: 'access_matrix' | 'platform_inventory' | 'subscription_inventory' | 'member_list' | 'unknown';
       headerRowIndex: number;
       dataEndRow: number | null;
       memberCol: number | null;
@@ -375,6 +375,8 @@ export const api = {
       nameCol: number | null;
       categoryCol: number | null;
       urlCol: number | null;
+      vendorCol: number | null;
+      renewalCol: number | null;
       statusCol: number | null;
       confidence: 'high' | 'medium' | 'low';
       notes: string;
@@ -383,6 +385,9 @@ export const api = {
     },
     batchPlatforms(data: { platforms: { name: string; category?: string; url?: string; status?: string }[] }): Promise<{ created: number; skipped: number }> {
       return request('/import/batch-platforms', { method: 'POST', body: JSON.stringify(data) });
+    },
+    batchSubscriptions(data: { subscriptions: { name: string; vendor?: string; category?: string; renewal_date?: string; status?: string }[] }): Promise<{ created: number; skipped: number }> {
+      return request('/import/batch-subscriptions', { method: 'POST', body: JSON.stringify(data) });
     },
     batchMembers(data: { members: { full_name: string; email?: string; team?: string }[] }): Promise<{ created: number; skipped: number }> {
       return request('/import/batch-members', { method: 'POST', body: JSON.stringify(data) });

@@ -1,0 +1,21 @@
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+export const config = {
+  port: parseInt(process.env.PORT || '4000', 10),
+  jwtSecret: process.env.JWT_SECRET || 'changeme-use-a-real-secret-in-production',
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+  apiUrl: process.env.API_URL || 'http://localhost:4000',
+  databaseUrl: process.env.DATABASE_URL || '',
+  nodeEnv: process.env.NODE_ENV || 'development',
+  email: {
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    from: process.env.SMTP_FROM || 'Tracix <noreply@tracix.io>',
+  },
+};

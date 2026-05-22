@@ -12,10 +12,10 @@ FROM node:20-slim
 
 WORKDIR /app
 
-RUN npm install -g serve
+RUN npm install -g http-server
 
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
 
-CMD serve dist -s -l ${PORT:-3000}
+CMD http-server dist -p ${PORT:-3000} --proxy http://localhost:${PORT:-3000}? -c-1

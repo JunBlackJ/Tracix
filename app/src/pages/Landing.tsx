@@ -6,8 +6,8 @@ import { useState } from 'react';
 import {
   Shield, ArrowRight, CheckCircle, Users, BarChart2, Bell,
   GitBranch, Lock, Mail, Eye, EyeOff, Menu, X,
-  Zap, Star, Crown, TrendingUp, FileText, ChevronRight,
-  AlertTriangle, Activity, Database, Building2,
+  Zap, Star, Crown, TrendingUp, FileText,
+  AlertTriangle, Activity, Database, Building2, ShieldCheck,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -122,6 +122,7 @@ const TESTIMONIALS = [
 export function Landing({ onLogin, onRegister }: LandingProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showSsoModal, setShowSsoModal] = useState(false);
   const [modalDefaultTab, setModalDefaultTab] = useState<'login' | 'register'>('login');
 
   const openLogin = () => { setModalDefaultTab('login'); setShowLoginModal(true); };
@@ -148,6 +149,10 @@ export function Landing({ onLogin, onRegister }: LandingProps) {
           </div>
 
           <div className="hidden md:flex items-center gap-3">
+            <button onClick={() => setShowSsoModal(true)} className="flex items-center gap-1.5 text-sm text-white/40 hover:text-white/70 transition-colors px-3 py-2">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              SSO
+            </button>
             <button onClick={openLogin} className="text-sm text-white/60 hover:text-white transition-colors px-3 py-2">
               Se connecter
             </button>
@@ -583,8 +588,12 @@ export function Landing({ onLogin, onRegister }: LandingProps) {
           onLogin={onLogin}
           onRegister={onRegister}
           onClose={() => setShowLoginModal(false)}
+          onOpenSso={() => { setShowLoginModal(false); setShowSsoModal(true); }}
         />
       )}
+
+      {/* ── SSO Modal ── */}
+      {showSsoModal && <SsoLoginModal onClose={() => setShowSsoModal(false)} />}
     </div>
   );
 }
@@ -628,9 +637,63 @@ interface AuthModalProps {
   onLogin: (email: string, password: string) => Promise<boolean>;
   onRegister: (data: { full_name: string; email: string; password: string; organization_name: string }) => Promise<{ success: boolean; error?: string }>;
   onClose: () => void;
+  onOpenSso?: () => void;
 }
 
-function AuthModal({ defaultTab, onLogin, onRegister, onClose }: AuthModalProps) {
+function SsoLoginModal({ onClose }: { onClose: () => void }) {
+  const [orgId, setOrgId] = useState('');
+  const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
+
+  const handleGo = () => {
+    if (!orgId.trim()) return;
+    window.location.href = `${BASE}/saml/${orgId.trim()}/login`;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-white/10 overflow-hidden"
+        style={{ background: 'linear-gradient(160deg, #0F0F1E, #0A0A16)' }}>
+        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-colors">
+          <X className="w-4 h-4" />
+        </button>
+        <div className="p-8">
+          <div className="w-10 h-10 rounded-xl bg-[#534AB7]/20 flex items-center justify-center mx-auto mb-4">
+            <ShieldCheck className="w-5 h-5 text-[#818CF8]" />
+          </div>
+          <h2 className="text-lg font-black text-white text-center mb-1">Connexion SSO</h2>
+          <p className="text-xs text-white/35 text-center mb-6">Entrez l'identifiant de votre organisation</p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-white/40 mb-1.5">ID d'organisation</label>
+              <input
+                type="text"
+                value={orgId}
+                onChange={(e) => setOrgId(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleGo()}
+                className="w-full px-3 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
+                placeholder="ex: abc123 ou votre-org-id"
+                autoFocus
+              />
+              <p className="text-[11px] text-white/25 mt-1">Fourni par votre administrateur IT</p>
+            </div>
+            <button
+              onClick={handleGo}
+              disabled={!orgId.trim()}
+              className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}
+            >
+              <ArrowRight className="w-4 h-4" />
+              Continuer avec SSO
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthModal({ defaultTab, onLogin, onRegister, onClose, onOpenSso }: AuthModalProps) {
   const [tab, setTab] = useState<'login' | 'register'>(defaultTab);
 
   return (
@@ -691,6 +754,16 @@ function AuthModal({ defaultTab, onLogin, onRegister, onClose }: AuthModalProps)
                 <span className="flex-1 text-center">{label}</span>
               </a>
             ))}
+            {onOpenSso && (
+              <button
+                type="button"
+                onClick={onOpenSso}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-[#534AB7]/30 bg-[#534AB7]/8 hover:bg-[#534AB7]/15 hover:border-[#534AB7]/50 transition-all text-sm font-medium text-[#818CF8] hover:text-white"
+              >
+                <ShieldCheck className="w-5 h-5 flex-shrink-0" />
+                <span className="flex-1 text-center">Se connecter via SSO</span>
+              </button>
+            )}
           </div>
 
           {/* Divider */}

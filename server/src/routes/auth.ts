@@ -505,4 +505,48 @@ router.get('/oauth/github/callback', async (req: Request, res: Response): Promis
   }
 });
 
+// POST /api/auth/test-email — envoie un email de test à l'utilisateur connecté
+router.post('/test-email', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { email, full_name } = req.user
+    ? { email: req.user.email, full_name: req.user.email }
+    : { email: '', full_name: '' };
+
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    res.status(503).json({ error: 'SMTP non configuré sur le serveur' });
+    return;
+  }
+
+  try {
+    const nodemailer = await import('nodemailer');
+    const transporter = nodemailer.default.createTransport({
+      host: config.email.host,
+      port: config.email.port,
+      secure: config.email.secure,
+      auth: { user: config.email.user, pass: config.email.pass },
+    });
+
+    await transporter.sendMail({
+      from: config.email.from,
+      to: email,
+      subject: '[Tracix] Test de configuration email',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+          <p style="font-size:20px;font-weight:bold;color:#534AB7;margin:0 0 8px;">Tracix</p>
+          <p style="font-size:16px;font-weight:600;color:#111827;margin:0 0 16px;">Configuration email opérationnelle ✓</p>
+          <p style="font-size:14px;color:#6B7280;line-height:1.6;">
+            Bonjour,<br><br>
+            Ce message confirme que la configuration SMTP de votre instance Tracix fonctionne correctement.
+            Vous recevrez désormais les alertes critiques et les rappels d'abonnements à cette adresse.
+          </p>
+          <p style="font-size:12px;color:#9CA3AF;margin-top:24px;">Tracix — Plateforme de gouvernance IT</p>
+        </div>`,
+    });
+
+    res.json({ success: true, sent_to: email });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+    res.status(500).json({ error: `Échec envoi : ${msg}` });
+  }
+});
+
 export default router;

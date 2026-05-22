@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
+import { sendCriticalAlertsEmail } from './email.service';
 
 interface AlertInput {
   id: string;
@@ -331,5 +332,29 @@ export async function generateAlerts(orgId: string): Promise<void> {
   // ─── Insert all new alerts ───
   if (newAlerts.length > 0) {
     await prisma.alert.createMany({ data: newAlerts });
+
+    // Envoi immédiat pour les alertes critiques nouvelles
+    const critical = newAlerts.filter((a) => a.severity === 'critical');
+    if (critical.length > 0) {
+      const admins = await prisma.userApp.findMany({
+        where: { organization_id: orgId, role: { in: ['admin', 'manager'] } },
+        select: { email: true },
+      });
+      const adminEmails = admins.map((a) => a.email);
+      if (adminEmails.length > 0) {
+        const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } });
+        sendCriticalAlertsEmail({
+          to: adminEmails,
+          orgName: org?.name ?? 'Votre organisation',
+          alerts: critical.map((a) => ({
+            type: a.type,
+            severity: a.severity,
+            message: a.message,
+            source_label: a.source_label,
+            source_module: a.source_module,
+          })),
+        }).catch((err) => console.error('[Email] Erreur envoi alertes critiques:', err));
+      }
+    }
   }
 }

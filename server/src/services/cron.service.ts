@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { generateAlerts } from './alert.service';
-import { sendSubscriptionAlertEmail } from './email.service';
+import { sendSubscriptionAlertEmail, sendCriticalAlertsEmail } from './email.service';
 
 // Runs every day at 8:00 AM
 export function startCronJobs(): void {
@@ -19,6 +19,9 @@ export function startCronJobs(): void {
 
       // 3. Send email notifications for expiring subscriptions
       await checkSubscriptionEmails(org.id);
+
+      // 4. Send email digest for new critical/warning alerts
+      await checkCriticalAlertEmails(org.id, org.name);
     }
 
     console.log('[Cron] Daily check done.');
@@ -86,6 +89,74 @@ export async function processOffboarding(orgId: string): Promise<number> {
   }
 
   return processed;
+}
+
+async function checkCriticalAlertEmails(orgId: string, orgName: string): Promise<void> {
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+
+  // Alertes non résolues créées aujourd'hui (critical ou warning)
+  const newAlerts = await prisma.alert.findMany({
+    where: {
+      organization_id: orgId,
+      is_resolved: false,
+      severity: { in: ['critical', 'warning'] },
+      created_at: {
+        gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+      },
+    },
+    orderBy: [{ severity: 'asc' }, { created_at: 'desc' }],
+  });
+
+  if (newAlerts.length === 0) return;
+
+  // Anti-doublon : un seul digest par org par jour
+  const alreadySent = await prisma.auditTrail.findFirst({
+    where: {
+      organization_id: orgId,
+      action: 'email.alert_digest',
+      created_at: {
+        gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+      },
+    },
+  });
+  if (alreadySent) return;
+
+  const admins = await prisma.userApp.findMany({
+    where: { organization_id: orgId, role: { in: ['admin', 'manager'] } },
+    select: { email: true },
+  });
+  const adminEmails = admins.map((a) => a.email);
+  if (adminEmails.length === 0) return;
+
+  await sendCriticalAlertsEmail({
+    to: adminEmails,
+    orgName,
+    alerts: newAlerts.map((a) => ({
+      type: a.type,
+      severity: a.severity,
+      message: a.message,
+      source_label: a.source_label,
+      source_module: a.source_module,
+    })),
+  });
+
+  // Log anti-doublon
+  await prisma.auditTrail.create({
+    data: {
+      id: `email_digest_${orgId}_${today}`,
+      organization_id: orgId,
+      actor: 'system',
+      action: 'email.alert_digest',
+      target_type: 'organization',
+      target_id: orgId,
+      target_label: orgName,
+      old_value: {},
+      new_value: { recipients: adminEmails, alert_count: newAlerts.length, date: today },
+      ip_address: '127.0.0.1',
+      user_agent: 'Tracix-Cron/1.0',
+    },
+  });
 }
 
 async function checkSubscriptionEmails(orgId: string): Promise<void> {

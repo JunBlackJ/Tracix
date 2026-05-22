@@ -113,6 +113,9 @@ export const api = {
     oauthUrl(provider: 'google' | 'microsoft' | 'github'): string {
       return `${BASE_URL}/auth/oauth/${provider}`;
     },
+    testEmail(): Promise<{ success: boolean; sent_to: string }> {
+      return request('/auth/test-email', { method: 'POST' });
+    },
   },
 
   members: {
@@ -459,6 +462,35 @@ export const api = {
     },
     delete(id: string): Promise<void> {
       return request(`/categories/${id}`, { method: 'DELETE' });
+    },
+  },
+
+  saml: {
+    getConfig(): Promise<{
+      configured: boolean;
+      id?: string;
+      entity_id?: string;
+      sso_url?: string;
+      certificate?: string;
+      is_enabled?: boolean;
+      metadata_url?: string;
+      login_url?: string;
+    }> {
+      return request('/saml/config');
+    },
+    saveConfig(data: { entity_id: string; sso_url: string; certificate: string; is_enabled: boolean }): Promise<{
+      configured: boolean;
+      entity_id: string;
+      sso_url: string;
+      certificate: string;
+      is_enabled: boolean;
+      metadata_url: string;
+      login_url: string;
+    }> {
+      return request('/saml/config', { method: 'POST', body: JSON.stringify(data) });
+    },
+    deleteConfig(): Promise<{ success: boolean }> {
+      return request('/saml/config', { method: 'DELETE' });
     },
   },
 

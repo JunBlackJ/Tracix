@@ -32,6 +32,7 @@ model Organization {
   categories    Category[]
   customModules    CustomModule[]
   reviewCampaigns  ReviewCampaign[]
+  samlConfig       SamlConfig?
 
   @@map("organizations")
 }
@@ -336,6 +337,21 @@ model ReviewItem {
   campaign ReviewCampaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
 
   @@map("review_items")
+}
+
+model SamlConfig {
+  id              String   @id
+  organization_id String   @unique
+  entity_id       String
+  sso_url         String
+  certificate     String
+  is_enabled      Boolean  @default(false)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@map("saml_configs")
 }
 
 model AuditTrail {

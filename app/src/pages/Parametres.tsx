@@ -28,7 +28,7 @@ interface ParametresProps {
   onCustomModuleRemoved: (id: string) => void;
 }
 
-type Section = 'profil' | 'organisation' | 'plan' | 'modules' | 'custom-modules' | 'membres' | 'categories' | 'integrations' | 'securite';
+type Section = 'profil' | 'organisation' | 'plan' | 'modules' | 'custom-modules' | 'membres' | 'categories' | 'sso' | 'integrations' | 'securite';
 
 export function Parametres({ user, organization, categories, customModules, onCategoryAdded, onCategoryRemoved, onOrganizationUpdated, onCustomModuleCreated, onCustomModuleRemoved }: ParametresProps) {
   const [section, setSection] = useState<Section>('profil');
@@ -41,6 +41,7 @@ export function Parametres({ user, organization, categories, customModules, onCa
     { id: 'custom-modules', label: 'Mes modules', icon: Tag },
     { id: 'membres', label: 'Membres Tracix', icon: Users },
     { id: 'categories', label: 'Catégories', icon: Tag },
+    { id: 'sso', label: 'SSO / SAML', icon: ShieldCheck },
     { id: 'integrations', label: 'Intégrations', icon: Link2 },
     { id: 'securite', label: 'Sécurité', icon: Lock },
   ];
@@ -101,6 +102,7 @@ export function Parametres({ user, organization, categories, customModules, onCa
               onRemoved={onCategoryRemoved}
             />
           )}
+          {section === 'sso' && <SsoSection organization={organization} />}
           {section === 'integrations' && <IntegrationsSection />}
           {section === 'securite' && <SecuriteSection />}
         </div>
@@ -540,33 +542,428 @@ function MembresSection() {
   );
 }
 
-function IntegrationsSection() {
-  const integrations = [
-    { name: 'Active Directory / LDAP', icon: Lock, desc: 'Synchronisation automatique des utilisateurs', status: 'soon' },
-    { name: 'Google Workspace', icon: CheckCircle2, desc: 'Sync automatique des membres et groupes', status: 'soon' },
-    { name: 'Slack', icon: Bell, desc: 'Notifications d\'alertes dans un channel', status: 'soon' },
-  ];
+function SsoSection({ organization }: { organization: Organization | null }) {
+  const [cfg, setCfg] = useState<{
+    configured: boolean;
+    entity_id?: string;
+    sso_url?: string;
+    certificate?: string;
+    is_enabled?: boolean;
+    metadata_url?: string;
+    login_url?: string;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ entity_id: '', sso_url: '', certificate: '', is_enabled: true });
+  const [saving, setSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.saml.getConfig()
+      .then((data) => {
+        setCfg(data);
+        if (data.configured) {
+          setForm({
+            entity_id: data.entity_id ?? '',
+            sso_url: data.sso_url ?? '',
+            certificate: data.certificate ?? '',
+            is_enabled: data.is_enabled ?? true,
+          });
+        }
+      })
+      .catch(() => setCfg({ configured: false }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const isEnterprise = organization?.plan === 'enterprise';
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.entity_id || !form.sso_url || !form.certificate) {
+      toast.error('Tous les champs sont requis');
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await api.saml.saveConfig(form);
+      setCfg({ configured: true, ...updated });
+      setShowForm(false);
+      toast.success('Configuration SSO enregistrée');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.saml.deleteConfig();
+      setCfg({ configured: false });
+      setForm({ entity_id: '', sso_url: '', certificate: '', is_enabled: true });
+      setShowForm(false);
+      toast.success('Configuration SSO supprimée');
+    } catch {
+      toast.error('Erreur lors de la suppression');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-8 flex items-center justify-center">
+        <Loader2 className="w-5 h-5 animate-spin text-[#534AB7]" />
+      </div>
+    );
+  }
+
+  if (!isEnterprise) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-[#534AB7]" />
+          SSO / SAML
+        </h2>
+        <div className="flex items-start gap-4 p-4 rounded-xl bg-amber-50 border border-amber-200">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <Lock className="w-5 h-5 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">Plan Enterprise requis</p>
+            <p className="text-xs text-amber-600 mt-1">
+              L'authentification SSO/SAML 2.0 est disponible uniquement pour les organisations Enterprise.
+              Elle permet à vos utilisateurs de se connecter via votre IdP (Okta, Azure AD, Google Workspace, etc.)
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          {['Okta', 'Azure AD', 'Google Workspace'].map((idp) => (
+            <div key={idp} className="p-3 rounded-xl border border-gray-200 text-center opacity-50">
+              <p className="text-xs font-semibold text-gray-600">{idp}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">Compatible SAML 2.0</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Intégrations</h2>
-      <div className="space-y-3">
-        {integrations.map((int, i) => (
-          <div key={i} className="flex items-center gap-4 p-4 rounded-xl border border-gray-200 opacity-60">
-            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-              <int.icon className="w-5 h-5 text-gray-400" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-gray-700">{int.name}</h3>
-              <p className="text-xs text-gray-400">{int.desc}</p>
-            </div>
-            <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
-              Bientôt
-            </span>
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-[#534AB7]" />
+              SSO / SAML 2.0
+            </h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Connectez votre fournisseur d'identité (Okta, Azure AD, Google Workspace…)
+            </p>
           </div>
-        ))}
+          {cfg?.configured && (
+            <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.is_enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${cfg.is_enabled ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+              {cfg.is_enabled ? 'Actif' : 'Désactivé'}
+            </span>
+          )}
+        </div>
+
+        {/* Config info or setup prompt */}
+        {!cfg?.configured && !showForm ? (
+          <div className="text-center py-8">
+            <div className="w-14 h-14 rounded-2xl bg-[#534AB7]/8 flex items-center justify-center mx-auto mb-4">
+              <ShieldCheck className="w-7 h-7 text-[#534AB7]/50" />
+            </div>
+            <p className="text-sm font-medium text-gray-700 mb-1">Aucun fournisseur SSO configuré</p>
+            <p className="text-xs text-gray-400 mb-5 max-w-xs mx-auto">
+              Connectez Okta, Azure AD, Ping Identity ou tout autre IdP compatible SAML 2.0.
+            </p>
+            <button
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Configurer le SSO
+            </button>
+          </div>
+        ) : cfg?.configured && !showForm ? (
+          <div className="space-y-3">
+            {/* URLs info */}
+            {[
+              { label: 'URL de connexion SSO', value: cfg.login_url ?? '', key: 'login' },
+              { label: 'URL de métadonnées SP', value: cfg.metadata_url ?? '', key: 'meta' },
+            ].map((row) => (
+              <div key={row.key} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-gray-50 gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-gray-500 mb-0.5">{row.label}</p>
+                  <p className="text-xs text-gray-700 font-mono truncate">{row.value}</p>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(row.value, row.key)}
+                  className="flex-shrink-0 p-1.5 rounded-lg hover:bg-white hover:shadow-sm transition-all text-gray-400 hover:text-[#534AB7]"
+                >
+                  {copied === row.key
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    : <Link2 className="w-4 h-4" />}
+                </button>
+              </div>
+            ))}
+
+            {/* IdP info */}
+            <div className="p-4 rounded-xl border border-gray-200 space-y-2">
+              <p className="text-xs font-semibold text-gray-700">Configuration IdP enregistrée</p>
+              <div className="grid grid-cols-1 gap-1.5">
+                <div className="flex gap-2 text-xs">
+                  <span className="text-gray-400 w-24 flex-shrink-0">Entity ID</span>
+                  <span className="text-gray-700 font-mono truncate">{cfg.entity_id}</span>
+                </div>
+                <div className="flex gap-2 text-xs">
+                  <span className="text-gray-400 w-24 flex-shrink-0">SSO URL</span>
+                  <span className="text-gray-700 font-mono truncate">{cfg.sso_url}</span>
+                </div>
+                <div className="flex gap-2 text-xs">
+                  <span className="text-gray-400 w-24 flex-shrink-0">Certificat</span>
+                  <span className="text-gray-500">••••••••••••{cfg.certificate?.slice(-8)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowForm(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Modifier
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                Supprimer
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Form */}
+        {showForm && (
+          <form onSubmit={handleSave} className="space-y-4">
+            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-700">
+              <p className="font-semibold mb-1">Configuration SAML 2.0</p>
+              <p>Récupérez ces informations depuis votre fournisseur d'identité (IdP). L'URL de callback à enregistrer côté IdP est :</p>
+              <p className="font-mono mt-1 bg-white/60 px-2 py-1 rounded text-blue-800 break-all">
+                {`${import.meta.env.VITE_API_URL ?? ''}/saml/${organization?.id}/callback`}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Entity ID (Issuer) *</label>
+              <input
+                type="text"
+                value={form.entity_id}
+                onChange={(e) => setForm((f) => ({ ...f, entity_id: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20"
+                placeholder="https://your-idp.example.com"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">SSO URL (Login endpoint) *</label>
+              <input
+                type="url"
+                value={form.sso_url}
+                onChange={(e) => setForm((f) => ({ ...f, sso_url: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20"
+                placeholder="https://your-idp.example.com/sso/saml"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Certificat X.509 (base64) *</label>
+              <textarea
+                value={form.certificate}
+                onChange={(e) => setForm((f) => ({ ...f, certificate: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20 font-mono h-28 resize-none"
+                placeholder={"-----BEGIN CERTIFICATE-----\nMIIC....\n-----END CERTIFICATE-----"}
+                required
+              />
+              <p className="text-[11px] text-gray-400 mt-0.5">Collez le certificat avec ou sans les lignes BEGIN/END CERTIFICATE</p>
+            </div>
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div
+                onClick={() => setForm((f) => ({ ...f, is_enabled: !f.is_enabled }))}
+                className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${form.is_enabled ? 'bg-[#534AB7]' : 'bg-gray-300'}`}
+              >
+                <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.is_enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </div>
+              <span className="text-sm text-gray-700">Activer le SSO pour cette organisation</span>
+            </label>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
-      <p className="text-xs text-gray-400 mt-3">Disponibles en plan Enterprise</p>
+
+      {/* Compatible IdPs */}
+      {!showForm && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm font-semibold text-gray-800 mb-3">Fournisseurs d'identité compatibles</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { name: 'Okta', desc: 'Enterprise Identity' },
+              { name: 'Azure AD', desc: 'Microsoft Entra ID' },
+              { name: 'Google Workspace', desc: 'G Suite / Workspace' },
+              { name: 'Ping Identity', desc: 'PingFederate' },
+              { name: 'OneLogin', desc: 'OneLogin SSO' },
+              { name: 'ADFS', desc: 'Active Directory FS' },
+            ].map((idp) => (
+              <div key={idp.name} className="p-3 rounded-xl border border-gray-200 hover:border-[#534AB7]/30 hover:bg-[#534AB7]/3 transition-colors">
+                <p className="text-xs font-semibold text-gray-700">{idp.name}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{idp.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IntegrationsSection() {
+  const [testingEmail, setTestingEmail] = useState(false);
+
+  const handleTestEmail = async () => {
+    setTestingEmail(true);
+    try {
+      const res = await api.auth.testEmail();
+      toast.success(`Email de test envoyé à ${res.sent_to}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'envoi');
+    } finally {
+      setTestingEmail(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* SMTP */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          <Bell className="w-5 h-5 text-[#534AB7]" />
+          Notifications email (SMTP)
+        </h2>
+        <p className="text-sm text-gray-500 mb-5">
+          Tracix envoie automatiquement des alertes critiques et des rappels d'abonnements par email.
+        </p>
+
+        {/* Ce que Tracix envoie */}
+        <div className="space-y-2 mb-5">
+          {[
+            { label: 'Alertes critiques', desc: 'Envoi immédiat dès qu\'une alerte critique est générée (Admin sans MFA, départ non traité…)', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
+            { label: 'Digest quotidien', desc: 'Résumé des alertes warning/critiques nouvelles, envoyé à 8h chaque matin', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
+            { label: 'Rappels abonnements', desc: 'Notifications à J-30, J-14, J-7 et J-1 avant renouvellement', color: 'text-[#534AB7]', bg: 'bg-[#534AB7]/5', border: 'border-[#534AB7]/20' },
+          ].map((item) => (
+            <div key={item.label} className={`flex items-start gap-3 p-3 rounded-xl border ${item.border} ${item.bg}`}>
+              <CheckCircle2 className={`w-4 h-4 mt-0.5 flex-shrink-0 ${item.color}`} />
+              <div>
+                <p className={`text-sm font-semibold ${item.color}`}>{item.label}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Config SMTP */}
+        <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 mb-4">
+          <p className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5" />
+            Variables d'environnement SMTP à configurer sur Railway
+          </p>
+          <div className="space-y-1.5">
+            {[
+              { key: 'SMTP_HOST', example: 'smtp.gmail.com', desc: 'Serveur SMTP' },
+              { key: 'SMTP_PORT', example: '587', desc: 'Port (587 = TLS, 465 = SSL)' },
+              { key: 'SMTP_SECURE', example: 'false', desc: '"true" si port 465' },
+              { key: 'SMTP_USER', example: 'vous@gmail.com', desc: 'Adresse email expéditeur' },
+              { key: 'SMTP_PASS', example: 'mot de passe app', desc: 'Gmail : activer "Mots de passe d\'application"' },
+              { key: 'SMTP_FROM', example: 'Tracix <noreply@tracix.io>', desc: 'Nom affiché dans l\'email' },
+            ].map((v) => (
+              <div key={v.key} className="flex items-center gap-2 text-xs">
+                <code className="bg-white border border-gray-200 px-2 py-0.5 rounded font-mono text-[#534AB7] w-28 flex-shrink-0">{v.key}</code>
+                <code className="text-gray-500 flex-shrink-0 w-36 truncate">{v.example}</code>
+                <span className="text-gray-400 truncate">{v.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bouton test */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleTestEmail}
+            disabled={testingEmail}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors disabled:opacity-60"
+          >
+            {testingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+            {testingEmail ? 'Envoi…' : 'Envoyer un email de test'}
+          </button>
+          <p className="text-xs text-gray-400">Envoie un email de test à votre adresse de connexion</p>
+        </div>
+      </div>
+
+      {/* Intégrations à venir */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Intégrations à venir</h2>
+        <div className="space-y-3">
+          {[
+            { name: 'Active Directory / LDAP', icon: Lock, desc: 'Synchronisation automatique des utilisateurs' },
+            { name: 'Google Workspace', icon: CheckCircle2, desc: 'Sync automatique des membres et groupes' },
+            { name: 'Slack', icon: Bell, desc: 'Notifications d\'alertes dans un channel' },
+          ].map((int, i) => (
+            <div key={i} className="flex items-center gap-4 p-4 rounded-xl border border-gray-200 opacity-60">
+              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                <int.icon className="w-5 h-5 text-gray-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-gray-700">{int.name}</h3>
+                <p className="text-xs text-gray-400">{int.desc}</p>
+              </div>
+              <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">Bientôt</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 mt-3">Disponibles en plan Enterprise</p>
+      </div>
     </div>
   );
 }

@@ -11,14 +11,12 @@ ENV VITE_API_URL=$VITE_API_URL
 COPY . .
 RUN npm run build
 
-FROM node:20-slim
+FROM caddy:2-alpine
 
-WORKDIR /app
+COPY --from=builder /app/dist /srv
 
-RUN npm install -g http-server
-
-COPY --from=builder /app/dist ./dist
+RUN printf ':${PORT:-3000}\nroot * /srv\ntry_files {path} /index.html\nfile_server\n' > /etc/caddy/Caddyfile
 
 EXPOSE 3000
 
-CMD http-server dist -p ${PORT:-3000} --proxy http://localhost:${PORT:-3000}? -c-1
+CMD caddy run --config /etc/caddy/Caddyfile --adapter caddyfile

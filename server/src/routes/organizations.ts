@@ -167,4 +167,39 @@ router.post('/:orgId/switch', requireAuth, async (req: Request, res: Response): 
   });
 });
 
+// POST /api/organizations/reset — supprimer toutes les données de l'org (sauf l'org et les utilisateurs)
+router.post('/reset', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+
+  // Delete in dependency order to respect foreign key constraints
+  await prisma.$transaction([
+    prisma.auditTrail.deleteMany({ where: { organization_id: orgId } }),
+    prisma.alert.deleteMany({ where: { organization_id: orgId } }),
+    prisma.accessRight.deleteMany({ where: { organization_id: orgId } }),
+    prisma.subscription.deleteMany({ where: { organization_id: orgId } }),
+    prisma.networkFlow.deleteMany({ where: { organization_id: orgId } }),
+    prisma.customEntry.deleteMany({ where: { module: { organization_id: orgId } } }),
+    prisma.customModule.deleteMany({ where: { organization_id: orgId } }),
+    prisma.category.deleteMany({ where: { organization_id: orgId } }),
+    prisma.system.deleteMany({ where: { organization_id: orgId } }),
+    prisma.platform.deleteMany({ where: { organization_id: orgId } }),
+    prisma.member.deleteMany({ where: { organization_id: orgId } }),
+  ]);
+
+  await createAuditEntry({
+    organizationId: orgId,
+    actor: req.user!.email,
+    action: 'organization.reset',
+    targetType: 'organization',
+    targetId: orgId,
+    targetLabel: 'Réinitialisation des données',
+    oldValue: {},
+    newValue: { reset: true },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ success: true });
+});
+
 export default router;

@@ -10,7 +10,7 @@ import {
   FileText, Server as ServerIcon, Network as NetworkIcon,
   ShieldCheck, GitBranch, Import as ImportIcon,
   List, BookOpen, StickyNote, BarChart2, Layers,
-  Zap, Star, Crown, Check, ArrowRight,
+  Zap, Star, Crown, Check, ArrowRight, Trash2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -1251,8 +1251,80 @@ function UpgradeModal({ currentPlan, onClose, onUpgraded }: {
   );
 }
 
+function ResetDataModal({ onClose, onConfirm, loading }: { onClose: () => void; onConfirm: () => void; loading: boolean }) {
+  const [typed, setTyped] = useState('');
+  const confirmWord = 'RÉINITIALISER';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <div className="p-6 space-y-5">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+              <Trash2 className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Réinitialiser toutes les données</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Cette action est irréversible.</p>
+            </div>
+          </div>
+
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-2">
+            <p className="text-sm font-semibold text-red-800">Les éléments suivants seront supprimés :</p>
+            <ul className="text-sm text-red-700 space-y-1 list-disc list-inside">
+              <li>Tous les membres</li>
+              <li>Toutes les plateformes</li>
+              <li>Tous les droits d'accès</li>
+              <li>Toutes les alertes</li>
+              <li>Tout le journal d'audit</li>
+              <li>Tous les abonnements</li>
+              <li>Tous les systèmes et flux réseau</li>
+              <li>Tous les modules personnalisés et leurs entrées</li>
+              <li>Toutes les catégories</li>
+            </ul>
+            <p className="text-sm font-semibold text-red-800 mt-2">Votre compte et votre organisation seront conservés.</p>
+          </div>
+
+          <div>
+            <p className="text-sm text-gray-600 mb-2">
+              Pour confirmer, tapez <span className="font-mono font-bold text-gray-900">{confirmWord}</span> ci-dessous :
+            </p>
+            <input
+              type="text"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={confirmWord}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={loading || typed !== confirmWord}
+              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {loading ? 'Réinitialisation…' : 'Tout supprimer'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SecuriteSection() {
   const [revoking, setRevoking] = useState(false);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const handleRevokeSessions = async () => {
     setRevoking(true);
@@ -1266,43 +1338,81 @@ function SecuriteSection() {
     }
   };
 
+  const handleReset = async () => {
+    setResetting(true);
+    try {
+      await api.organizations.reset();
+      setResetModalOpen(false);
+      toast.success('Toutes les données ont été réinitialisées');
+    } catch {
+      toast.error('Erreur lors de la réinitialisation');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
-      <h2 className="text-lg font-semibold text-gray-900">Sécurité</h2>
+    <>
+      {resetModalOpen && (
+        <ResetDataModal
+          onClose={() => setResetModalOpen(false)}
+          onConfirm={handleReset}
+          loading={resetting}
+        />
+      )}
 
-      <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">Sessions actives</h3>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50">
-            <div className="flex items-center gap-3">
-              <Smartphone className="w-4 h-4 text-green-600" />
-              <div>
-                <p className="text-sm text-gray-800">Cette session — {navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Navigateur'}</p>
-                <p className="text-xs text-gray-500">Actuelle</p>
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
+        <h2 className="text-lg font-semibold text-gray-900">Sécurité</h2>
+
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">Sessions actives</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50">
+              <div className="flex items-center gap-3">
+                <Smartphone className="w-4 h-4 text-green-600" />
+                <div>
+                  <p className="text-sm text-gray-800">Cette session — {navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Navigateur'}</p>
+                  <p className="text-xs text-gray-500">Actuelle</p>
+                </div>
               </div>
+              <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Active</span>
             </div>
-            <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Active</span>
           </div>
+          <button
+            onClick={handleRevokeSessions}
+            disabled={revoking}
+            className="mt-3 inline-flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-50"
+          >
+            {revoking && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Révoquer toutes les autres sessions
+          </button>
         </div>
-        <button
-          onClick={handleRevokeSessions}
-          disabled={revoking}
-          className="mt-3 inline-flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-50"
-        >
-          {revoking && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-          Révoquer toutes les autres sessions
-        </button>
-      </div>
 
-      <div className="border-t border-gray-100 pt-4">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">Historique des connexions</h3>
-        <div className="space-y-1 text-xs text-gray-500">
-          <div className="flex items-center justify-between py-1.5">
-            <span>Chrome/macOS</span>
-            <span>Connexion récente</span>
+        <div className="border-t border-gray-100 pt-4">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">Historique des connexions</h3>
+          <div className="space-y-1 text-xs text-gray-500">
+            <div className="flex items-center justify-between py-1.5">
+              <span>Chrome/macOS</span>
+              <span>Connexion récente</span>
+            </div>
           </div>
         </div>
+
+        <div className="border-t border-gray-100 pt-4">
+          <h3 className="text-sm font-semibold text-gray-800 mb-1">Zone de danger</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Supprime définitivement tous les membres, plateformes, droits d'accès et données de l'organisation.
+            Votre compte reste intact.
+          </p>
+          <button
+            onClick={() => setResetModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            Réinitialiser toutes les données
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

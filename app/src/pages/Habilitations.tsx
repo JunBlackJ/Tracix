@@ -6,7 +6,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Shield, Search, FileText, RotateCcw, X, ChevronRight, Clock, UserCheck, UserX, Edit3,
-  CheckCircle2, AlertTriangle, Loader2,
+  CheckCircle2, AlertTriangle, Loader2, CheckSquare, Square, ShieldOff, ShieldCheck,
 } from 'lucide-react';
 import { ACCESS_LEVEL_CONFIG, getRiskColor } from '@/types';
 import type { AccessLevel, Member, Platform, AccessRight } from '@/types';
@@ -34,6 +34,8 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
   const [editLevel, setEditLevel] = useState<AccessLevel>('none');
   const [editNote, setEditNote] = useState('');
   const [showRevue, setShowRevue] = useState(false);
+  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const teams = useMemo(() => [...new Set(members.map((m) => m.team))], [members]);
   const activePlatforms = useMemo(() => platforms.filter((p) => p.status === 'actif'), [platforms]);
@@ -74,6 +76,63 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
       onRevokeAccess(selectedCell.rightId, editNote || 'Révocation via matrice');
     }
     setSelectedCell(null);
+  };
+
+  const toggleMemberSelection = (memberId: string) => {
+    setSelectedMembers((prev) => {
+      const next = new Set(prev);
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedMembers.size === filteredMembers.length) {
+      setSelectedMembers(new Set());
+    } else {
+      setSelectedMembers(new Set(filteredMembers.map((m) => m.id)));
+    }
+  };
+
+  const handleBulkRevoke = async () => {
+    const targetMembers = filteredMembers.filter((m) => selectedMembers.has(m.id));
+    const rights = accessRights.filter(
+      (a) => selectedMembers.has(a.member_id) && a.level !== 'none'
+    );
+    if (rights.length === 0) { toast.info('Aucun accès actif à révoquer'); return; }
+    if (!confirm(`Révoquer ${rights.length} droit(s) pour ${targetMembers.length} membre(s) ?`)) return;
+    setBulkLoading(true);
+    let done = 0;
+    for (const right of rights) {
+      try {
+        await api.accessRights.revoke(right.id, 'Révocation en masse');
+        onRevokeAccess(right.id, 'Révocation en masse');
+        done++;
+      } catch { /* continue */ }
+    }
+    setBulkLoading(false);
+    setSelectedMembers(new Set());
+    toast.success(`${done} accès révoqué(s)`);
+  };
+
+  const handleBulkConfirmReview = async () => {
+    const rights = accessRights.filter(
+      (a) => selectedMembers.has(a.member_id) && a.level !== 'none'
+    );
+    if (rights.length === 0) { toast.info('Aucun accès actif'); return; }
+    setBulkLoading(true);
+    let done = 0;
+    for (const right of rights) {
+      try {
+        await api.accessRights.updateLevel(right.id, right.level, 'Revue confirmée en masse');
+        onUpdateAccess(right.id, right.level, 'Revue confirmée en masse');
+        done++;
+      } catch { /* continue */ }
+    }
+    setBulkLoading(false);
+    setSelectedMembers(new Set());
+    toast.success(`${done} accès confirmé(s)`);
   };
 
   const getCellDisplay = (memberId: string, platformId: string) => {
@@ -169,8 +228,14 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200">
-                <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left font-semibold text-gray-700 min-w-[180px] border-r border-gray-200">
+                <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left font-semibold text-gray-700 min-w-[200px] border-r border-gray-200">
                   <div className="flex items-center gap-2">
+                    <button onClick={toggleSelectAll} className="text-gray-400 hover:text-[#534AB7] transition-colors flex-shrink-0">
+                      {selectedMembers.size === filteredMembers.length && filteredMembers.length > 0
+                        ? <CheckSquare className="w-4 h-4 text-[#534AB7]" />
+                        : <Square className="w-4 h-4" />
+                      }
+                    </button>
                     <Shield className="w-4 h-4 text-[#534AB7]" />
                     Membre
                   </div>
@@ -187,27 +252,40 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
               {filteredMembers.map((member) => (
                 <tr key={member.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
                   <td
-                    className="sticky left-0 z-10 bg-white px-4 py-2.5 border-r border-gray-200 cursor-pointer hover:bg-gray-50"
-                    onClick={() => navigate(`/membres/${member.id}`)}
+                    className={`sticky left-0 z-10 px-4 py-2.5 border-r border-gray-200 ${selectedMembers.has(member.id) ? 'bg-[#534AB7]/5' : 'bg-white hover:bg-gray-50'}`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: getRiskColor(member.risk_score) }}
-                      />
-                      <div>
-                        <div className="font-medium text-gray-900 text-xs">{member.full_name}</div>
-                        <div className="text-[10px] text-gray-400">{member.team}</div>
-                      </div>
-                      <span
-                        className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded"
-                        style={{
-                          backgroundColor: `${getRiskColor(member.risk_score)}15`,
-                          color: getRiskColor(member.risk_score),
-                        }}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleMemberSelection(member.id); }}
+                        className="text-gray-400 hover:text-[#534AB7] transition-colors flex-shrink-0"
                       >
-                        {member.risk_score}
-                      </span>
+                        {selectedMembers.has(member.id)
+                          ? <CheckSquare className="w-4 h-4 text-[#534AB7]" />
+                          : <Square className="w-4 h-4" />
+                        }
+                      </button>
+                      <div
+                        className="flex items-center gap-2 flex-1 cursor-pointer"
+                        onClick={() => navigate(`/membres/${member.id}`)}
+                      >
+                        <div
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: getRiskColor(member.risk_score) }}
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900 text-xs">{member.full_name}</div>
+                          <div className="text-[10px] text-gray-400">{member.team}</div>
+                        </div>
+                        <span
+                          className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded"
+                          style={{
+                            backgroundColor: `${getRiskColor(member.risk_score)}15`,
+                            color: getRiskColor(member.risk_score),
+                          }}
+                        >
+                          {member.risk_score}
+                        </span>
+                      </div>
                     </div>
                   </td>
                   {activePlatforms.map((platform) => {
@@ -233,6 +311,36 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
           </table>
         </div>
       </div>
+
+      {/* Bulk action bar */}
+      {selectedMembers.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+          <span className="text-sm font-medium">{selectedMembers.size} membre{selectedMembers.size > 1 ? 's' : ''} sélectionné{selectedMembers.size > 1 ? 's' : ''}</span>
+          <div className="w-px h-4 bg-white/20" />
+          <button
+            onClick={handleBulkConfirmReview}
+            disabled={bulkLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            {bulkLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+            Confirmer les accès
+          </button>
+          <button
+            onClick={handleBulkRevoke}
+            disabled={bulkLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            {bulkLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldOff className="w-3.5 h-3.5" />}
+            Révoquer tout
+          </button>
+          <button
+            onClick={() => setSelectedMembers(new Set())}
+            className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+          >
+            <X className="w-4 h-4 text-white/60" />
+          </button>
+        </div>
+      )}
 
       {/* Detail Drawer */}
       {selectedCell && (

@@ -89,11 +89,46 @@ Réponds UNIQUEMENT avec du JSON valide :
   });
 
   const raw = (message.content[0] as { type: string; text: string }).text.trim();
+  console.log('[Reports] Raw AI response (first 500 chars):', raw.substring(0, 500));
   const jsonStart = raw.indexOf('{');
   const jsonEnd = raw.lastIndexOf('}');
   const sections = JSON.parse(raw.substring(jsonStart, jsonEnd + 1));
 
-  res.json(sections);
+  // Decode all HTML entities in every string value
+  const decode = (s: string): string =>
+    s.replace(/&amp;/g, '&')
+     .replace(/&lt;/g, '<')
+     .replace(/&gt;/g, '>')
+     .replace(/&quot;/g, '"')
+     .replace(/&#x27;/g, "'")
+     .replace(/&#39;/g, "'")
+     .replace(/&apos;/g, "'")
+     .replace(/&laquo;/g, '«')
+     .replace(/&raquo;/g, '»')
+     .replace(/&eacute;/g, 'é')
+     .replace(/&egrave;/g, 'è')
+     .replace(/&agrave;/g, 'à')
+     .replace(/&ccedil;/g, 'ç')
+     .replace(/&ocirc;/g, 'ô')
+     .replace(/&ecirc;/g, 'ê')
+     .replace(/&ucirc;/g, 'û')
+     .replace(/&icirc;/g, 'î')
+     .replace(/&rsquo;/g, "'")
+     .replace(/&lsquo;/g, "'")
+     .replace(/&rdquo;/g, '"')
+     .replace(/&ldquo;/g, '"')
+     .replace(/&ndash;/g, '–')
+     .replace(/&mdash;/g, '—')
+     .replace(/&nbsp;/g, ' ')
+     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+     .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+
+  const clean: Record<string, string> = {};
+  for (const [key, val] of Object.entries(sections)) {
+    clean[key] = typeof val === 'string' ? decode(val) : String(val);
+  }
+
+  res.json(clean);
 });
 
 export default router;

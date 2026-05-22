@@ -16,4 +16,4 @@ RUN node node_modules/.bin/prisma generate
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "node node_modules/.bin/prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "node node_modules/.bin/prisma db push --accept-data-loss && node dist/index.js"]

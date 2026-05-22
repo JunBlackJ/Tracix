@@ -68,7 +68,7 @@ Respond with ONLY valid JSON matching this TypeScript interface, no markdown, no
     awsSecretKey: awsSecretAccessKey,
   });
   const message = await client.messages.create({
-    model: 'anthropic.claude-haiku-4-5-20251001-v1:0',
+    model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
     max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
   });

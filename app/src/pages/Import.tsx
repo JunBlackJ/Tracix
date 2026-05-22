@@ -117,12 +117,15 @@ interface AiModalProps {
   error: string | null;
   sheet: ParsedSheet | null;
   rawSheet: RawSheet | null;
+  rawSheets: RawSheet[];
+  activeSheet: number;
   mapping: ColumnMapping;
   platformCols: { h: string; i: number }[];
   allPlatformCols: { h: string; i: number }[];
   excludedPlatformCols: Set<number>;
   payload: BatchPayload;
   importing: boolean;
+  onSelectSheet: (i: number) => void;
   onTogglePlatform: (i: number) => void;
   onConfirm: () => void;
   onEdit: () => void;
@@ -131,8 +134,9 @@ interface AiModalProps {
 
 function AiModal({
   open, loading, suggestion, error, sheet, rawSheet,
+  rawSheets, activeSheet,
   mapping, platformCols, allPlatformCols, excludedPlatformCols,
-  payload, importing, onTogglePlatform, onConfirm, onEdit, onClose,
+  payload, importing, onSelectSheet, onTogglePlatform, onConfirm, onEdit, onClose,
 }: AiModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -152,15 +156,34 @@ function AiModal({
 
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-[#534AB7]/10 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-[#534AB7]/10 flex items-center justify-center flex-shrink-0">
             <Sparkles className="w-4 h-4 text-[#534AB7]" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-gray-900">Analyse IA</p>
-            <p className="text-xs text-gray-400 truncate">{sheetName}</p>
+            {rawSheets.length > 1 ? (
+              <div className="flex gap-1.5 mt-1 flex-wrap">
+                {rawSheets.map((s, i) => (
+                  <button
+                    key={i}
+                    disabled={loading}
+                    onClick={() => onSelectSheet(i)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors ${
+                      activeSheet === i
+                        ? 'bg-[#534AB7] text-white'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200 disabled:opacity-50'
+                    }`}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 truncate">{sheetName}</p>
+            )}
           </div>
           {!loading && (
-            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0">
               <X className="w-4 h-4 text-gray-400" />
             </button>
           )}
@@ -532,6 +555,15 @@ export function Import() {
 
   const platformCols = allPlatformCols.filter(({ i }) => !excludedPlatformCols.has(i));
 
+  const handleSelectSheet = useCallback(async (i: number) => {
+    if (i === activeSheet) return;
+    setActiveSheet(i);
+    setAiSuggestion(null);
+    setExcludedPlatformCols(new Set());
+    setMapping(detectColumns(sheets[i]?.headers ?? []));
+    await analyzeWithAI(rawSheets[i], i);
+  }, [activeSheet, sheets, rawSheets, analyzeWithAI]);
+
   const togglePlatformCol = (i: number) => {
     setExcludedPlatformCols((prev) => {
       const next = new Set(prev);
@@ -809,12 +841,15 @@ export function Import() {
           error={aiError}
           sheet={currentSheet ?? null}
           rawSheet={currentRaw ?? null}
+          rawSheets={rawSheets}
+          activeSheet={activeSheet}
           mapping={mapping}
           platformCols={platformCols}
           allPlatformCols={allPlatformCols}
           excludedPlatformCols={excludedPlatformCols}
           payload={payload}
           importing={importing}
+          onSelectSheet={handleSelectSheet}
           onTogglePlatform={togglePlatformCol}
           onConfirm={handleImport}
           onEdit={() => setModalOpen(false)}

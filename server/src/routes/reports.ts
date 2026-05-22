@@ -62,7 +62,7 @@ ALERTES : ${alerts.filter((a: { is_resolved: boolean }) => !a.is_resolved).lengt
 
 ---
 
-Rédige un rapport structuré en JSON avec exactement ces clés. Chaque valeur est un texte rédigé, professionnel, factuel, en français, entre 2 et 6 phrases. Utilise les chiffres réels fournis. Ne mets pas de markdown dans les textes (pas de ** ni #).
+Rédige un rapport structuré en JSON avec exactement ces clés. Chaque valeur est un texte rédigé, professionnel, factuel, en français, entre 2 et 6 phrases. Utilise les chiffres réels fournis. IMPORTANT : ne mets jamais de markdown (pas de ** ni #), jamais d'entités HTML (écris directement les caractères : & pas &amp;, ' pas &#x27;, etc.), jamais de balises XML ou HTML.
 
 Réponds UNIQUEMENT avec du JSON valide :
 {

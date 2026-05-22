@@ -283,11 +283,26 @@ type Indicators = {
   overdueCount: number; noMfaCount: number; criticalAlerts: number; expiringSubs: number; eolSystems: number;
 };
 
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
 function addAIText(doc: jsPDF, text: string, x: number, y: number, maxWidth: number): number {
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(60, 60, 60);
-  const lines = doc.splitTextToSize(text, maxWidth);
+  const clean = decodeHtmlEntities(text);
+  const lines = doc.splitTextToSize(clean, maxWidth);
   doc.text(lines, x, y);
   doc.setTextColor(0, 0, 0);
   return y + lines.length * 4.5;

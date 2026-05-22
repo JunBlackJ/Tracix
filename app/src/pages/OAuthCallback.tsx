@@ -27,7 +27,7 @@ export function OAuthCallback({ onLoginWithToken }: OAuthCallbackProps) {
 
     onLoginWithToken(token).then((ok) => {
       if (ok) {
-        navigate('/dashboard', { replace: true });
+        window.location.href = '/dashboard';
       } else {
         setError('Impossible de valider la session OAuth.');
       }

@@ -13,8 +13,8 @@ router.use(requireAuth);
 
 // ─── POST /api/import/analyze — AI column detection ───
 const AnalyzeSchema = z.object({
-  headers: z.array(z.string()).min(1).max(100),
-  sampleRows: z.array(z.array(z.string())).max(10),
+  // All raw rows from the sheet (up to 50), including title/legend rows
+  rawRows: z.array(z.array(z.string())).min(1).max(50),
 });
 
 router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
@@ -26,33 +26,41 @@ router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { headers, sampleRows } = AnalyzeSchema.parse(req.body);
+  const { rawRows } = AnalyzeSchema.parse(req.body);
 
-  const headerList = headers.map((h: string, i: number) => `  [${i}] "${h}"`).join('\n');
-  const sampleTable = sampleRows.slice(0, 5).map((row: string[]) =>
-    '  | ' + headers.map((_: string, i: number) => String(row[i] ?? '').substring(0, 30)).join(' | ') + ' |'
-  ).join('\n');
+  // Render all rows with their index so Claude can identify the header row
+  const rowDump = rawRows.map((row: string[], i: number) => {
+    const cells = row.map((c: string) => `"${String(c).substring(0, 40).replace(/"/g, "'")}"`)
+      .join(', ');
+    return `  Ligne ${i}: [${cells}]`;
+  }).join('\n');
 
-  const prompt = `You are analyzing an Excel file for an IT access management application. The file tracks which employees have access to which platforms/tools.
+  const prompt = `Tu analyses un fichier Excel pour une application de gestion des habilitations IT. Le fichier suit les droits d'accès des employés sur les plateformes.
 
-Headers (with their column index):
-${headerList}
+Voici TOUTES les lignes brutes du fichier avec leur index :
+${rowDump}
 
-Sample data rows:
-${sampleTable}
+IMPORTANT : Ce fichier peut contenir des lignes de titre, sous-titres ou légendes AVANT et APRÈS les vraies données. Tu dois identifier précisément :
 
-Identify:
-1. memberCol: index of the column containing the person's full name (could be "Nom", "Name", "Collaborateur", "Prénom Nom", etc.)
-2. teamCol: index of the team/department column (could be "Équipe", "Service", "Department", "Pôle", etc.) — null if absent
-3. emailCol: index of the email column — null if absent
-4. platformCols: indexes of ALL remaining columns that represent platforms/tools/applications (GitHub, Jira, Notion, AWS, etc.)
-5. levelMappings: for any non-standard access level values found in the sample data, map them to one of: "admin", "rw" (read-write/editor), "ro" (read-only/viewer), "req" (requested), "none" (no access / empty)
-   Common patterns: "X", "✓", "Oui", "Yes", "1", "true" → typically "rw" or check context; "A" or "Admin" → "admin"; blank/"-"/"Non"/"No"/"0" → "none"
-6. confidence: your confidence level ("high", "medium", or "low")
-7. notes: a short explanation in French about what you detected, or any ambiguity
+1. headerRowIndex : l'index (0-based) de la ligne qui contient les VRAIS noms de colonnes (ex: "Nom Prénom", "Équipe", "GitHub", etc.) — pas les titres de section
+2. dataEndRow : l'index (exclusif) de la première ligne après les données réelles (pour ignorer les sections LÉGENDE, notes, totaux en bas). null si les données vont jusqu'à la fin
+3. memberCol : index de la colonne (relatif à headerRow) contenant le nom complet de la personne
+4. teamCol : index de la colonne équipe/département — null si absente
+5. emailCol : index de la colonne email — null si absente
+6. platformCols : index de TOUTES les colonnes représentant des plateformes/outils/applications
+7. levelMappings : pour chaque valeur d'accès non-standard trouvée dans les données, mappe vers : "admin", "rw", "ro", "req", ou "none"
+   - "A" ou "Admin" → "admin"
+   - "RW", "Oui", "X", "✓", "1", "Yes" → "rw"
+   - "RO", "Lecture" → "ro"
+   - "REQ", "Sur demande" → "req"
+   - "—", "-", "", "Aucun", "Non", "0" → "none"
+8. confidence : "high", "medium" ou "low"
+9. notes : explication courte en français de ce que tu as détecté
 
-Respond with ONLY valid JSON matching this TypeScript interface, no markdown, no explanation:
+Réponds UNIQUEMENT avec du JSON valide, sans markdown, sans explication :
 {
+  "headerRowIndex": number,
+  "dataEndRow": number | null,
   "memberCol": number | null,
   "teamCol": number | null,
   "emailCol": number | null,
@@ -74,8 +82,6 @@ Respond with ONLY valid JSON matching this TypeScript interface, no markdown, no
   });
 
   const raw = (message.content.find((b) => b.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '{}';
-
-  // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
   const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
 
   let analysis: unknown;

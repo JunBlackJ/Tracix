@@ -360,7 +360,9 @@ export const api = {
     }): Promise<{ created: { members: number; platforms: number; accessRights: number }; skipped: { members: number; platforms: number } }> {
       return request('/import/batch', { method: 'POST', body: JSON.stringify(data) });
     },
-    analyze(data: { headers: string[]; sampleRows: string[][] }): Promise<{
+    analyze(data: { rawRows: string[][] }): Promise<{
+      headerRowIndex: number;
+      dataEndRow: number | null;
       memberCol: number | null;
       teamCol: number | null;
       emailCol: number | null;

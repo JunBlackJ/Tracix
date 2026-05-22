@@ -6,14 +6,19 @@ import { useState, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Upload, FileSpreadsheet, X, ChevronRight,
-  Users, ShieldCheck, CheckCircle2,
+  ShieldCheck, CheckCircle2,
   AlertCircle, ArrowRight, Loader2, RefreshCw, Sparkles,
-  Tag, Mail, Building2, Layers, ArrowRightLeft,
+  Tag, Mail, Building2, Layers, ArrowRightLeft, Users,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Link } from 'react-router-dom';
 
 // ─── Types ───
+interface RawSheet {
+  name: string;
+  allRows: string[][];  // toutes les lignes brutes
+}
+
 interface ParsedSheet {
   name: string;
   headers: string[];
@@ -27,6 +32,8 @@ interface ColumnMapping {
 }
 
 interface AiSuggestion {
+  headerRowIndex: number;
+  dataEndRow: number | null;
   memberCol: number | null;
   teamCol: number | null;
   emailCol: number | null;
@@ -47,24 +54,16 @@ interface BatchPayload {
   access: { memberName: string; platformName: string; level: 'admin' | 'rw' | 'ro' | 'req' }[];
 }
 
-function normalizeLevel(
-  raw: string,
-  aiMappings?: Record<string, 'admin' | 'rw' | 'ro' | 'req' | 'none'>
-): 'admin' | 'rw' | 'ro' | 'req' | 'none' {
-  const v = raw.toLowerCase().trim();
-  if (!v || v === '-') return 'none';
-  if (aiMappings) {
-    const key = Object.keys(aiMappings).find((k) => k.toLowerCase() === v);
-    if (key) return aiMappings[key];
-  }
-  if (v === 'none' || v === 'aucun' || v === 'non' || v === 'no' || v === '0' || v === 'false') return 'none';
-  if (v === 'admin' || v === 'administrator' || v === 'administrateur' || v === 'a') return 'admin';
-  if (v.includes('rw') || v.includes('write') || v === 'ecriture' || v === 'écriture' || v === 'editor' || v === 'editeur' || v === 'full' || v === 'oui' || v === 'yes' || v === 'x' || v === '✓' || v === '1' || v === 'true') return 'rw';
-  if (v.includes('ro') || v === 'read' || v === 'lecture' || v === 'viewer' || v === 'lecteur') return 'ro';
-  if (v === 'req' || v === 'request' || v === 'demande') return 'req';
-  return 'none';
+// ─── Construit un ParsedSheet depuis un RawSheet + suggestion IA ───
+function applyAiToSheet(raw: RawSheet, ai: AiSuggestion): ParsedSheet {
+  const headerRow = raw.allRows[ai.headerRowIndex] ?? [];
+  const end = ai.dataEndRow ?? raw.allRows.length;
+  const dataRows = raw.allRows.slice(ai.headerRowIndex + 1, end)
+    .filter((r) => r.some((c) => String(c).trim() !== ''));
+  return { name: raw.name, headers: headerRow.map(String), rows: dataRows.map((r) => r.map(String)) };
 }
 
+// ─── Détection fallback sans IA ───
 function detectColumns(headers: string[]): ColumnMapping {
   const h = headers.map((x) => x.toLowerCase().trim());
   const find = (keywords: string[]): number | null => {
@@ -81,26 +80,34 @@ function detectColumns(headers: string[]): ColumnMapping {
   };
 }
 
+function normalizeLevel(
+  raw: string,
+  aiMappings?: Record<string, 'admin' | 'rw' | 'ro' | 'req' | 'none'>
+): 'admin' | 'rw' | 'ro' | 'req' | 'none' {
+  const v = raw.toLowerCase().trim();
+  if (!v || v === '-' || v === '—') return 'none';
+  if (aiMappings) {
+    const key = Object.keys(aiMappings).find((k) => k.toLowerCase() === v);
+    if (key) return aiMappings[key];
+  }
+  if (v === 'none' || v === 'aucun' || v === 'non' || v === 'no' || v === '0' || v === 'false') return 'none';
+  if (v === 'admin' || v === 'administrator' || v === 'administrateur' || v === 'a') return 'admin';
+  if (v.includes('rw') || v.includes('write') || v === 'ecriture' || v === 'écriture' || v === 'editor' || v === 'editeur' || v === 'full' || v === 'oui' || v === 'yes' || v === 'x' || v === '✓' || v === '1' || v === 'true') return 'rw';
+  if (v.includes('ro') || v === 'read' || v === 'lecture' || v === 'viewer' || v === 'lecteur') return 'ro';
+  if (v === 'req' || v === 'request' || v === 'demande') return 'req';
+  return 'none';
+}
+
 const LEVEL_STYLE: Record<string, string> = {
   admin: 'bg-red-100 text-red-700',
   rw: 'bg-amber-100 text-amber-700',
   ro: 'bg-blue-100 text-blue-700',
   req: 'bg-purple-100 text-purple-700',
 };
-
-const LEVEL_LABEL: Record<string, string> = {
-  admin: 'ADMIN', rw: 'RW', ro: 'RO', req: 'REQ',
-};
-
-const CONFIDENCE_BORDER: Record<string, string> = {
-  high: 'border-emerald-400', medium: 'border-amber-400', low: 'border-red-400',
-};
-const CONFIDENCE_DOT: Record<string, string> = {
-  high: 'bg-emerald-400', medium: 'bg-amber-400', low: 'bg-red-400',
-};
-const CONFIDENCE_LABEL_MAP: Record<string, string> = {
-  high: 'Confiance élevée', medium: 'Confiance moyenne', low: 'Confiance faible',
-};
+const LEVEL_LABEL: Record<string, string> = { admin: 'ADMIN', rw: 'RW', ro: 'RO', req: 'REQ' };
+const CONFIDENCE_BORDER: Record<string, string> = { high: 'border-emerald-400', medium: 'border-amber-400', low: 'border-red-400' };
+const CONFIDENCE_DOT: Record<string, string> = { high: 'bg-emerald-400', medium: 'bg-amber-400', low: 'bg-red-400' };
+const CONFIDENCE_LABEL_MAP: Record<string, string> = { high: 'Confiance élevée', medium: 'Confiance moyenne', low: 'Confiance faible' };
 
 // ─── Modal IA ───
 interface AiModalProps {
@@ -108,7 +115,8 @@ interface AiModalProps {
   loading: boolean;
   suggestion: AiSuggestion | null;
   error: string | null;
-  sheet: ParsedSheet;
+  sheet: ParsedSheet | null;
+  rawSheet: RawSheet | null;
   mapping: ColumnMapping;
   platformCols: { h: string; i: number }[];
   allPlatformCols: { h: string; i: number }[];
@@ -122,29 +130,24 @@ interface AiModalProps {
 }
 
 function AiModal({
-  open, loading, suggestion, error, sheet, mapping,
-  platformCols, allPlatformCols, excludedPlatformCols, payload,
-  importing, onTogglePlatform, onConfirm, onEdit, onClose,
+  open, loading, suggestion, error, sheet, rawSheet,
+  mapping, platformCols, allPlatformCols, excludedPlatformCols,
+  payload, importing, onTogglePlatform, onConfirm, onEdit, onClose,
 }: AiModalProps) {
-  // Fermer avec Escape
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && !loading) onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+  }, [open, loading, onClose]);
 
   if (!open) return null;
 
+  const sheetName = rawSheet?.name ?? sheet?.name ?? '';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={!loading ? onClose : undefined}
-      />
-
-      {/* Modal */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={!loading ? onClose : undefined} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
 
         {/* Header */}
@@ -152,9 +155,9 @@ function AiModal({
           <div className="w-9 h-9 rounded-xl bg-[#534AB7]/10 flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-[#534AB7]" />
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-gray-900">Analyse IA — {sheet.name}</p>
-            <p className="text-xs text-gray-400">{sheet.rows.length} lignes · {sheet.headers.length} colonnes</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-gray-900">Analyse IA</p>
+            <p className="text-xs text-gray-400 truncate">{sheetName}</p>
           </div>
           {!loading && (
             <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
@@ -168,47 +171,65 @@ function AiModal({
 
           {/* Loading */}
           {loading && (
-            <div className="py-6 space-y-4">
-              <div className="flex flex-col items-center gap-3 mb-6">
+            <div className="py-4 space-y-4">
+              <div className="flex flex-col items-center gap-3 mb-4">
                 <div className="w-14 h-14 rounded-2xl bg-[#534AB7]/10 flex items-center justify-center">
                   <Sparkles className="w-7 h-7 text-[#534AB7]" />
                 </div>
                 <p className="text-sm font-semibold text-gray-800">Claude analyse votre fichier…</p>
+                <p className="text-xs text-gray-400 text-center">Détection de la structure, des colonnes et des valeurs d'accès</p>
               </div>
-              {[
-                'Détection des colonnes membres et équipes',
-                'Identification des plateformes',
-                'Normalisation des valeurs d\'accès',
-              ].map((t, i) => (
+              {['Identification de la ligne d\'en-têtes réelle', 'Détection des colonnes membres et équipes', 'Reconnaissance des plateformes', 'Normalisation des valeurs d\'accès'].map((t, i) => (
                 <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
-                  <Loader2 className="w-4 h-4 text-[#534AB7] animate-spin flex-shrink-0" style={{ animationDelay: `${i * 200}ms` }} />
-                  <p className="text-sm text-gray-600">{t}</p>
+                  <Loader2 className="w-4 h-4 text-[#534AB7] animate-spin flex-shrink-0" />
+                  <p className="text-sm text-gray-500">{t}</p>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Erreur IA */}
+          {/* Erreur */}
           {error && !loading && (
             <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
               <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-amber-700">Analyse IA indisponible</p>
                 <p className="text-xs text-amber-600 mt-1">{error}</p>
-                <p className="text-xs text-amber-500 mt-1">La détection automatique a été utilisée à la place.</p>
+                <p className="text-xs text-amber-500 mt-1">La détection automatique a été utilisée.</p>
               </div>
             </div>
           )}
 
           {/* Rapport */}
-          {suggestion && !loading && (
+          {suggestion && !loading && sheet && (
             <>
               {/* Confidence + note */}
               <div className={`flex items-start gap-3 p-4 rounded-xl border-l-4 bg-gray-50 ${CONFIDENCE_BORDER[suggestion.confidence]}`}>
-                <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${CONFIDENCE_DOT[suggestion.confidence]}`} />
+                <div className={`w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0 ${CONFIDENCE_DOT[suggestion.confidence]}`} />
                 <div>
                   <p className="text-xs font-bold text-gray-700 mb-0.5">{CONFIDENCE_LABEL_MAP[suggestion.confidence]}</p>
                   <p className="text-xs text-gray-500 leading-relaxed">{suggestion.notes}</p>
+                </div>
+              </div>
+
+              {/* Structure détectée */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Structure du fichier</p>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Ligne d'en-têtes</p>
+                    <p className="text-xs font-bold text-gray-800">Ligne {suggestion.headerRowIndex + 1}</p>
+                    {suggestion.headerRowIndex > 0 && (
+                      <p className="text-[10px] text-gray-400 mt-0.5">{suggestion.headerRowIndex} ligne{suggestion.headerRowIndex > 1 ? 's' : ''} de titre ignorée{suggestion.headerRowIndex > 1 ? 's' : ''}</p>
+                    )}
+                  </div>
+                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Données importées</p>
+                    <p className="text-xs font-bold text-gray-800">{sheet.rows.length} lignes</p>
+                    {suggestion.dataEndRow !== null && rawSheet && suggestion.dataEndRow < rawSheet.allRows.length && (
+                      <p className="text-[10px] text-gray-400 mt-0.5">{rawSheet.allRows.length - suggestion.dataEndRow} ligne{rawSheet.allRows.length - suggestion.dataEndRow > 1 ? 's' : ''} de légende ignorée{rawSheet.allRows.length - suggestion.dataEndRow > 1 ? 's' : ''}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -230,11 +251,10 @@ function AiModal({
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[10px] font-semibold text-gray-400 uppercase">{label}{required && ' *'}</p>
-                          {colName ? (
-                            <p className="text-xs font-semibold text-gray-800 truncate">{colName}</p>
-                          ) : (
-                            <p className="text-xs text-gray-300 italic">Non détecté</p>
-                          )}
+                          {colName
+                            ? <p className="text-xs font-semibold text-gray-800 truncate">{colName}</p>
+                            : <p className="text-xs text-gray-300 italic">Non détecté</p>
+                          }
                         </div>
                         {colName
                           ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
@@ -270,7 +290,7 @@ function AiModal({
                 </div>
               )}
 
-              {/* Transformations */}
+              {/* Transformations des valeurs */}
               {Object.entries(suggestion.levelMappings).filter(([, v]) => v !== 'none').length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Valeurs d'accès reconnues</p>
@@ -303,44 +323,34 @@ function AiModal({
                             <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Membre</th>
                             {mapping.teamCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Équipe</th>}
                             {mapping.emailCol !== null && <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">Email</th>}
-                            {platformCols.slice(0, 4).map(({ h }) => (
+                            {platformCols.slice(0, 5).map(({ h }) => (
                               <th key={h} className="px-3 py-2 text-left font-semibold text-[#534AB7] whitespace-nowrap">{h}</th>
                             ))}
-                            {platformCols.length > 4 && (
-                              <th className="px-3 py-2 text-gray-400 font-normal">+{platformCols.length - 4}</th>
-                            )}
+                            {platformCols.length > 5 && <th className="px-3 py-2 text-gray-400 font-normal whitespace-nowrap">+{platformCols.length - 5}</th>}
                           </tr>
                         </thead>
                         <tbody>
-                          {sheet.rows.slice(0, 5).map((row, ri) => {
+                          {sheet.rows.slice(0, 6).map((row, ri) => {
                             const memberName = String(row[mapping.memberCol!] ?? '').trim();
                             if (!memberName) return null;
                             return (
                               <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50">
                                 <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{memberName}</td>
-                                {mapping.teamCol !== null && (
-                                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[mapping.teamCol] ?? '')}</td>
-                                )}
-                                {mapping.emailCol !== null && (
-                                  <td className="px-3 py-2 text-gray-400 font-mono text-[10px] whitespace-nowrap">{String(row[mapping.emailCol] ?? '')}</td>
-                                )}
-                                {platformCols.slice(0, 4).map(({ i }) => {
+                                {mapping.teamCol !== null && <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(row[mapping.teamCol] ?? '')}</td>}
+                                {mapping.emailCol !== null && <td className="px-3 py-2 text-gray-400 font-mono text-[10px] whitespace-nowrap">{String(row[mapping.emailCol] ?? '')}</td>}
+                                {platformCols.slice(0, 5).map(({ i }) => {
                                   const rawVal = String(row[i] ?? '');
-                                  const level = normalizeLevel(rawVal, suggestion?.levelMappings);
+                                  const level = normalizeLevel(rawVal, suggestion.levelMappings);
                                   return (
-                                    <td key={i} className="px-3 py-2">
+                                    <td key={i} className="px-3 py-2 whitespace-nowrap">
                                       {level !== 'none' ? (
                                         <div className="flex items-center gap-1">
-                                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[level]}`}>
-                                            {LEVEL_LABEL[level]}
-                                          </span>
-                                          {rawVal && rawVal.toUpperCase() !== level.toUpperCase() && (
+                                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${LEVEL_STYLE[level]}`}>{LEVEL_LABEL[level]}</span>
+                                          {rawVal && rawVal.toLowerCase() !== level && (
                                             <span className="text-[9px] text-gray-400 font-mono">({rawVal})</span>
                                           )}
                                         </div>
-                                      ) : (
-                                        <span className="text-gray-300">—</span>
-                                      )}
+                                      ) : <span className="text-gray-300">—</span>}
                                     </td>
                                   );
                                 })}
@@ -363,10 +373,7 @@ function AiModal({
         {/* Footer */}
         {!loading && (
           <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
-            <button
-              onClick={onEdit}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-            >
+            <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
               <RefreshCw className="w-4 h-4" /> Modifier
             </button>
             <button
@@ -390,6 +397,7 @@ function AiModal({
 export function Import() {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [rawSheets, setRawSheets] = useState<RawSheet[]>([]);
   const [sheets, setSheets] = useState<ParsedSheet[]>([]);
   const [activeSheet, setActiveSheet] = useState(0);
   const [mapping, setMapping] = useState<ColumnMapping>({ memberCol: null, teamCol: null, emailCol: null });
@@ -403,26 +411,32 @@ export function Import() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
 
-  const analyzeWithAI = useCallback(async (sheet: ParsedSheet) => {
+  const analyzeWithAI = useCallback(async (raw: RawSheet): Promise<AiSuggestion | null> => {
     setAiLoading(true);
     setAiError(null);
     setAiSuggestion(null);
     try {
-      const sampleRows = sheet.rows.slice(0, 5).map((r) =>
-        sheet.headers.map((_, i) => String(r[i] ?? ''))
-      );
-      const suggestion = await api.import.analyze({ headers: sheet.headers, sampleRows });
+      // Envoie toutes les lignes brutes (max 50) pour que l'IA voie la vraie structure
+      const rowsToSend = raw.allRows.slice(0, 50).map((r) => r.map((c) => String(c)));
+      const suggestion = await api.import.analyze({ rawRows: rowsToSend });
+      const parsed = applyAiToSheet(raw, suggestion);
       setAiSuggestion(suggestion);
+      setSheets((prev) => {
+        const next = [...prev];
+        next[rawSheets.indexOf(raw)] = parsed;
+        return next;
+      });
       setMapping({ memberCol: suggestion.memberCol, teamCol: suggestion.teamCol, emailCol: suggestion.emailCol });
       setExcludedPlatformCols(new Set());
+      return suggestion;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erreur IA';
       setAiError(msg.includes('AWS') || msg.includes('credential') ? 'Credentials AWS non configurés.' : msg);
-      setMapping(detectColumns(sheet.headers));
+      return null;
     } finally {
       setAiLoading(false);
     }
-  }, []);
+  }, [rawSheets]);
 
   const parseFile = useCallback((f: File) => {
     setParseError(null);
@@ -431,37 +445,44 @@ export function Import() {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
-        const parsed: ParsedSheet[] = wb.SheetNames.map((name) => {
+
+        const raws: RawSheet[] = wb.SheetNames.map((name) => {
           const ws = wb.Sheets[name];
           const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][];
-          const nonEmpty = rows.filter((r) => r.some((c) => String(c).trim() !== ''));
-          const headers = nonEmpty[0]?.map(String) ?? [];
-          const dataRows = nonEmpty.slice(1).map((r) => r.map(String));
-          return { name, headers, rows: dataRows };
-        }).filter((s) => s.headers.length > 0 && s.rows.length > 0);
+          return { name, allRows: rows };
+        }).filter((s) => s.allRows.some((r) => r.some((c) => String(c).trim() !== '')));
 
-        if (parsed.length === 0) {
+        if (raws.length === 0) {
           setParseError('Aucune feuille avec des données trouvée dans ce fichier.');
           return;
         }
 
-        setSheets(parsed);
+        // Parsage initial simple pour affichage pendant l'analyse
+        const initialParsed: ParsedSheet[] = raws.map((raw) => {
+          const nonEmpty = raw.allRows.filter((r) => r.some((c) => String(c).trim() !== ''));
+          const headers = (nonEmpty[0] ?? []).map(String);
+          const rows = nonEmpty.slice(1).map((r) => r.map(String));
+          return { name: raw.name, headers, rows };
+        });
+
+        setRawSheets(raws);
+        setSheets(initialParsed);
         setFile(f);
         setAiSuggestion(null);
         setExcludedPlatformCols(new Set());
 
-        const best = parsed.find((s) => {
-          const h = s.headers.join(' ').toLowerCase();
-          return h.includes('nom') || h.includes('name') || h.includes('membre') || h.includes('user');
-        }) ?? parsed[0];
-        const idx = parsed.indexOf(best);
+        // Choisit la feuille la plus susceptible d'être la matrice d'habilitation
+        const bestRaw = raws.find((s) => {
+          const flat = s.allRows.flat().join(' ').toLowerCase();
+          return flat.includes('habilitation') || flat.includes('accès') || flat.includes('acces')
+            || flat.includes('nom') || flat.includes('name') || flat.includes('membre');
+        }) ?? raws[0];
+        const idx = raws.indexOf(bestRaw);
         setActiveSheet(idx);
-        setMapping(detectColumns(best.headers));
-
-        // Ouvre le modal immédiatement (en état loading)
+        setMapping(detectColumns(initialParsed[idx].headers));
         setStep('map');
         setModalOpen(true);
-        await analyzeWithAI(best);
+        await analyzeWithAI(bestRaw);
       } catch {
         setParseError('Impossible de lire ce fichier. Vérifiez qu\'il s\'agit d\'un .xlsx, .xls ou .csv valide.');
       }
@@ -478,11 +499,8 @@ export function Import() {
     e.preventDefault();
     setIsDragging(false);
     const f = e.dataTransfer.files[0];
-    if (f && /\.(xlsx|xls|csv)$/i.test(f.name)) {
-      parseFile(f);
-    } else {
-      setParseError('Format non supporté. Utilisez .xlsx, .xls ou .csv');
-    }
+    if (f && /\.(xlsx|xls|csv)$/i.test(f.name)) parseFile(f);
+    else setParseError('Format non supporté. Utilisez .xlsx, .xls ou .csv');
   }, [parseFile]);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -491,6 +509,7 @@ export function Import() {
   };
 
   const currentSheet = sheets[activeSheet];
+  const currentRaw = rawSheets[activeSheet];
 
   const allPlatformCols: { h: string; i: number }[] = (() => {
     if (!currentSheet) return [];
@@ -508,8 +527,7 @@ export function Import() {
   const togglePlatformCol = (i: number) => {
     setExcludedPlatformCols((prev) => {
       const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
+      if (next.has(i)) next.delete(i); else next.add(i);
       return next;
     });
   };
@@ -576,11 +594,10 @@ export function Import() {
   };
 
   const reset = () => {
-    setFile(null); setSheets([]); setActiveSheet(0);
+    setFile(null); setRawSheets([]); setSheets([]); setActiveSheet(0);
     setMapping({ memberCol: null, teamCol: null, emailCol: null });
     setAiSuggestion(null); setAiError(null); setAiLoading(false);
-    setExcludedPlatformCols(new Set());
-    setModalOpen(false);
+    setExcludedPlatformCols(new Set()); setModalOpen(false);
     setStep('upload'); setResult(null); setParseError(null);
   };
 
@@ -622,17 +639,16 @@ export function Import() {
               <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} />
             </label>
           </div>
-
           <div className="flex items-center gap-2 p-3 rounded-xl bg-[#534AB7]/5 border border-[#534AB7]/20">
             <Sparkles className="w-4 h-4 text-[#534AB7] flex-shrink-0" />
             <p className="text-xs text-[#534AB7]">
-              <strong>Analyse IA activée</strong> — Claude détecte automatiquement vos colonnes et comprend tout format : X, ✓, Oui, Admin, 1…
+              <strong>Analyse IA activée</strong> — Claude détecte la structure réelle de votre fichier, ignore les titres et légendes, et comprend tout format de valeurs.
             </p>
           </div>
         </>
       )}
 
-      {/* ── STEP 2 : Modification manuelle (si modal fermé) ── */}
+      {/* ── STEP 2 : Modification manuelle ── */}
       {step === 'map' && currentSheet && !modalOpen && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200">
@@ -648,6 +664,23 @@ export function Import() {
               <X className="w-4 h-4 text-gray-400" />
             </button>
           </div>
+
+          {/* Sélecteur de feuille */}
+          {rawSheets.length > 1 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-sm font-semibold text-gray-700 mb-2">Feuille à importer</p>
+              <div className="flex gap-2 flex-wrap">
+                {rawSheets.map((s, i) => (
+                  <button key={i} onClick={() => setActiveSheet(i)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      activeSheet === i ? 'bg-[#534AB7] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}>
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h3 className="text-sm font-semibold text-gray-800 mb-1">Mappage des colonnes</h3>
@@ -675,7 +708,6 @@ export function Import() {
                 </div>
               ))}
             </div>
-
             {allPlatformCols.length > 0 && (
               <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                 <p className="text-xs font-semibold text-emerald-700 mb-1.5 flex items-center gap-1.5">
@@ -701,8 +733,7 @@ export function Import() {
           </div>
 
           <div className="flex gap-3">
-            <button onClick={reset}
-              className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-2">
+            <button onClick={reset} className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-2">
               <ChevronRight className="w-4 h-4 rotate-180" /> Retour
             </button>
             <button
@@ -745,22 +776,16 @@ export function Import() {
                 <p className="text-xs font-semibold text-amber-700 flex items-center gap-1.5 mb-1">
                   <AlertCircle className="w-3.5 h-3.5" /> Limite du plan atteinte
                 </p>
-                {result.skipped.members > 0 && (
-                  <p className="text-xs text-amber-600">{result.skipped.members} membre{result.skipped.members > 1 ? 's' : ''} non importé{result.skipped.members > 1 ? 's' : ''} (quota atteint)</p>
-                )}
-                {result.skipped.platforms > 0 && (
-                  <p className="text-xs text-amber-600">{result.skipped.platforms} plateforme{result.skipped.platforms > 1 ? 's' : ''} non importée{result.skipped.platforms > 1 ? 's' : ''} (quota atteint)</p>
-                )}
+                {result.skipped.members > 0 && <p className="text-xs text-amber-600">{result.skipped.members} membre{result.skipped.members > 1 ? 's' : ''} non importé{result.skipped.members > 1 ? 's' : ''} (quota atteint)</p>}
+                {result.skipped.platforms > 0 && <p className="text-xs text-amber-600">{result.skipped.platforms} plateforme{result.skipped.platforms > 1 ? 's' : ''} non importée{result.skipped.platforms > 1 ? 's' : ''} (quota atteint)</p>}
               </div>
             )}
           </div>
           <div className="flex gap-3">
-            <button onClick={reset}
-              className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+            <button onClick={reset} className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
               Importer un autre fichier
             </button>
-            <Link to="/dashboard"
-              className="flex-1 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] transition-colors flex items-center justify-center gap-2">
+            <Link to="/dashboard" className="flex-1 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] transition-colors flex items-center justify-center gap-2">
               Voir le tableau de bord <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
@@ -768,13 +793,14 @@ export function Import() {
       )}
 
       {/* ── Modal IA ── */}
-      {currentSheet && (
+      {(step === 'map' || modalOpen) && (
         <AiModal
           open={modalOpen}
           loading={aiLoading}
           suggestion={aiSuggestion}
           error={aiError}
-          sheet={currentSheet}
+          sheet={currentSheet ?? null}
+          rawSheet={currentRaw ?? null}
           mapping={mapping}
           platformCols={platformCols}
           allPlatformCols={allPlatformCols}

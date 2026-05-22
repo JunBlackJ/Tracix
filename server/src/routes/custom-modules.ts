@@ -103,7 +103,7 @@ router.post('/:id/entries', async (req: Request, res: Response): Promise<void> =
   if (!mod) { res.status(404).json({ error: 'Module non trouvé' }); return; }
   const body = EntrySchema.parse(req.body);
   const entry = await prisma.customEntry.create({
-    data: { id: uuidv4(), module_id: req.params.id, data: body.data as Prisma.InputJsonValue },
+    data: { id: uuidv4(), module_id: req.params.id, data: body.data as unknown },
   });
   res.status(201).json(entry);
 });
@@ -113,7 +113,7 @@ router.put('/:id/entries/:entryId', async (req: Request, res: Response): Promise
   const mod = await prisma.customModule.findFirst({ where: { id: req.params.id, organization_id: orgId } });
   if (!mod) { res.status(404).json({ error: 'Module non trouvé' }); return; }
   const body = EntrySchema.parse(req.body);
-  const updated = await prisma.customEntry.update({ where: { id: req.params.entryId }, data: { data: body.data as Prisma.InputJsonValue } });
+  const updated = await prisma.customEntry.update({ where: { id: req.params.entryId }, data: { data: body.data as unknown } });
   res.json(updated);
 });
 

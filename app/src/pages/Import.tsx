@@ -411,19 +411,19 @@ export function Import() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
 
-  const analyzeWithAI = useCallback(async (raw: RawSheet): Promise<AiSuggestion | null> => {
+  const analyzeWithAI = useCallback(async (raw: RawSheet, sheetIndex: number): Promise<AiSuggestion | null> => {
     setAiLoading(true);
     setAiError(null);
     setAiSuggestion(null);
     try {
-      // Envoie toutes les lignes brutes (max 50) pour que l'IA voie la vraie structure
       const rowsToSend = raw.allRows.slice(0, 50).map((r) => r.map((c) => String(c)));
       const suggestion = await api.import.analyze({ rawRows: rowsToSend });
       const parsed = applyAiToSheet(raw, suggestion);
       setAiSuggestion(suggestion);
+      // Utilise l'index passé en paramètre, pas rawSheets.indexOf (stale closure)
       setSheets((prev) => {
         const next = [...prev];
-        next[rawSheets.indexOf(raw)] = parsed;
+        next[sheetIndex] = parsed;
         return next;
       });
       setMapping({ memberCol: suggestion.memberCol, teamCol: suggestion.teamCol, emailCol: suggestion.emailCol });
@@ -436,7 +436,7 @@ export function Import() {
     } finally {
       setAiLoading(false);
     }
-  }, [rawSheets]);
+  }, []);
 
   const parseFile = useCallback((f: File) => {
     setParseError(null);
@@ -490,7 +490,7 @@ export function Import() {
         setMapping(detectColumns(initialParsed[idx].headers));
         setStep('map');
         setModalOpen(true);
-        await analyzeWithAI(bestRaw);
+        await analyzeWithAI(bestRaw, idx);
       } catch {
         setParseError('Impossible de lire ce fichier. Vérifiez qu\'il s\'agit d\'un .xlsx, .xls ou .csv valide.');
       }

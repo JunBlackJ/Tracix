@@ -22,5 +22,5 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
 }
 
 export function generateSuperAdminToken(): string {
-  return jwt.sign({ superadmin: true }, config.jwtSecret, { expiresIn: '8h' });
+  return jwt.sign({ superadmin: true }, config.jwtSecret, { expiresIn: '2h' });
 }

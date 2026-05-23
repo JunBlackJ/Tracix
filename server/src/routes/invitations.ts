@@ -142,8 +142,8 @@ router.post('/accept/:token', async (req: Request, res: Response): Promise<void>
 
   if (!user) {
     // Créer un compte
-    if (!full_name || !password || password.length < 8) {
-      res.status(400).json({ error: 'Nom complet et mot de passe (8 car. min) requis.' });
+    if (!full_name || !password || password.length < 10 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+      res.status(400).json({ error: 'Mot de passe requis : 10 caractères min, 1 majuscule, 1 chiffre.' });
       return;
     }
     const password_hash = await bcrypt.hash(password, 10);

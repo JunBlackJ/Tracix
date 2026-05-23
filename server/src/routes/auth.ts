@@ -45,7 +45,10 @@ const LoginSchema = z.object({
 const RegisterSchema = z.object({
   full_name: z.string().min(1).max(100),
   email: z.string().email(),
-  password: z.string().min(8, 'Le mot de passe doit avoir au moins 8 caractères'),
+  password: z.string()
+    .min(10, 'Le mot de passe doit avoir au moins 10 caractères')
+    .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
+    .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre'),
   organization_name: z.string().min(1).max(100),
 });
 

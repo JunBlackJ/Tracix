@@ -52,5 +52,5 @@ export async function requireRole(roles: string[]) {
 }
 
 export function generateToken(payload: JwtPayload): string {
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: '7d' });
+  return jwt.sign(payload, config.jwtSecret, { expiresIn: '24h' });
 }

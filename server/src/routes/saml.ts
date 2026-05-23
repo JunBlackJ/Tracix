@@ -18,7 +18,7 @@ async function getSamlInstance(orgId: string): Promise<SAML | null> {
     entryPoint: cfg.sso_url,
     issuer: cfg.entity_id,
     idpCert: cfg.certificate,
-    wantAssertionsSigned: false,
+    wantAssertionsSigned: true,
     acceptedClockSkewMs: 5000,
   });
 }

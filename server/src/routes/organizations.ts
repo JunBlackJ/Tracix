@@ -175,6 +175,29 @@ router.post('/:orgId/switch', requireAuth, async (req: Request, res: Response): 
 
 // POST /api/organizations/reset — supprimer toutes les données de l'org (sauf l'org et les utilisateurs)
 router.post('/reset', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  // Réservé aux admins uniquement
+  if (req.user!.role !== 'admin') {
+    res.status(403).json({ error: 'Réservé aux administrateurs.' });
+    return;
+  }
+
+  // Vérification du mot de passe obligatoire avant toute suppression
+  const { password } = req.body as { password?: string };
+  if (!password) {
+    res.status(400).json({ error: 'Mot de passe requis pour confirmer la réinitialisation.' });
+    return;
+  }
+  const user = await prisma.userApp.findUnique({ where: { id: req.user!.userId }, select: { password_hash: true } });
+  if (!user?.password_hash) {
+    res.status(403).json({ error: 'Impossible de vérifier le mot de passe.' });
+    return;
+  }
+  const valid = await import('bcrypt').then(b => b.compare(password, user.password_hash!));
+  if (!valid) {
+    res.status(403).json({ error: 'Mot de passe incorrect.' });
+    return;
+  }
+
   const orgId = req.user!.organizationId;
 
   // Delete in dependency order to respect foreign key constraints

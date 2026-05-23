@@ -859,6 +859,11 @@ export function Import() {
   const [emailDomain, setEmailDomain] = useState("");
   const [showEmailDomainModal, setShowEmailDomainModal] = useState(false);
   const [pendingImportData, setPendingImportData] = useState<BatchPayload | { type: "member_list"; members: { full_name: string; team?: string; email?: string }[] } | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<Record<number, AiSuggestion | null>>({});
+  const [aiLoadingSheets, setAiLoadingSheets] = useState<Set<number>>(new Set());
+  const [selectedSheets, setSelectedSheets] = useState<Set<number>>(new Set());
+  const [multiImporting, setMultiImporting] = useState(false);
+  const [multiResult, setMultiResult] = useState<{ sheets: Array<{ name: string; result: ImportResult | null; error?: string }> } | null>(null);
 
   const analyzeWithAI = useCallback(async (raw: RawSheet, sheetIndex: number): Promise<AiSuggestion | null> => {
     setAiLoading(true);
@@ -869,6 +874,7 @@ export function Import() {
       const suggestion = await api.import.analyze({ rawRows: rowsToSend });
       const parsed = applyAiToSheet(raw, suggestion);
       setAiSuggestion(suggestion);
+      setAiSuggestions((prev) => ({ ...prev, [sheetIndex]: suggestion }));
       // Utilise l'index passé en paramètre, pas rawSheets.indexOf (stale closure)
       setSheets((prev) => {
         const next = [...prev];
@@ -890,6 +896,26 @@ export function Import() {
       return null;
     } finally {
       setAiLoading(false);
+    }
+  }, []);
+
+  // Analyse silencieuse d'une feuille (sans toucher aiLoading/aiSuggestion/mapping)
+  const analyzeSheetBackground = useCallback(async (raw: RawSheet, sheetIndex: number) => {
+    setAiLoadingSheets((prev) => new Set([...prev, sheetIndex]));
+    try {
+      const rowsToSend = raw.allRows.slice(0, 50).map((r) => r.map((c) => String(c)));
+      const suggestion = await api.import.analyze({ rawRows: rowsToSend });
+      const parsed = applyAiToSheet(raw, suggestion);
+      setAiSuggestions((prev) => ({ ...prev, [sheetIndex]: suggestion }));
+      setSheets((prev) => {
+        const next = [...prev];
+        next[sheetIndex] = parsed;
+        return next;
+      });
+    } catch {
+      setAiSuggestions((prev) => ({ ...prev, [sheetIndex]: null }));
+    } finally {
+      setAiLoadingSheets((prev) => { const n = new Set(prev); n.delete(sheetIndex); return n; });
     }
   }, []);
 
@@ -947,15 +973,20 @@ export function Import() {
         const idx = raws.indexOf(bestRaw);
         setActiveSheet(idx);
         setMapping(detectColumns(initialParsed[idx].headers));
+        setSelectedSheets(new Set(raws.map((_, i) => i)));
         setStep('map');
         setModalOpen(true);
+        // Analyze all sheets: main for the best one, silent for the others
+        raws.forEach((raw, i) => {
+          if (i !== idx) analyzeSheetBackground(raw, i);
+        });
         await analyzeWithAI(bestRaw, idx);
       } catch {
         setParseError('Impossible de lire ce fichier. Vérifiez qu\'il s\'agit d\'un .xlsx, .xls ou .csv valide.');
       }
     };
     reader.readAsArrayBuffer(f);
-  }, [analyzeWithAI]);
+  }, [analyzeWithAI, analyzeSheetBackground]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -1201,12 +1232,140 @@ export function Import() {
     }
   };
 
+  // Import toutes les feuilles selectionnees en sequence
+  const doImportMulti = async (domainOverride?: string) => {
+    setMultiImporting(true);
+    const sheetResults: Array<{ name: string; result: ImportResult | null; error?: string }> = [];
+    for (const idx of Array.from(selectedSheets).sort()) {
+      const suggestion = aiSuggestions[idx] ?? null;
+      const sheet = sheets[idx];
+      const raw = rawSheets[idx];
+      if (!suggestion || !sheet) {
+        sheetResults.push({ name: raw?.name ?? 'Feuille ' + idx, result: null, error: 'Analyse non disponible' });
+        continue;
+      }
+      try {
+        const ft = suggestion.fileType;
+        const rows = sheet.rows;
+        // Derive mapping from AI suggestion
+        const effectiveMemberCol = (suggestion.firstNameCol !== null && suggestion.lastNameCol !== null)
+          ? sheet.headers.length - 1
+          : suggestion.memberCol;
+        const memberCol = ft === 'access_matrix_transposed' ? 0 : effectiveMemberCol;
+        const teamCol = suggestion.teamCol;
+        const emailCol = suggestion.emailCol;
+
+        if (ft === 'platform_inventory' && suggestion.nameCol !== null) {
+          const platforms = rows.map((r) => ({
+            name: String(r[suggestion.nameCol!] ?? '').trim(),
+            category: suggestion.categoryCol !== null ? String(r[suggestion.categoryCol!] ?? '').trim() : '',
+            url: suggestion.urlCol !== null ? String(r[suggestion.urlCol!] ?? '').trim() : '',
+            status: suggestion.statusCol !== null ? String(r[suggestion.statusCol!] ?? '').trim() || 'actif' : 'actif',
+          })).filter((p) => p.name);
+          if (platforms.length === 0) throw new Error('Aucune plateforme');
+          const res = await api.import.batchPlatforms({ platforms });
+          sheetResults.push({ name: sheet.name, result: { created: { members: 0, platforms: res.created, accessRights: 0 }, skipped: { members: 0, platforms: res.skipped }, fileType: 'platform_inventory' } });
+
+        } else if (ft === 'system_inventory' && suggestion.nameCol !== null) {
+          const systems = rows.map((r) => ({
+            name: String(r[suggestion.nameCol!] ?? '').trim(),
+            ip_address: suggestion.ipCol !== null ? String(r[suggestion.ipCol!] ?? '').trim() : undefined,
+            os_version: suggestion.osCol !== null ? String(r[suggestion.osCol!] ?? '').trim() : undefined,
+            type: suggestion.typeCol !== null ? String(r[suggestion.typeCol!] ?? '').trim() : undefined,
+            criticality: suggestion.criticalityCol !== null ? String(r[suggestion.criticalityCol!] ?? '').trim() : undefined,
+            status: suggestion.statusCol !== null ? String(r[suggestion.statusCol!] ?? '').trim() : undefined,
+            responsible: suggestion.responsibleCol !== null ? String(r[suggestion.responsibleCol!] ?? '').trim() : undefined,
+          })).filter((s) => s.name);
+          if (systems.length === 0) throw new Error('Aucun système');
+          const res = await api.import.batchSystems({ systems });
+          sheetResults.push({ name: sheet.name, result: { created: { members: 0, platforms: 0, accessRights: 0, systems: res.created }, skipped: { members: 0, platforms: 0, systems: res.skipped }, fileType: 'system_inventory' } });
+
+        } else if (ft === 'network_flow_inventory' && suggestion.sourceCol !== null) {
+          const flows = rows.map((r) => ({
+            source: String(r[suggestion.sourceCol!] ?? '').trim(),
+            destination: suggestion.destinationCol !== null ? String(r[suggestion.destinationCol!] ?? '').trim() : '',
+            port: suggestion.portCol !== null ? String(r[suggestion.portCol!] ?? '').trim() : undefined,
+            protocol: suggestion.protocolCol !== null ? String(r[suggestion.protocolCol!] ?? '').trim() : undefined,
+            status: suggestion.statusCol !== null ? String(r[suggestion.statusCol!] ?? '').trim() : undefined,
+            direction: suggestion.directionCol !== null ? String(r[suggestion.directionCol!] ?? '').trim() : undefined,
+          })).filter((f) => f.source);
+          if (flows.length === 0) throw new Error('Aucun flux');
+          const res = await api.import.batchNetworkFlows({ flows });
+          sheetResults.push({ name: sheet.name, result: { created: { members: 0, platforms: 0, accessRights: 0, flows: res.created }, skipped: { members: 0, platforms: 0 }, fileType: 'network_flow_inventory' } });
+
+        } else if (ft === 'subscription_inventory' && suggestion.nameCol !== null) {
+          const subscriptions = rows.map((r) => ({
+            name: String(r[suggestion.nameCol!] ?? '').trim(),
+            vendor: suggestion.vendorCol !== null ? String(r[suggestion.vendorCol!] ?? '').trim() : undefined,
+            category: suggestion.categoryCol !== null ? String(r[suggestion.categoryCol!] ?? '').trim() : undefined,
+            renewal_date: suggestion.renewalCol !== null ? String(r[suggestion.renewalCol!] ?? '').trim() : undefined,
+            status: suggestion.statusCol !== null ? String(r[suggestion.statusCol!] ?? '').trim() || 'actif' : 'actif',
+          })).filter((s) => s.name);
+          if (subscriptions.length === 0) throw new Error('Aucun abonnement');
+          const res = await api.import.batchSubscriptions({ subscriptions });
+          sheetResults.push({ name: sheet.name, result: { created: { members: 0, platforms: 0, accessRights: 0, subscriptions: res.created }, skipped: { members: 0, platforms: 0, subscriptions: res.skipped }, fileType: 'subscription_inventory' } });
+
+        } else if (ft === 'member_list' && memberCol !== null) {
+          let members = rows.map((r) => ({
+            full_name: String(r[memberCol!] ?? '').trim(),
+            team: teamCol !== null ? String(r[teamCol!] ?? '').trim() || undefined : undefined,
+            email: emailCol !== null ? String(r[emailCol!] ?? '').trim() || undefined : undefined,
+          })).filter((m) => m.full_name)
+            .map((m) => ({ ...m, email: m.email || (domainOverride ? generateEmail(m.full_name, domainOverride) : undefined) }));
+          if (members.length === 0) throw new Error('Aucun membre');
+          const res = await api.import.batchMembers({ members });
+          sheetResults.push({ name: sheet.name, result: { created: { members: res.created, platforms: 0, accessRights: 0 }, skipped: { members: res.skipped, platforms: 0 }, fileType: 'member_list' } });
+
+        } else if ((ft === 'access_matrix' || ft === 'access_matrix_transposed') && memberCol !== null) {
+          const levelMappings = suggestion.levelMappings;
+          const platformColsList = sheet.headers
+            .map((h, i) => ({ h, i }))
+            .filter(({ i }) => i !== memberCol && i !== teamCol && i !== emailCol)
+            .filter(({ i }) => (suggestion.platformCols.length > 0 ? suggestion.platformCols.includes(i) : true));
+          const memberNamesSet = new Set<string>();
+          const platformNamesSet = new Set<string>(platformColsList.map(({ h }) => h));
+          const access: { memberName: string; platformName: string; level: 'admin' | 'rw' | 'ro' | 'req' }[] = [];
+          for (const row of rows) {
+            const name = String(row[memberCol!] ?? '').trim();
+            if (!name) continue;
+            memberNamesSet.add(name);
+            for (const { h, i } of platformColsList) {
+              const level = normalizeLevel(String(row[i] ?? ''), levelMappings);
+              if (level === 'none') continue;
+              access.push({ memberName: name, platformName: h, level });
+            }
+          }
+          let members = [...memberNamesSet].map((full_name) => {
+            const row = rows.find((r) => String(r[memberCol!] ?? '').trim() === full_name);
+            const email = row && emailCol !== null ? String(row[emailCol!] ?? '').trim() || undefined : undefined;
+            const team = row && teamCol !== null ? String(row[teamCol!] ?? '').trim() || undefined : undefined;
+            return { full_name, ...(email ? { email } : {}), ...(team ? { team } : {}) };
+          }).map((m) => ({ ...m, email: m.email || (domainOverride ? generateEmail(m.full_name, domainOverride) : undefined) }));
+          if (members.length === 0) throw new Error('Aucun membre');
+          const data = { members, platforms: [...platformNamesSet].map((name) => ({ name })), access };
+          const res = await api.import.batch(data);
+          sheetResults.push({ name: sheet.name, result: { ...res, fileType: 'access_matrix' } });
+        } else {
+          sheetResults.push({ name: sheet.name, result: null, error: 'Type non importable: ' + ft });
+        }
+      } catch (err) {
+        sheetResults.push({ name: sheet.name, result: null, error: err instanceof Error ? err.message : 'Erreur' });
+      }
+    }
+    setMultiResult({ sheets: sheetResults });
+    setMultiImporting(false);
+    setModalOpen(false);
+    setStep('done');
+  };
+
   const reset = () => {
     setFile(null); setRawSheets([]); setSheets([]); setActiveSheet(0);
     setMapping({ memberCol: null, teamCol: null, emailCol: null });
     setAiSuggestion(null); setAiError(null); setAiLoading(false);
     setExcludedPlatformCols(new Set()); setModalOpen(false);
     setStep('upload'); setResult(null); setParseError(null);
+    setAiSuggestions({}); setAiLoadingSheets(new Set()); setSelectedSheets(new Set());
+    setMultiImporting(false); setMultiResult(null);
   };
 
   const payload = buildPayload();
@@ -1273,19 +1432,82 @@ export function Import() {
             </button>
           </div>
 
-          {/* Sélecteur de feuille */}
+          {/* Multi-select feuilles */}
           {rawSheets.length > 1 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <p className="text-sm font-semibold text-gray-700 mb-2">Feuille à importer</p>
-              <div className="flex gap-2 flex-wrap">
-                {rawSheets.map((s, i) => (
-                  <button key={i} onClick={() => setActiveSheet(i)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      activeSheet === i ? 'bg-[#534AB7] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}>
-                    {s.name}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-gray-700">{rawSheets.length} feuilles détectées</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedSheets(new Set(rawSheets.map((_, i) => i)))}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-[#534AB7]/5 text-[#534AB7] hover:bg-[#534AB7]/10 font-medium transition-colors"
+                  >
+                    Tout sélectionner
                   </button>
-                ))}
+                  <button
+                    onClick={() => setSelectedSheets(new Set())}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 font-medium transition-colors"
+                  >
+                    Tout déselectionner
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {rawSheets.map((s, i) => {
+                  const sug = aiSuggestions[i];
+                  const loading = aiLoadingSheets.has(i);
+                  const selected = selectedSheets.has(i);
+                  const typeLabel = sug
+                    ? sug.fileType === 'access_matrix' ? 'Matrice d'accès'
+                    : sug.fileType === 'access_matrix_transposed' ? 'Matrice inversée'
+                    : sug.fileType === 'platform_inventory' ? 'Inventaire plateformes'
+                    : sug.fileType === 'system_inventory' ? 'Inventaire systèmes'
+                    : sug.fileType === 'network_flow_inventory' ? 'Flux réseau'
+                    : sug.fileType === 'subscription_inventory' ? 'Abonnements'
+                    : sug.fileType === 'member_list' ? 'Liste membres'
+                    : 'Type inconnu'
+                    : null;
+                  const typeColor = sug
+                    ? sug.fileType === 'access_matrix' || sug.fileType === 'access_matrix_transposed' ? 'bg-[#534AB7]/10 text-[#534AB7]'
+                    : sug.fileType === 'platform_inventory' ? 'bg-emerald-100 text-emerald-700'
+                    : sug.fileType === 'system_inventory' ? 'bg-orange-100 text-orange-700'
+                    : sug.fileType === 'network_flow_inventory' ? 'bg-rose-100 text-rose-700'
+                    : sug.fileType === 'subscription_inventory' ? 'bg-blue-100 text-blue-700'
+                    : sug.fileType === 'member_list' ? 'bg-amber-100 text-amber-700'
+                    : 'bg-gray-100 text-gray-500'
+                    : 'bg-gray-100 text-gray-400';
+                  return (
+                    <div key={i}
+                      className={`flex items-center gap-3 p-3 rounded-xl border transition-colors cursor-pointer ${selected ? 'border-[#534AB7]/30 bg-[#534AB7]/3' : 'border-gray-100 bg-gray-50 opacity-60'}`}
+                      onClick={() => {
+                        setSelectedSheets((prev) => {
+                          const n = new Set(prev);
+                          if (n.has(i)) n.delete(i); else n.add(i);
+                          return n;
+                        });
+                        handleSelectSheet(i);
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => {}}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-4 h-4 accent-[#534AB7] flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{s.name}</p>
+                        <p className="text-xs text-gray-400">{sheets[i]?.rows.length ?? 0} lignes</p>
+                      </div>
+                      {loading
+                        ? <Loader2 className="w-4 h-4 text-[#534AB7] animate-spin flex-shrink-0" />
+                        : typeLabel
+                        ? <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${typeColor}`}>{typeLabel}</span>
+                        : <span className="text-xs text-gray-300 italic flex-shrink-0">En attente…</span>
+                      }
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1344,22 +1566,77 @@ export function Import() {
             <button onClick={reset} className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-2">
               <ChevronRight className="w-4 h-4 rotate-180" /> Retour
             </button>
-            <button
-              onClick={handleImport}
-              disabled={importing || mapping.memberCol === null || payload.members.length === 0}
-              className="flex-1 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-            >
-              {importing
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</>
-                : <><CheckCircle2 className="w-4 h-4" />Lancer l'import ({payload.members.length} membres)</>
-              }
-            </button>
+            {rawSheets.length > 1 && selectedSheets.size > 1 ? (
+              <button
+                onClick={() => doImportMulti()}
+                disabled={multiImporting || selectedSheets.size === 0}
+                className="flex-1 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {multiImporting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</>
+                  : <><CheckCircle2 className="w-4 h-4" />Importer {selectedSheets.size} feuilles sélectionnées</>
+                }
+              </button>
+            ) : (
+              <button
+                onClick={handleImport}
+                disabled={importing || mapping.memberCol === null || payload.members.length === 0}
+                className="flex-1 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {importing
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</>
+                  : <><CheckCircle2 className="w-4 h-4" />Lancer l'import ({payload.members.length} membres)</>
+                }
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {/* ── STEP 3 : Done ── */}
-      {step === 'done' && result && (
+      {/* ── STEP 3 : Done (multi) ── */}
+      {step === 'done' && multiResult && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-emerald-200 p-8">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-black text-gray-900 mb-1 text-center">Import terminé !</h3>
+            <p className="text-sm text-gray-500 mb-6 text-center">{multiResult.sheets.filter(s => s.result).length} feuille{multiResult.sheets.filter(s => s.result).length > 1 ? 's' : ''} importée{multiResult.sheets.filter(s => s.result).length > 1 ? 's' : ''} avec succès</p>
+            <div className="space-y-2">
+              {multiResult.sheets.map((s, i) => (
+                <div key={i} className={"flex items-center gap-3 p-3 rounded-xl border " + (s.error ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50")}>
+                  {s.error
+                    ? <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                    : <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  }
+                  <div className="flex-1">
+                    <p className={"text-sm font-semibold " + (s.error ? "text-red-700" : "text-gray-800")}>{s.name}</p>
+                    {s.error && <p className="text-xs text-red-500">{s.error}</p>}
+                    {s.result && (
+                      <p className="text-xs text-gray-500">
+                        {s.result.created.members > 0 && s.result.created.members + ' membres '}
+                        {s.result.created.platforms > 0 && s.result.created.platforms + ' plateformes '}
+                        {s.result.created.accessRights > 0 && s.result.created.accessRights + ' droits '}
+                        {(s.result.created.systems ?? 0) > 0 && s.result.created.systems + ' systèmes '}
+                        {(s.result.created.flows ?? 0) > 0 && s.result.created.flows + ' flux '}
+                        {(s.result.created.subscriptions ?? 0) > 0 && s.result.created.subscriptions + ' abonnements '}
+                        créés
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={reset} className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">Importer un autre fichier</button>
+            <a href="/dashboard" className="flex-1 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] transition-colors flex items-center justify-center gap-2">Voir le tableau de bord <ArrowRight className="w-4 h-4" /></a>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 3 : Done (single) ── */}
+      {step === 'done' && result && !multiResult && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-emerald-200 p-8 text-center">
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">

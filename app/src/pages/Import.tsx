@@ -873,6 +873,7 @@ function AiModal({
             )}
             </>
             )}
+          </div>
         )}
         {!loading && !suggestion && (
           <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white">

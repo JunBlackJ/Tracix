@@ -1501,7 +1501,6 @@ export function Import() {
             </div>
           )}
 
-          )}
 
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h3 className="text-sm font-semibold text-gray-800 mb-1">Mappage des colonnes</h3>

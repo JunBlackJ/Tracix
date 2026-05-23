@@ -9,26 +9,29 @@ import { config } from '../config';
 export function startCronJobs(): void {
   cron.schedule('0 8 * * *', async () => {
     console.log('[Cron] Daily check starting…');
+    try {
+      const orgs = await prisma.organization.findMany();
+      for (const org of orgs) {
+        // Isoler chaque org — une erreur n'arrête pas les autres
+        try { await processOffboarding(org.id); }
+        catch (e) { console.error(`[Cron] processOffboarding failed for ${org.id}:`, e); }
 
-    const orgs = await prisma.organization.findMany();
-    for (const org of orgs) {
-      // 1. Auto-offboard departed members
-      await processOffboarding(org.id);
+        try { await generateAlerts(org.id); }
+        catch (e) { console.error(`[Cron] generateAlerts failed for ${org.id}:`, e); }
 
-      // 2. Generate new alerts
-      await generateAlerts(org.id);
+        try { await checkSubscriptionEmails(org.id); }
+        catch (e) { console.error(`[Cron] checkSubscriptionEmails failed for ${org.id}:`, e); }
 
-      // 3. Send email notifications for expiring subscriptions
-      await checkSubscriptionEmails(org.id);
+        try { await checkCriticalAlertEmails(org.id, org.name); }
+        catch (e) { console.error(`[Cron] checkCriticalAlertEmails failed for ${org.id}:`, e); }
 
-      // 4. Send email digest for new critical/warning alerts
-      await checkCriticalAlertEmails(org.id, org.name);
-
-      // 5. Warn if Tracix plan is about to expire
-      await checkPlanExpiryEmail(org.id, org.name);
+        try { await checkPlanExpiryEmail(org.id, org.name); }
+        catch (e) { console.error(`[Cron] checkPlanExpiryEmail failed for ${org.id}:`, e); }
+      }
+      console.log('[Cron] Daily check done.');
+    } catch (e) {
+      console.error('[Cron] Fatal error during daily check:', e);
     }
-
-    console.log('[Cron] Daily check done.');
   });
 
   console.log('[Cron] Scheduled daily check at 08:00');

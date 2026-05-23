@@ -103,6 +103,21 @@ export async function sendAlertEmail(opts: {
 </table>
 </body></html>`;
 
-  await resend.emails.send({ from: FROM, to: opts.to, subject, html });
-  console.log(`[Email] Alertes envoyées (${opts.alerts.length}) → ${opts.to}`);
+  // Retry 2 fois avec backoff exponentiel si Resend est temporairement indisponible
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await resend.emails.send({ from: FROM, to: opts.to, subject, html });
+      console.log(`[Email] Alertes envoyées (${opts.alerts.length}) → ${opts.to}`);
+      return;
+    } catch (err) {
+      lastError = err;
+      if (attempt < 3) {
+        const delay = attempt * 2000;
+        console.warn(`[Email] Tentative ${attempt} échouée, retry dans ${delay}ms…`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  console.error('[Email] Échec après 3 tentatives:', lastError);
 }

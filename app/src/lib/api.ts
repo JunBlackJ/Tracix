@@ -54,17 +54,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  // Timeout 15s sur toutes les requêtes
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('La requête a expiré — vérifiez votre connexion.');
+    }
+    throw new Error('Impossible de contacter le serveur — vérifiez votre connexion.');
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try {
       const body = await response.json();
       if (body.details) {
-        // Zod validation error — include field details
         const details = (body.details as { field: string; message: string }[])
           .map((d) => `${d.field ? d.field + ': ' : ''}${d.message}`)
           .join(' | ');

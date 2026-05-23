@@ -109,7 +109,9 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoFocus
-              className="w-full bg-white/8 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7]"
+              autoComplete="username"
+              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7] [&:-webkit-autofill]:[-webkit-box-shadow:0_0_0_1000px_#1A1730_inset] [&:-webkit-autofill]:[-webkit-text-fill-color:#ffffff]"
+              style={{ background: '#1A1730' }}
               placeholder="admin@tracix.io"
             />
           </div>
@@ -120,7 +122,9 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full bg-white/8 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7]"
+              autoComplete="current-password"
+              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7] [&:-webkit-autofill]:[-webkit-box-shadow:0_0_0_1000px_#1A1730_inset] [&:-webkit-autofill]:[-webkit-text-fill-color:#ffffff]"
+              style={{ background: '#1A1730' }}
             />
           </div>
           <button

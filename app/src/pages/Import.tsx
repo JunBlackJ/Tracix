@@ -1767,7 +1767,7 @@ export function Import() {
                 <h3 className="text-base font-bold text-gray-900">Emails manquants détectés</h3>
                 <p className="text-xs text-gray-400">
                   {(() => {
-                    const members = pendingImportData ? ("members" in pendingImportData ? pendingImportData.members : pendingImportData.members) : [];
+                    const members = pendingImportData ? pendingImportData.members : [];
                     const missing = members.filter((m) => !m.email).length;
                     const total = members.length;
                     return total > 0
@@ -1801,29 +1801,14 @@ export function Import() {
                   <div className="mt-2 p-2.5 rounded-lg bg-[#534AB7]/5 border border-[#534AB7]/10">
                     <p className="text-[11px] text-gray-500 mb-1">Aperçu des emails générés :</p>
                     <div className="space-y-0.5">
-                      {(pendingImportData
-                        ? ("members" in pendingImportData
-                            ? pendingImportData.members
-                            : pendingImportData.members)
-                        : []
-                      ).filter((m) => !m.email).slice(0, 3).map((m, i) => (
+                      {(pendingImportData ? pendingImportData.members : []).filter((m) => !m.email).slice(0, 3).map((m, i) => (
                         <p key={i} className="text-xs font-mono text-[#534AB7]">
                           {generateEmail(m.full_name, emailDomain)}
                         </p>
                       ))}
-                      {(pendingImportData
-                        ? ("members" in pendingImportData
-                            ? pendingImportData.members
-                            : pendingImportData.members)
-                        : []
-                      ).filter((m) => !m.email).length > 3 && (
+                      {(pendingImportData ? pendingImportData.members : []).filter((m) => !m.email).length > 3 && (
                         <p className="text-[10px] text-gray-400">
-                          +{(pendingImportData
-                            ? ("members" in pendingImportData
-                                ? pendingImportData.members
-                                : pendingImportData.members)
-                            : []
-                          ).filter((m) => !m.email).length - 3} autres...
+                          +{(pendingImportData ? pendingImportData.members : []).filter((m) => !m.email).length - 3} autres...
                         </p>
                       )}
                     </div>

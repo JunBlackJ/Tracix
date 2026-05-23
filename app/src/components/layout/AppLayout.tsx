@@ -1,3 +1,7 @@
+// ═══════════════════════════════════════════
+// Layout principal — Sidebar + Header + Content
+// ═══════════════════════════════════════════
+
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -30,6 +34,7 @@ interface AppLayoutProps {
   onCreateOrg?: (name: string) => Promise<boolean>;
 }
 
+// Modules always visible regardless of enabled_modules
 const CORE_PATHS = new Set(['/dashboard', '/parametres']);
 
 const ALL_NAV_ITEMS: { path: string; moduleId?: ModuleId; label: string; icon: React.ElementType }[] = [
@@ -46,172 +51,10 @@ const ALL_NAV_ITEMS: { path: string; moduleId?: ModuleId; label: string; icon: R
   { path: '/journal',         moduleId: 'journal',        label: "Journal d'audit",  icon: ScrollText },
   { path: '/rapports',        moduleId: 'rapports',       label: 'Rapports',         icon: FileText },
   { path: '/import',          moduleId: 'import',         label: 'Import',           icon: Import },
+  { path: '/parametres',      label: 'Paramètres',        icon: Settings },
 ];
 
-const NAV_GROUPS = [
-  {
-    label: 'ACCÈS',
-    paths: ['/dashboard', '/habilitations', '/revues', '/membres', '/plateformes'],
-  },
-  {
-    label: 'ANALYSE',
-    paths: ['/score-de-risque', '/alertes', '/journal', '/rapports'],
-  },
-  {
-    label: 'INFRASTRUCTURE',
-    paths: ['/systemes', '/flux-reseau', '/abonnements'],
-  },
-  {
-    label: 'OUTILS',
-    paths: ['/import'],
-  },
-];
-
-function NavItem({
-  item,
-  active,
-  unresolvedAlerts,
-  onClick,
-}: {
-  item: { path: string; label: string; icon: React.ElementType; color?: string };
-  active: boolean;
-  unresolvedAlerts?: number;
-  onClick?: () => void;
-}) {
-  return (
-    <Link
-      to={item.path}
-      onClick={onClick}
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-        active
-          ? 'bg-[#534AB7] text-white font-medium shadow-md shadow-[#534AB7]/30'
-          : 'text-white/55 hover:text-white hover:bg-white/[0.08]'
-      }`}
-      style={
-        !active && item.color
-          ? {}
-          : active && item.color
-          ? { backgroundColor: `${item.color}CC`, color: '#fff' }
-          : {}
-      }
-    >
-      <item.icon
-        className="w-4 h-4 flex-shrink-0"
-        style={!active && item.color ? { color: item.color } : {}}
-      />
-      <span className="truncate">{item.label}</span>
-      {item.path === '/alertes' && unresolvedAlerts && unresolvedAlerts > 0 ? (
-        <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-          {unresolvedAlerts}
-        </span>
-      ) : null}
-    </Link>
-  );
-}
-
-function SidebarContent({
-  navItems,
-  customNavItems,
-  isActive,
-  unresolvedAlerts,
-  onItemClick,
-  onLogout,
-}: {
-  navItems: typeof ALL_NAV_ITEMS;
-  customNavItems: { path: string; label: string; icon: React.ElementType; color: string }[];
-  isActive: (path: string) => boolean;
-  unresolvedAlerts: number;
-  onItemClick?: () => void;
-  onLogout: () => void;
-}) {
-  const navByPath = Object.fromEntries(navItems.map((i) => [i.path, i]));
-
-  return (
-    <>
-      {/* Navigation groupée */}
-      <nav className="flex-1 py-3 px-3 overflow-y-auto space-y-4">
-        {NAV_GROUPS.map((group) => {
-          const groupItems = group.paths
-            .map((p) => navByPath[p])
-            .filter(Boolean);
-          if (groupItems.length === 0) return null;
-          return (
-            <div key={group.label}>
-              <p className="px-3 mb-1 text-[10px] font-semibold text-white/25 uppercase tracking-widest">
-                {group.label}
-              </p>
-              <div className="space-y-0.5">
-                {groupItems.map((item) => (
-                  <NavItem
-                    key={item.path}
-                    item={item}
-                    active={isActive(item.path)}
-                    unresolvedAlerts={unresolvedAlerts}
-                    onClick={onItemClick}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Modules personnalisés */}
-        {customNavItems.length > 0 && (
-          <div>
-            <p className="px-3 mb-1 text-[10px] font-semibold text-white/25 uppercase tracking-widest">
-              MES MODULES
-            </p>
-            <div className="space-y-0.5">
-              {customNavItems.map((item) => (
-                <NavItem
-                  key={item.path}
-                  item={item}
-                  active={isActive(item.path)}
-                  onClick={onItemClick}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </nav>
-
-      {/* Bas de sidebar : Paramètres + Déconnexion */}
-      <div className="p-3 border-t border-white/[0.08] space-y-0.5">
-        <Link
-          to="/parametres"
-          onClick={onItemClick}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-            isActive('/parametres')
-              ? 'bg-[#534AB7] text-white font-medium'
-              : 'text-white/55 hover:text-white hover:bg-white/[0.08]'
-          }`}
-        >
-          <Settings className="w-4 h-4 flex-shrink-0" />
-          <span>Paramètres</span>
-        </Link>
-        <button
-          onClick={() => { onLogout(); onItemClick?.(); }}
-          className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm text-white/55 hover:text-red-400 hover:bg-red-500/10 transition-all"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Déconnexion</span>
-        </button>
-      </div>
-    </>
-  );
-}
-
-export function AppLayout({
-  children,
-  user,
-  organization,
-  onLogout,
-  unresolvedAlerts,
-  customModules = [],
-  userOrganizations = [],
-  onSwitchOrg,
-  onCreateOrg,
-}: AppLayoutProps) {
+export function AppLayout({ children, user, organization, onLogout, unresolvedAlerts, customModules = [], userOrganizations = [], onSwitchOrg, onCreateOrg }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [orgMenuOpen, setOrgMenuOpen] = useState(false);
@@ -241,47 +84,145 @@ export function AppLayout({
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex">
       {/* ─── Sidebar Desktop ─── */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-[240px] bg-[#0E0C1E] flex-col z-30">
+      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-[240px] bg-white border-r border-gray-200 flex-col z-30">
         {/* Logo */}
-        <div className="h-16 flex items-center px-5 border-b border-white/[0.08] flex-shrink-0">
-          <img src="/favicon.png" alt="Tracix" className="w-8 h-8 object-contain mr-3 flex-shrink-0" />
+        <div className="h-16 flex items-center px-5 border-b border-gray-100">
+          <img src="/favicon.png" alt="Tracix" className="w-16 h-16 object-contain mr-3 flex-shrink-0" />
           <div>
-            <h1 className="font-bold text-white text-lg leading-tight">Tracix</h1>
-            <p className="text-[10px] text-white/35 -mt-0.5">Visibilité totale. Zéro angle mort.</p>
+            <h1 className="font-bold text-[#534AB7] text-lg leading-tight">Tracix</h1>
+            <p className="text-[10px] text-gray-400 -mt-0.5">Visibilité totale. Zéro angle mort.</p>
           </div>
         </div>
 
-        <SidebarContent
-          navItems={NAV_ITEMS}
-          customNavItems={CUSTOM_NAV_ITEMS}
-          isActive={isActive}
-          unresolvedAlerts={unresolvedAlerts}
-          onLogout={onLogout}
-        />
+        {/* Navigation */}
+        <nav className="flex-1 py-4 px-3 overflow-y-auto">
+          <div className="space-y-0.5">
+            {NAV_ITEMS.map((item) => {
+              const active = isActive(item.path);
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    active
+                      ? 'bg-[#534AB7]/10 text-[#534AB7] font-medium'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <item.icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                  {item.path === '/alertes' && unresolvedAlerts > 0 && (
+                    <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {unresolvedAlerts}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+            {CUSTOM_NAV_ITEMS.length > 0 && (
+              <>
+                <div className="mx-3 my-2 border-t border-gray-100" />
+                <p className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Mes modules</p>
+                {CUSTOM_NAV_ITEMS.map((item) => {
+                  const active = isActive(item.path);
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        active ? 'font-medium' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                      style={active ? { backgroundColor: `${item.color}18`, color: item.color } : {}}
+                    >
+                      <item.icon className="w-4 h-4 flex-shrink-0" style={{ color: item.color }} />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </nav>
+
+        {/* Déconnexion */}
+        <div className="p-3 border-t border-gray-100">
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-red-600 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Déconnexion</span>
+          </button>
+        </div>
       </aside>
 
       {/* ─── Sidebar Mobile ─── */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
-          <aside className="absolute left-0 top-0 h-full w-[260px] bg-[#0E0C1E] flex flex-col">
-            <div className="h-16 flex items-center justify-between px-5 border-b border-white/[0.08] flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <img src="/favicon.png" alt="Tracix" className="w-8 h-8 object-contain flex-shrink-0" />
-                <h1 className="font-bold text-white text-lg">Tracix</h1>
+          <div className="absolute inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
+          <aside className="absolute left-0 top-0 h-full w-[260px] bg-white flex flex-col">
+            <div className="h-16 flex items-center justify-between px-5 border-b border-gray-100">
+              <div className="flex items-center">
+                <img src="/favicon.png" alt="Tracix" className="w-16 h-16 object-contain mr-3 flex-shrink-0" />
+                <h1 className="font-bold text-[#534AB7] text-lg">Tracix</h1>
               </div>
-              <button onClick={() => setSidebarOpen(false)} className="p-1 rounded-lg hover:bg-white/10 transition-colors">
-                <X className="w-5 h-5 text-white/60" />
+              <button onClick={() => setSidebarOpen(false)}>
+                <X className="w-5 h-5 text-gray-400" />
               </button>
             </div>
-            <SidebarContent
-              navItems={NAV_ITEMS}
-              customNavItems={CUSTOM_NAV_ITEMS}
-              isActive={isActive}
-              unresolvedAlerts={unresolvedAlerts}
-              onItemClick={() => setSidebarOpen(false)}
-              onLogout={onLogout}
-            />
+            <nav className="flex-1 py-4 px-3 overflow-y-auto">
+              {NAV_ITEMS.map((item) => {
+                const active = isActive(item.path);
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 ${
+                      active
+                        ? 'bg-[#534AB7]/10 text-[#534AB7] font-medium'
+                        : 'text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <item.icon className="w-4 h-4 flex-shrink-0" />
+                    <span>{item.label}</span>
+                    {item.path === '/alertes' && unresolvedAlerts > 0 && (
+                      <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        {unresolvedAlerts}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+              {CUSTOM_NAV_ITEMS.length > 0 && (
+                <>
+                  <div className="mx-3 my-2 border-t border-gray-100" />
+                  <p className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Mes modules</p>
+                  {CUSTOM_NAV_ITEMS.map((item) => {
+                    const active = isActive(item.path);
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-0.5 ${active ? 'font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                        style={active ? { backgroundColor: `${item.color}18`, color: item.color } : {}}
+                      >
+                        <item.icon className="w-4 h-4 flex-shrink-0" style={{ color: item.color }} />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </>
+              )}
+              <button
+                onClick={() => { onLogout(); setSidebarOpen(false); }}
+                className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm text-gray-500 hover:bg-gray-50 mt-4"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Déconnexion</span>
+              </button>
+            </nav>
           </aside>
         </div>
       )}
@@ -332,10 +273,8 @@ export function AppLayout({
                         }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left disabled:opacity-60"
                       >
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                          style={{ background: org.id === organization.id ? '#534AB7' : '#9CA3AF' }}
-                        >
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                          style={{ background: org.id === organization.id ? '#534AB7' : '#9CA3AF' }}>
                           {org.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -343,9 +282,7 @@ export function AppLayout({
                           <p className="text-[11px] text-gray-400">{role} · {org.plan}</p>
                         </div>
                         {org.id === organization.id && <Check className="w-4 h-4 text-[#534AB7] flex-shrink-0" />}
-                        {switchingOrg === org.id && (
-                          <div className="w-4 h-4 border-2 border-gray-300 border-t-[#534AB7] rounded-full animate-spin flex-shrink-0" />
-                        )}
+                        {switchingOrg === org.id && <div className="w-4 h-4 border-2 border-gray-300 border-t-[#534AB7] rounded-full animate-spin flex-shrink-0" />}
                       </button>
                     ))}
                     <div className="mx-3 my-1 border-t border-gray-100" />
@@ -375,16 +312,14 @@ export function AppLayout({
               <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
                 <h3 className="text-base font-bold text-gray-800 mb-1">Nouvelle organisation</h3>
                 <p className="text-sm text-gray-500 mb-5">Créez un espace de travail indépendant.</p>
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!newOrgName.trim()) return;
-                    setCreatingOrg(true);
-                    const ok = await onCreateOrg?.(newOrgName.trim());
-                    setCreatingOrg(false);
-                    if (ok) { setShowNewOrgModal(false); setNewOrgName(''); }
-                  }}
-                >
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newOrgName.trim()) return;
+                  setCreatingOrg(true);
+                  const ok = await onCreateOrg?.(newOrgName.trim());
+                  setCreatingOrg(false);
+                  if (ok) { setShowNewOrgModal(false); setNewOrgName(''); }
+                }}>
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5">Nom de l'organisation</label>
                   <input
                     type="text"
@@ -396,23 +331,14 @@ export function AppLayout({
                     autoFocus
                   />
                   <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowNewOrgModal(false)}
-                      className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
+                    <button type="button" onClick={() => setShowNewOrgModal(false)}
+                      className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
                       Annuler
                     </button>
-                    <button
-                      type="submit"
-                      disabled={creatingOrg}
+                    <button type="submit" disabled={creatingOrg}
                       className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-                      style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}
-                    >
-                      {creatingOrg
-                        ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Création…</>
-                        : 'Créer'
-                      }
+                      style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
+                      {creatingOrg ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Création…</> : 'Créer'}
                     </button>
                   </div>
                 </form>

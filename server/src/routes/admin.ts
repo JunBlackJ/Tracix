@@ -58,7 +58,8 @@ router.get('/stats', requireSuperAdmin, async (_req: Request, res: Response) => 
 
 // ─── GET /api/admin/orgs ───
 router.get('/orgs', requireSuperAdmin, async (_req: Request, res: Response) => {
-  const orgs = await prisma.organization.findMany({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const orgs = await (prisma.organization.findMany as any)({
     select: {
       id: true, name: true, plan: true, plan_expires_at: true, created_at: true,
       is_suspended: true,
@@ -67,7 +68,8 @@ router.get('/orgs', requireSuperAdmin, async (_req: Request, res: Response) => {
     orderBy: { created_at: 'desc' },
   });
 
-  res.json(orgs.map((org) => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  res.json(orgs.map((org: any) => ({
     id: org.id, name: org.name, plan: org.plan,
     plan_expires_at: org.plan_expires_at, created_at: org.created_at,
     is_suspended: org.is_suspended ?? false,
@@ -78,8 +80,10 @@ router.get('/orgs', requireSuperAdmin, async (_req: Request, res: Response) => {
 // ─── GET /api/admin/orgs/:id ───
 router.get('/orgs/:id', requireSuperAdmin, async (req: Request, res: Response) => {
   const { id } = req.params;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [org, recentAudit] = await Promise.all([
-    prisma.organization.findUnique({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (prisma.organization.findUnique as any)({
       where: { id },
       include: {
         _count: { select: { users: true, members: true, alerts: true, platforms: true, subscriptions: true } },
@@ -95,13 +99,15 @@ router.get('/orgs/:id', requireSuperAdmin, async (req: Request, res: Response) =
 
   if (!org) { res.status(404).json({ error: 'Organisation introuvable' }); return; }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const o = org as any;
   res.json({
-    id: org.id, name: org.name, plan: org.plan,
-    plan_expires_at: org.plan_expires_at, created_at: org.created_at,
-    is_suspended: (org as typeof org & { is_suspended?: boolean }).is_suspended ?? false,
-    users_count: org._count.users, members_count: org._count.members,
-    alerts_count: org._count.alerts, platforms_count: org._count.platforms,
-    subscriptions_count: org._count.subscriptions,
+    id: o.id, name: o.name, plan: o.plan,
+    plan_expires_at: o.plan_expires_at, created_at: o.created_at,
+    is_suspended: o.is_suspended ?? false,
+    users_count: o._count.users, members_count: o._count.members,
+    alerts_count: o._count.alerts, platforms_count: o._count.platforms,
+    subscriptions_count: o._count.subscriptions,
     recent_audit: recentAudit,
   });
 });
@@ -127,12 +133,13 @@ router.patch('/orgs/:id/suspend', requireSuperAdmin, async (req: Request, res: R
   const { id } = req.params;
   const { suspended } = req.body as { suspended: boolean };
 
-  const updated = await prisma.organization.update({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updated = await (prisma.organization.update as any)({
     where: { id },
     data: { is_suspended: suspended },
   });
 
-  res.json({ id: updated.id, is_suspended: (updated as typeof updated & { is_suspended?: boolean }).is_suspended ?? false });
+  res.json({ id: updated.id, is_suspended: updated.is_suspended ?? false });
 });
 
 // ─── DELETE /api/admin/orgs/:id ───

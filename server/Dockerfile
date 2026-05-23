@@ -11,8 +11,8 @@ COPY prisma ./prisma
 COPY tsconfig.json ./
 COPY src ./src
 
-RUN node node_modules/typescript/bin/tsc
 RUN node node_modules/.bin/prisma generate
+RUN node node_modules/typescript/bin/tsc
 
 EXPOSE 4000
 

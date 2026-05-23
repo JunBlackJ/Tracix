@@ -20,6 +20,7 @@ model Organization {
   alert_email_enabled       Boolean  @default(false)
   alert_email_address       String   @default("")
   alert_email_frequency     String   @default("daily")
+  is_suspended              Boolean  @default(false)
   created_at                DateTime @default(now())
 
   users             UserApp[]

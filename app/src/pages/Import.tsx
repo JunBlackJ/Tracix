@@ -1174,7 +1174,8 @@ export function Import() {
             team: tCol !== null ? String(r[tCol] ?? '').trim() : undefined,
             email: eCol !== null ? String(r[eCol] ?? '').trim() : undefined,
           }))
-          .filter((m) => m.full_name);
+          .filter((m) => m.full_name)
+          .map((m) => ({ ...m, email: m.email || (domainOverride ? generateEmail(m.full_name, domainOverride) : undefined) }));
         if (members.length === 0) throw new Error('Aucun membre trouvé.');
         const res = await api.import.batchMembers({ members });
         setResult({ created: { members: res.created, platforms: 0, accessRights: 0 }, skipped: { members: res.skipped, platforms: 0 }, fileType: 'member_list' });
@@ -1184,6 +1185,9 @@ export function Import() {
       } else {
         if (mapping.memberCol === null) return;
         const data = buildPayload();
+        if (domainOverride) {
+          data.members = data.members.map((m) => ({ ...m, email: m.email || generateEmail(m.full_name, domainOverride) }));
+        }
         if (data.members.length === 0) throw new Error('Aucun membre trouvé. Vérifiez que la colonne Membres est bien sélectionnée.');
         const res = await api.import.batch(data);
         setResult({ ...res, fileType: 'access_matrix' });

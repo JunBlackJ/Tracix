@@ -110,7 +110,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
               required
               autoFocus
               autoComplete="username"
-              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7] [&:-webkit-autofill]:[-webkit-box-shadow:0_0_0_1000px_#1A1730_inset] [&:-webkit-autofill]:[-webkit-text-fill-color:#ffffff]"
+              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7]"
               style={{ background: '#1A1730' }}
               placeholder="admin@tracix.io"
             />
@@ -123,7 +123,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
-              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7] [&:-webkit-autofill]:[-webkit-box-shadow:0_0_0_1000px_#1A1730_inset] [&:-webkit-autofill]:[-webkit-text-fill-color:#ffffff]"
+              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7]"
               style={{ background: '#1A1730' }}
             />
           </div>

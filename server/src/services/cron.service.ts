@@ -2,7 +2,8 @@ import cron from 'node-cron';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { generateAlerts } from './alert.service';
-import { sendSubscriptionAlertEmail, sendCriticalAlertsEmail } from './email.service';
+import { sendAlertEmail } from './email.service';
+import { config } from '../config';
 
 // Runs every day at 8:00 AM
 export function startCronJobs(): void {
@@ -95,15 +96,20 @@ async function checkCriticalAlertEmails(orgId: string, orgName: string): Promise
   const now = new Date();
   const today = now.toISOString().split('T')[0];
 
-  // Alertes non résolues créées aujourd'hui (critical ou warning)
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { alert_email_enabled: true, alert_email_address: true, alert_email_frequency: true },
+  });
+
+  // Digest quotidien uniquement si activé et fréquence = daily
+  if (!org?.alert_email_enabled || !org.alert_email_address || org.alert_email_frequency !== 'daily') return;
+
   const newAlerts = await prisma.alert.findMany({
     where: {
       organization_id: orgId,
       is_resolved: false,
       severity: { in: ['critical', 'warning'] },
-      created_at: {
-        gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-      },
+      created_at: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) },
     },
     orderBy: [{ severity: 'asc' }, { created_at: 'desc' }],
   });
@@ -115,33 +121,23 @@ async function checkCriticalAlertEmails(orgId: string, orgName: string): Promise
     where: {
       organization_id: orgId,
       action: 'email.alert_digest',
-      created_at: {
-        gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-      },
+      created_at: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) },
     },
   });
   if (alreadySent) return;
 
-  const admins = await prisma.userApp.findMany({
-    where: { organization_id: orgId, role: { in: ['admin', 'manager'] } },
-    select: { email: true },
-  });
-  const adminEmails = admins.map((a) => a.email);
-  if (adminEmails.length === 0) return;
-
-  await sendCriticalAlertsEmail({
-    to: adminEmails,
+  await sendAlertEmail({
+    to: org.alert_email_address,
     orgName,
     alerts: newAlerts.map((a) => ({
       type: a.type,
       severity: a.severity,
       message: a.message,
       source_label: a.source_label,
-      source_module: a.source_module,
     })),
+    frontendUrl: config.frontendUrl,
   });
 
-  // Log anti-doublon
   await prisma.auditTrail.create({
     data: {
       id: `email_digest_${orgId}_${today}`,
@@ -152,7 +148,7 @@ async function checkCriticalAlertEmails(orgId: string, orgName: string): Promise
       target_id: orgId,
       target_label: orgName,
       old_value: {},
-      new_value: { recipients: adminEmails, alert_count: newAlerts.length, date: today },
+      new_value: { recipient: org.alert_email_address, alert_count: newAlerts.length, date: today },
       ip_address: '127.0.0.1',
       user_agent: 'Tracix-Cron/1.0',
     },
@@ -162,60 +158,45 @@ async function checkCriticalAlertEmails(orgId: string, orgName: string): Promise
 async function checkSubscriptionEmails(orgId: string): Promise<void> {
   const org = await prisma.organization.findUnique({ where: { id: orgId } });
   if (!org) return;
+  if (!org.alert_email_enabled || !org.alert_email_address) return;
 
   const now = new Date();
-
   const subscriptions = await prisma.subscription.findMany({
     where: { organization_id: orgId, status: 'actif' },
   });
-
-  // Get all admin emails for this org
-  const admins = await prisma.userApp.findMany({
-    where: { organization_id: orgId, role: { in: ['admin', 'manager'] } },
-    select: { email: true },
-  });
-  const adminEmails = admins.map((a) => a.email);
-
-  if (adminEmails.length === 0) return;
 
   for (const sub of subscriptions) {
     if (!sub.renewal_date) continue;
 
     const renewalDate = new Date(sub.renewal_date);
-    const daysUntilRenewal = Math.floor(
-      (renewalDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const daysUntilRenewal = Math.floor((renewalDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Send at 30 days, 14 days, 7 days, and 1 day before expiry
     const notifyAt = [30, 14, 7, 1];
     if (!notifyAt.includes(daysUntilRenewal)) continue;
 
-    // Check if we already sent a notification for this threshold today
     const alreadySent = await prisma.auditTrail.findFirst({
       where: {
         organization_id: orgId,
         action: 'email.subscription_alert',
         target_id: sub.id,
         target_label: String(daysUntilRenewal),
-        created_at: {
-          gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-        },
+        created_at: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) },
       },
     });
     if (alreadySent) continue;
 
-    await sendSubscriptionAlertEmail({
-      to: adminEmails,
-      subscriptionName: sub.name,
-      daysUntilRenewal,
-      renewalDate: sub.renewal_date,
-      vendor: sub.vendor,
-      costAnnual: sub.cost_annual,
-      currency: sub.currency,
-      responsible: sub.responsible,
+    await sendAlertEmail({
+      to: org.alert_email_address,
+      orgName: org.name,
+      alerts: [{
+        type: 'subscription_expiring',
+        severity: daysUntilRenewal <= 7 ? 'critical' : 'warning',
+        message: `Renouvellement dans ${daysUntilRenewal} jour${daysUntilRenewal > 1 ? 's' : ''} (${sub.renewal_date}) — ${sub.vendor}`,
+        source_label: sub.name,
+      }],
+      frontendUrl: config.frontendUrl,
     });
 
-    // Log the email send in audit trail to avoid duplicates
     await prisma.auditTrail.create({
       data: {
         id: `email_${sub.id}_${daysUntilRenewal}_${now.toISOString().split('T')[0]}`,
@@ -226,7 +207,7 @@ async function checkSubscriptionEmails(orgId: string): Promise<void> {
         target_id: sub.id,
         target_label: String(daysUntilRenewal),
         old_value: {},
-        new_value: { recipients: adminEmails, days_remaining: daysUntilRenewal },
+        new_value: { recipient: org.alert_email_address, days_remaining: daysUntilRenewal },
         ip_address: '127.0.0.1',
         user_agent: 'Tracix-Cron/1.0',
       },

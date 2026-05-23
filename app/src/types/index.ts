@@ -18,6 +18,9 @@ export interface Organization {
   subscription_alert_days: number;
   enabled_modules: ModuleId[];
   created_at: string;
+  alert_email_enabled: boolean;
+  alert_email_address: string;
+  alert_email_frequency: 'immediate' | 'daily';
 }
 
 // ─── Utilisateurs ───

@@ -107,7 +107,7 @@ export const api = {
     me(): Promise<{ user: UserApp; organization: Organization }> {
       return request('/auth/me');
     },
-    updateOrganization(data: { name?: string; max_admin_per_platform?: number; access_review_delay_days?: number; subscription_alert_days?: number; enabled_modules?: ModuleId[]; plan?: string }): Promise<Organization> {
+    updateOrganization(data: { name?: string; max_admin_per_platform?: number; access_review_delay_days?: number; subscription_alert_days?: number; enabled_modules?: ModuleId[]; plan?: string; alert_email_enabled?: boolean; alert_email_address?: string; alert_email_frequency?: string }): Promise<Organization> {
       return request('/auth/organization', { method: 'PUT', body: JSON.stringify(data) });
     },
     oauthUrl(provider: 'google' | 'microsoft' | 'github'): string {

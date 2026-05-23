@@ -103,7 +103,7 @@ export function Parametres({ user, organization, categories, customModules, onCa
             />
           )}
           {section === 'sso' && <SsoSection organization={organization} />}
-          {section === 'integrations' && <IntegrationsSection />}
+          {section === 'integrations' && <IntegrationsSection organization={organization} onUpdated={onOrganizationUpdated} />}
           {section === 'securite' && <SecuriteSection />}
         </div>
       </div>
@@ -157,27 +157,6 @@ function ProfilSection({ user }: { user: UserApp | null }) {
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
           <input type="email" defaultValue={user.email} disabled className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-400 outline-none cursor-not-allowed" />
           <p className="text-[11px] text-gray-400 mt-0.5">L'email ne peut pas être modifié</p>
-        </div>
-      </div>
-
-      <div className="border-t border-gray-100 pt-5">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <Bell className="w-4 h-4" />
-          Notifications email
-        </h3>
-        <div className="space-y-3">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" defaultChecked className="rounded border-gray-300 text-[#534AB7]" />
-            <span className="text-sm text-gray-700">Alertes critiques immédiates</span>
-          </label>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" defaultChecked className="rounded border-gray-300 text-[#534AB7]" />
-            <span className="text-sm text-gray-700">Résumé quotidien des alertes</span>
-          </label>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" className="rounded border-gray-300 text-[#534AB7]" />
-            <span className="text-sm text-gray-700">Résumé hebdomadaire</span>
-          </label>
         </div>
       </div>
 
@@ -859,110 +838,190 @@ function SsoSection({ organization }: { organization: Organization | null }) {
   );
 }
 
-function IntegrationsSection() {
-  const [testingEmail, setTestingEmail] = useState(false);
+function IntegrationsSection({ organization, onUpdated }: { organization: Organization | null; onUpdated: (o: Organization) => void }) {
+  const [enabled, setEnabled] = useState(organization?.alert_email_enabled ?? false);
+  const [address, setAddress] = useState(organization?.alert_email_address ?? '');
+  const [frequency, setFrequency] = useState<'immediate' | 'daily'>(organization?.alert_email_frequency ?? 'daily');
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
-  const handleTestEmail = async () => {
-    setTestingEmail(true);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const updated = await api.auth.updateOrganization({
+        alert_email_enabled: enabled,
+        alert_email_address: address.trim(),
+        alert_email_frequency: frequency,
+      });
+      onUpdated(updated);
+      toast.success('Préférences email enregistrées');
+    } catch {
+      toast.error('Erreur lors de la sauvegarde');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    if (!address.trim()) { toast.error('Renseignez une adresse email d\'abord'); return; }
+    setTesting(true);
     try {
       const res = await api.auth.testEmail();
       toast.success(`Email de test envoyé à ${res.sent_to}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'envoi');
     } finally {
-      setTestingEmail(false);
+      setTesting(false);
     }
   };
 
   return (
     <div className="space-y-4">
-      {/* SMTP */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
-          <Bell className="w-5 h-5 text-[#534AB7]" />
-          Notifications email (SMTP)
-        </h2>
-        <p className="text-sm text-gray-500 mb-5">
-          Tracix envoie automatiquement des alertes critiques et des rappels d'abonnements par email.
-        </p>
-
-        {/* Ce que Tracix envoie */}
-        <div className="space-y-2 mb-5">
-          {[
-            { label: 'Alertes critiques', desc: 'Envoi immédiat dès qu\'une alerte critique est générée (Admin sans MFA, départ non traité…)', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
-            { label: 'Digest quotidien', desc: 'Résumé des alertes warning/critiques nouvelles, envoyé à 8h chaque matin', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
-            { label: 'Rappels abonnements', desc: 'Notifications à J-30, J-14, J-7 et J-1 avant renouvellement', color: 'text-[#534AB7]', bg: 'bg-[#534AB7]/5', border: 'border-[#534AB7]/20' },
-          ].map((item) => (
-            <div key={item.label} className={`flex items-start gap-3 p-3 rounded-xl border ${item.border} ${item.bg}`}>
-              <CheckCircle2 className={`w-4 h-4 mt-0.5 flex-shrink-0 ${item.color}`} />
-              <div>
-                <p className={`text-sm font-semibold ${item.color}`}>{item.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
-              </div>
-            </div>
-          ))}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Bell className="w-5 h-5 text-[#534AB7]" />
+            Notifications email
+          </h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Recevez les alertes critiques et les rappels d'abonnements par email.
+          </p>
         </div>
 
-        {/* Config SMTP */}
-        <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 mb-4">
-          <p className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-2">
-            <Lock className="w-3.5 h-3.5" />
-            Variables d'environnement SMTP à configurer sur Railway
-          </p>
-          <div className="space-y-1.5">
+        {/* Toggle activer */}
+        <div
+          onClick={() => setEnabled((v) => !v)}
+          className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
+            enabled ? 'border-[#534AB7]/30 bg-[#534AB7]/5' : 'border-gray-200 bg-gray-50'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${enabled ? 'bg-[#534AB7]/10' : 'bg-gray-100'}`}>
+              <Bell className={`w-4 h-4 ${enabled ? 'text-[#534AB7]' : 'text-gray-400'}`} />
+            </div>
+            <div>
+              <p className={`text-sm font-semibold ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>Activer les alertes email</p>
+              <p className="text-xs text-gray-400">Alertes critiques + rappels abonnements</p>
+            </div>
+          </div>
+          <div className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 flex-shrink-0 ${enabled ? 'bg-[#534AB7]' : 'bg-gray-300'}`}>
+            <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+          </div>
+        </div>
+
+        {/* Adresse email */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Adresse email de réception
+          </label>
+          <input
+            type="email"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="responsable-it@votreentreprise.com"
+            disabled={!enabled}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] disabled:bg-gray-50 disabled:text-gray-400"
+          />
+        </div>
+
+        {/* Fréquence */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Fréquence</label>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { value: 'immediate', label: 'Immédiat', desc: 'Dès qu\'une alerte est détectée' },
+              { value: 'daily',     label: 'Quotidien', desc: 'Résumé chaque matin à 8h' },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                disabled={!enabled}
+                onClick={() => setFrequency(opt.value)}
+                className={`text-left p-3 rounded-xl border transition-all disabled:opacity-40 ${
+                  frequency === opt.value
+                    ? 'border-[#534AB7] bg-[#534AB7]/5'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <p className={`text-sm font-semibold ${frequency === opt.value ? 'text-[#534AB7]' : 'text-gray-700'}`}>{opt.label}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Ce que Tracix envoie */}
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Ce que vous recevez</p>
+          <div className="space-y-2">
             {[
-              { key: 'SMTP_HOST', example: 'smtp.gmail.com', desc: 'Serveur SMTP' },
-              { key: 'SMTP_PORT', example: '587', desc: 'Port (587 = TLS, 465 = SSL)' },
-              { key: 'SMTP_SECURE', example: 'false', desc: '"true" si port 465' },
-              { key: 'SMTP_USER', example: 'vous@gmail.com', desc: 'Adresse email expéditeur' },
-              { key: 'SMTP_PASS', example: 'mot de passe app', desc: 'Gmail : activer "Mots de passe d\'application"' },
-              { key: 'SMTP_FROM', example: 'Tracix <noreply@tracix.io>', desc: 'Nom affiché dans l\'email' },
-            ].map((v) => (
-              <div key={v.key} className="flex items-center gap-2 text-xs">
-                <code className="bg-white border border-gray-200 px-2 py-0.5 rounded font-mono text-[#534AB7] w-28 flex-shrink-0">{v.key}</code>
-                <code className="text-gray-500 flex-shrink-0 w-36 truncate">{v.example}</code>
-                <span className="text-gray-400 truncate">{v.desc}</span>
+              { label: 'Alertes critiques & warnings', desc: 'Admin sans MFA, départ non traité, compte partagé…', color: 'text-red-600', dot: 'bg-red-500' },
+              { label: 'Rappels abonnements', desc: 'J-30, J-14, J-7 et J-1 avant renouvellement', color: 'text-amber-600', dot: 'bg-amber-500' },
+              { label: 'Fins de support système', desc: 'Systèmes avec date de fin de support proche', color: 'text-[#534AB7]', dot: 'bg-[#534AB7]' },
+            ].map((item) => (
+              <div key={item.label} className="flex items-start gap-3">
+                <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${item.dot}`} />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">{item.label}</p>
+                  <p className="text-xs text-gray-400">{item.desc}</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Bouton test */}
-        <div className="flex items-center gap-3">
+        {/* Config Railway */}
+        <div className="border border-dashed border-gray-200 rounded-xl p-4 bg-gray-50">
+          <p className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+            <Lock className="w-3.5 h-3.5" />
+            Variable à ajouter sur Railway
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="text-xs bg-white border border-gray-200 px-2 py-1 rounded font-mono text-[#534AB7]">RESEND_API_KEY</code>
+            <span className="text-xs text-gray-400">→ votre clé API Resend (gratuit : 100 emails/jour)</span>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">Créez un compte sur resend.com et copiez votre clé API.</p>
+        </div>
+
+        {/* Boutons */}
+        <div className="flex gap-3">
           <button
-            onClick={handleTestEmail}
-            disabled={testingEmail}
+            onClick={handleSave}
+            disabled={saving}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors disabled:opacity-60"
           >
-            {testingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
-            {testingEmail ? 'Envoi…' : 'Envoyer un email de test'}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
           </button>
-          <p className="text-xs text-gray-400">Envoie un email de test à votre adresse de connexion</p>
+          <button
+            onClick={handleTest}
+            disabled={testing || !enabled || !address.trim()}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-40"
+          >
+            {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+            {testing ? 'Envoi…' : 'Tester'}
+          </button>
         </div>
       </div>
 
       {/* Intégrations à venir */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Intégrations à venir</h2>
-        <div className="space-y-3">
+        <h2 className="text-base font-semibold text-gray-900 mb-3">Intégrations à venir</h2>
+        <div className="space-y-2">
           {[
-            { name: 'Active Directory / LDAP', icon: Lock, desc: 'Synchronisation automatique des utilisateurs' },
-            { name: 'Google Workspace', icon: CheckCircle2, desc: 'Sync automatique des membres et groupes' },
-            { name: 'Slack', icon: Bell, desc: 'Notifications d\'alertes dans un channel' },
-          ].map((int, i) => (
-            <div key={i} className="flex items-center gap-4 p-4 rounded-xl border border-gray-200 opacity-60">
-              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                <int.icon className="w-5 h-5 text-gray-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-sm font-medium text-gray-700">{int.name}</h3>
+            { name: 'Slack', desc: 'Notifications dans un channel Slack' },
+            { name: 'Google Workspace', desc: 'Sync automatique des membres et groupes' },
+            { name: 'Active Directory / LDAP', desc: 'Synchronisation des utilisateurs' },
+          ].map((int) => (
+            <div key={int.name} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 opacity-50">
+              <div>
+                <p className="text-sm font-medium text-gray-700">{int.name}</p>
                 <p className="text-xs text-gray-400">{int.desc}</p>
               </div>
               <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">Bientôt</span>
             </div>
           ))}
         </div>
-        <p className="text-xs text-gray-400 mt-3">Disponibles en plan Enterprise</p>
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ function serializeOrg(org: {
   id: string; name: string; logo_url: string; plan: string;
   max_admin_per_platform: number; access_review_delay_days: number;
   subscription_alert_days: number; enabled_modules: JsonValue; created_at: Date;
+  alert_email_enabled?: boolean; alert_email_address?: string; alert_email_frequency?: string;
 }) {
   return {
     id: org.id,
@@ -25,6 +26,9 @@ function serializeOrg(org: {
     subscription_alert_days: org.subscription_alert_days,
     enabled_modules: org.enabled_modules,
     created_at: org.created_at,
+    alert_email_enabled: org.alert_email_enabled ?? false,
+    alert_email_address: org.alert_email_address ?? '',
+    alert_email_frequency: org.alert_email_frequency ?? 'daily',
   };
 }
 
@@ -245,7 +249,8 @@ router.get('/plan-limits', requireAuth, async (req: Request, res: Response): Pro
 // PUT /api/auth/organization — update org settings incl. enabled_modules
 router.put('/organization', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
-  const { name, max_admin_per_platform, access_review_delay_days, subscription_alert_days, enabled_modules, plan } = req.body;
+  const { name, max_admin_per_platform, access_review_delay_days, subscription_alert_days, enabled_modules, plan,
+          alert_email_enabled, alert_email_address, alert_email_frequency } = req.body;
 
   const updated = await prisma.organization.update({
     where: { id: orgId },
@@ -256,6 +261,9 @@ router.put('/organization', requireAuth, async (req: Request, res: Response): Pr
       ...(subscription_alert_days !== undefined && { subscription_alert_days: Number(subscription_alert_days) }),
       ...(enabled_modules !== undefined && { enabled_modules }),
       ...(plan !== undefined && { plan }),
+      ...(alert_email_enabled !== undefined && { alert_email_enabled: Boolean(alert_email_enabled) }),
+      ...(alert_email_address !== undefined && { alert_email_address: String(alert_email_address) }),
+      ...(alert_email_frequency !== undefined && { alert_email_frequency: String(alert_email_frequency) }),
     },
   });
 
@@ -505,44 +513,29 @@ router.get('/oauth/github/callback', async (req: Request, res: Response): Promis
   }
 });
 
-// POST /api/auth/test-email — envoie un email de test à l'utilisateur connecté
+// POST /api/auth/test-email — envoie un email de test à l'adresse configurée
 router.post('/test-email', requireAuth, async (req: Request, res: Response): Promise<void> => {
-  const { email, full_name } = req.user
-    ? { email: req.user.email, full_name: req.user.email }
-    : { email: '', full_name: '' };
-
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    res.status(503).json({ error: 'SMTP non configuré sur le serveur' });
+  if (!process.env.RESEND_API_KEY) {
+    res.status(503).json({ error: 'RESEND_API_KEY non configuré sur le serveur' });
     return;
   }
 
+  const org = await prisma.organization.findUnique({
+    where: { id: req.user!.organizationId },
+    select: { alert_email_address: true, name: true },
+  });
+
+  const to = org?.alert_email_address || req.user!.email;
+
   try {
-    const nodemailer = await import('nodemailer');
-    const transporter = nodemailer.default.createTransport({
-      host: config.email.host,
-      port: config.email.port,
-      secure: config.email.secure,
-      auth: { user: config.email.user, pass: config.email.pass },
+    const { sendAlertEmail } = await import('../services/email.service');
+    await sendAlertEmail({
+      to,
+      orgName: org?.name ?? 'Tracix',
+      alerts: [{ type: 'no_mfa_on_admin', severity: 'critical', message: 'Ceci est un email de test — configuration Resend opérationnelle ✓', source_label: 'Test' }],
+      frontendUrl: config.frontendUrl,
     });
-
-    await transporter.sendMail({
-      from: config.email.from,
-      to: email,
-      subject: '[Tracix] Test de configuration email',
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;">
-          <p style="font-size:20px;font-weight:bold;color:#534AB7;margin:0 0 8px;">Tracix</p>
-          <p style="font-size:16px;font-weight:600;color:#111827;margin:0 0 16px;">Configuration email opérationnelle ✓</p>
-          <p style="font-size:14px;color:#6B7280;line-height:1.6;">
-            Bonjour,<br><br>
-            Ce message confirme que la configuration SMTP de votre instance Tracix fonctionne correctement.
-            Vous recevrez désormais les alertes critiques et les rappels d'abonnements à cette adresse.
-          </p>
-          <p style="font-size:12px;color:#9CA3AF;margin-top:24px;">Tracix — Plateforme de gouvernance IT</p>
-        </div>`,
-    });
-
-    res.json({ success: true, sent_to: email });
+    res.json({ success: true, sent_to: to });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erreur inconnue';
     res.status(500).json({ error: `Échec envoi : ${msg}` });

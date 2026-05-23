@@ -9,6 +9,7 @@ function serializeOrg(org: {
   id: string; name: string; logo_url: string; plan: string;
   max_admin_per_platform: number; access_review_delay_days: number;
   subscription_alert_days: number; enabled_modules: JsonValue; created_at: Date;
+  alert_email_enabled?: boolean; alert_email_address?: string; alert_email_frequency?: string;
 }) {
   return {
     id: org.id, name: org.name, logo_url: org.logo_url, plan: org.plan,
@@ -17,6 +18,9 @@ function serializeOrg(org: {
     subscription_alert_days: org.subscription_alert_days,
     enabled_modules: org.enabled_modules,
     created_at: org.created_at,
+    alert_email_enabled: org.alert_email_enabled ?? false,
+    alert_email_address: org.alert_email_address ?? '',
+    alert_email_frequency: org.alert_email_frequency ?? 'daily',
   };
 }
 

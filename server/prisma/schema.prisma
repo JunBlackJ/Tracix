@@ -16,6 +16,9 @@ model Organization {
   access_review_delay_days  Int      @default(90)
   subscription_alert_days   Int      @default(30)
   enabled_modules           Json     @default("[\"habilitations\",\"membres\",\"plateformes\",\"score-de-risque\",\"abonnements\",\"alertes\",\"journal\",\"rapports\",\"import\"]")
+  alert_email_enabled       Boolean  @default(false)
+  alert_email_address       String   @default("")
+  alert_email_frequency     String   @default("daily")
   created_at                DateTime @default(now())
 
   users             UserApp[]

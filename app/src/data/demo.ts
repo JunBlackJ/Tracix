@@ -18,6 +18,9 @@ export const DEMO_ORG: Organization = {
   subscription_alert_days: 30,
   enabled_modules: ['habilitations','membres','plateformes','score-de-risque','abonnements','alertes','journal','rapports','import'],
   created_at: '2024-01-15T08:30:00Z',
+  alert_email_enabled: false,
+  alert_email_address: '',
+  alert_email_frequency: 'daily',
 };
 
 export const DEMO_USER: UserApp = {

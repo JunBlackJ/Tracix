@@ -1,4 +1,4 @@
-// ═══════════════════════════════════════════
+﻿// ═══════════════════════════════════════════
 // Page Import — Excel intelligent
 // ═══════════════════════════════════════════
 
@@ -823,7 +823,22 @@ function AiModal({
   );
 }
 
-// ─── Composant principal ───
+
+// Genere un email professionnel a partir du nom complet et du domaine
+function generateEmail(fullName: string, domain: string): string {
+  const normalized = fullName
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z\s]/g, "")
+    .trim();
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return ${parts[0]}@;
+  // prenom.nom@domaine
+  return ${parts[0]}.@;
+}
+// --- Composant principal ---
 export function Import() {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -840,6 +855,9 @@ export function Import() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [emailDomain, setEmailDomain] = useState("");
+  const [showEmailDomainModal, setShowEmailDomainModal] = useState(false);
+  const [pendingImportData, setPendingImportData] = useState<BatchPayload | { type: "member_list"; members: { full_name: string; team?: string; email?: string }[] } | null>(null);
 
   const analyzeWithAI = useCallback(async (raw: RawSheet, sheetIndex: number): Promise<AiSuggestion | null> => {
     setAiLoading(true);
@@ -1020,6 +1038,53 @@ export function Import() {
   };
 
   const handleImport = async () => {
+    // Detecter si des membres n ont pas d email
+    const ft = aiSuggestion?.fileType;
+    if (ft === access_matrix || ft === access_matrix_transposed || ft === member_list || !ft) {
+      let membersToCheck: { full_name: string; email?: string }[] = [];
+      if (ft === member_list && currentSheet && aiSuggestion) {
+        const mCol = aiSuggestion.memberCol;
+        const eCol = aiSuggestion.emailCol;
+        if (mCol !== null) {
+          membersToCheck = currentSheet.rows
+            .map((r) => ({
+              full_name: String(r[mCol] ?? ).trim(),
+              email: eCol !== null ? String(r[eCol] ?? ).trim() || undefined : undefined,
+            }))
+            .filter((m) => m.full_name);
+        }
+      } else {
+        const p = buildPayload();
+        membersToCheck = p.members;
+      }
+      const hasNoEmail = membersToCheck.some((m) => !m.email);
+      if (hasNoEmail) {
+        // Sauvegarder les donnees et afficher la modal domaine
+        if (ft === member_list && currentSheet && aiSuggestion) {
+          const mCol = aiSuggestion.memberCol!;
+          const tCol = aiSuggestion.teamCol;
+          const eCol = aiSuggestion.emailCol;
+          setPendingImportData({
+            type: member_list,
+            members: currentSheet.rows
+              .map((r) => ({
+                full_name: String(r[mCol] ?? ).trim(),
+                team: tCol !== null ? String(r[tCol] ?? ).trim() || undefined : undefined,
+                email: eCol !== null ? String(r[eCol] ?? ).trim() || undefined : undefined,
+              }))
+              .filter((m) => m.full_name),
+          });
+        } else {
+          setPendingImportData(buildPayload());
+        }
+        setShowEmailDomainModal(true);
+        return;
+      }
+    }
+    await doImport();
+  };
+
+  const doImport = async (domainOverride?: string) => {
     setImporting(true);
     try {
       const ft = aiSuggestion?.fileType;
@@ -1364,6 +1429,93 @@ export function Import() {
           onEdit={() => setModalOpen(false)}
           onClose={() => setModalOpen(false)}
         />
+      )}
+
+      {/* Modal generation email */}
+      {showEmailDomainModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                <Mail className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Emails manquants détectés</h3>
+                <p className="text-xs text-gray-400">Certains membres n&apos;ont pas d&apos;adresse email dans le fichier</p>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Vos collaborateurs ont-ils une adresse email professionnelle ?<br />
+                <span className="text-gray-400 text-xs">Ex: <span className="font-mono bg-gray-100 px-1 rounded">prenom.nom@votreentreprise.com</span></span>
+              </p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Domaine email de l&apos;organisation
+                </label>
+                <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#534AB7]/20 focus-within:border-[#534AB7]">
+                  <span className="px-3 text-sm text-gray-400 bg-gray-50 border-r border-gray-200 py-2.5 select-none">@</span>
+                  <input
+                    type="text"
+                    value={emailDomain}
+                    onChange={(e) => setEmailDomain(e.target.value.replace(/^@/, ""))}
+                    placeholder="votreentreprise.com"
+                    className="flex-1 px-3 py-2.5 text-sm outline-none bg-white"
+                    autoFocus
+                  />
+                </div>
+                {emailDomain && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-[#534AB7]/5 border border-[#534AB7]/10">
+                    <p className="text-[11px] text-gray-500 mb-1">Aperçu des emails générés :</p>
+                    <div className="space-y-0.5">
+                      {(pendingImportData
+                        ? ("members" in pendingImportData
+                            ? pendingImportData.members
+                            : pendingImportData.members)
+                        : []
+                      ).filter((m) => !m.email).slice(0, 3).map((m, i) => (
+                        <p key={i} className="text-xs font-mono text-[#534AB7]">
+                          {generateEmail(m.full_name, emailDomain)}
+                        </p>
+                      ))}
+                      {(pendingImportData
+                        ? ("members" in pendingImportData
+                            ? pendingImportData.members
+                            : pendingImportData.members)
+                        : []
+                      ).filter((m) => !m.email).length > 3 && (
+                        <p className="text-[10px] text-gray-400">
+                          +{(pendingImportData
+                            ? ("members" in pendingImportData
+                                ? pendingImportData.members
+                                : pendingImportData.members)
+                            : []
+                          ).filter((m) => !m.email).length - 3} autres...
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => { setShowEmailDomainModal(false); doImport(); }}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Ignorer, importer sans email
+                </button>
+                <button
+                  disabled={!emailDomain.trim() || importing}
+                  onClick={() => { setShowEmailDomainModal(false); doImport(emailDomain.trim()); }}
+                  className="flex-1 px-4 py-2.5 bg-[#534AB7] text-white rounded-xl text-sm font-semibold hover:bg-[#3C3489] transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm shadow-[#534AB7]/20"
+                >
+                  {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                  Générer les emails
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

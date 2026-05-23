@@ -219,8 +219,8 @@ router.post('/batch', async (req: Request, res: Response): Promise<void> => {
   });
 
   const toCreateMembers = uniqueInMembers.filter((m) => {
-    const email = m.email.trim();
     if (memberByName.has(m.full_name.toLowerCase())) return false;
+    const email = m.email.trim();
     if (email && memberByEmail.has(email.toLowerCase())) return false;
     return true;
   });
@@ -258,6 +258,7 @@ router.post('/batch', async (req: Request, res: Response): Promise<void> => {
       const id = uuidv4();
       const username = makeUsername(m.full_name);
       const email = m.email.trim() || `${username}@import.local`;
+      if (memberByEmail.has(email.toLowerCase())) continue;
       await tx.member.create({
         data: {
           id,
@@ -494,6 +495,7 @@ router.post('/batch-members', async (req: Request, res: Response): Promise<void>
   for (const m of toCreate) {
     const username = makeUsername(m.full_name);
     const email = m.email.trim() || `${username}@import.local`;
+    if (byEmail.has(email.toLowerCase())) continue;
     await prisma.member.create({
       data: {
         id: uuidv4(),

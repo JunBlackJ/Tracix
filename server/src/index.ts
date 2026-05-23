@@ -1,6 +1,8 @@
 import 'express-async-errors';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { config } from './config';
 import { errorHandler } from './middleware/error';
 import { startCronJobs } from './services/cron.service';
@@ -28,15 +30,57 @@ import adminRoutes from './routes/admin';
 
 const app = express();
 
-// ─── Middleware ───
+// ─── Sécurité HTTP ───
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: false, // géré côté frontend (Vite)
+}));
+
+// ─── CORS ───
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: (origin, cb) => {
+    // Autoriser: frontendUrl configuré, sous-domaines admin.*, et pas d'origin (curl, Postman)
+    if (!origin) return cb(null, true);
+    const allowed = [config.frontendUrl, config.frontendUrl.replace('://', '://admin.')];
+    if (allowed.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origine non autorisée — ${origin}`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+
+// ─── Rate limiting global ───
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans 15 minutes.' },
+});
+
+// ─── Rate limiting strict sur les endpoints sensibles ───
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de tentatives de connexion, réessayez dans 15 minutes.' },
+  skipSuccessfulRequests: true,
+});
+
+export const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de tentatives, réessayez dans 15 minutes.' },
+  skipSuccessfulRequests: true,
+});
+
+app.use(globalLimiter);
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ─── Health check ───
 app.get('/health', (_req, res) => {

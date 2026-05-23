@@ -2,11 +2,12 @@ import { Router, Request, Response } from 'express';
 import prisma from '../prisma/client';
 import { requireSuperAdmin, generateSuperAdminToken } from '../middleware/superadmin';
 import { config } from '../config';
+import { adminLimiter } from '../index';
 
 const router = Router();
 
 // ─── POST /api/admin/login ───
-router.post('/login', (req: Request, res: Response) => {
+router.post('/login', adminLimiter, (req: Request, res: Response) => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (
     !config.superAdminEmail || !config.superAdminPassword ||

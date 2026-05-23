@@ -8,6 +8,7 @@ import { requireAuth, generateToken } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
 import { config } from '../config';
+import { authLimiter } from '../index';
 
 // Helper — expose organization fields consistently including enabled_modules (Json)
 function serializeOrg(org: {
@@ -49,7 +50,7 @@ const RegisterSchema = z.object({
 });
 
 // POST /api/auth/login
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+router.post('/login', authLimiter, async (req: Request, res: Response): Promise<void> => {
   const body = LoginSchema.parse(req.body);
 
   const user = await prisma.userApp.findUnique({
@@ -114,7 +115,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/auth/register
-router.post('/register', async (req: Request, res: Response): Promise<void> => {
+router.post('/register', authLimiter, async (req: Request, res: Response): Promise<void> => {
   const body = RegisterSchema.parse(req.body);
 
   const existing = await prisma.userApp.findUnique({ where: { email: body.email } });
@@ -248,26 +249,42 @@ router.get('/plan-limits', requireAuth, async (req: Request, res: Response): Pro
   });
 });
 
+const VALID_MODULES = ['habilitations','membres','plateformes','score-de-risque','systemes','flux-reseau','abonnements','alertes','journal','rapports','import'] as const;
+const VALID_EMAIL_FREQ = ['immediate', 'daily'] as const;
+
 // PUT /api/auth/organization — update org settings incl. enabled_modules
 router.put('/organization', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
-  const { name, max_admin_per_platform, access_review_delay_days, subscription_alert_days, enabled_modules, plan,
+  const { name, max_admin_per_platform, access_review_delay_days, subscription_alert_days, enabled_modules,
           plan_expires_at,
           alert_email_enabled, alert_email_address, alert_email_frequency } = req.body;
+
+  // Whitelist des modules valides
+  let safeModules: string[] | undefined;
+  if (enabled_modules !== undefined) {
+    if (!Array.isArray(enabled_modules)) { res.status(400).json({ error: 'enabled_modules doit être un tableau' }); return; }
+    safeModules = (enabled_modules as unknown[]).filter((m): m is string => VALID_MODULES.includes(m as typeof VALID_MODULES[number]));
+  }
+
+  // Whitelist fréquence email
+  let safeFreq: string | undefined;
+  if (alert_email_frequency !== undefined) {
+    if (!VALID_EMAIL_FREQ.includes(alert_email_frequency)) { res.status(400).json({ error: 'Fréquence invalide' }); return; }
+    safeFreq = alert_email_frequency;
+  }
 
   const updated = await prisma.organization.update({
     where: { id: orgId },
     data: {
-      ...(name !== undefined && { name }),
-      ...(max_admin_per_platform !== undefined && { max_admin_per_platform: Number(max_admin_per_platform) }),
-      ...(access_review_delay_days !== undefined && { access_review_delay_days: Number(access_review_delay_days) }),
-      ...(subscription_alert_days !== undefined && { subscription_alert_days: Number(subscription_alert_days) }),
-      ...(enabled_modules !== undefined && { enabled_modules }),
-      ...(plan !== undefined && { plan }),
+      ...(name !== undefined && { name: String(name).slice(0, 100) }),
+      ...(max_admin_per_platform !== undefined && { max_admin_per_platform: Math.max(1, Math.min(50, Number(max_admin_per_platform))) }),
+      ...(access_review_delay_days !== undefined && { access_review_delay_days: Math.max(1, Math.min(365, Number(access_review_delay_days))) }),
+      ...(subscription_alert_days !== undefined && { subscription_alert_days: Math.max(1, Math.min(365, Number(subscription_alert_days))) }),
+      ...(safeModules !== undefined && { enabled_modules: safeModules }),
       ...(plan_expires_at !== undefined && { plan_expires_at: plan_expires_at ? new Date(plan_expires_at) : null }),
       ...(alert_email_enabled !== undefined && { alert_email_enabled: Boolean(alert_email_enabled) }),
-      ...(alert_email_address !== undefined && { alert_email_address: String(alert_email_address) }),
-      ...(alert_email_frequency !== undefined && { alert_email_frequency: String(alert_email_frequency) }),
+      ...(alert_email_address !== undefined && { alert_email_address: String(alert_email_address).slice(0, 254) }),
+      ...(safeFreq !== undefined && { alert_email_frequency: safeFreq }),
     },
   });
 

@@ -15,15 +15,11 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   }
 
   if (err instanceof Error) {
+    // Ne jamais exposer les détails internes en production
     console.error(`[ERROR] ${req.method} ${req.path}:`, err.message);
-
-    if (config.nodeEnv === 'development') {
-      res.status(500).json({ error: err.message, stack: err.stack });
-    } else {
-      res.status(500).json({ error: 'Internal server error' });
-    }
+    res.status(500).json({ error: 'Internal server error' });
     return;
   }
 
-  res.status(500).json({ error: 'Unknown error' });
+  res.status(500).json({ error: 'Internal server error' });
 }

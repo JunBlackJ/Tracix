@@ -970,18 +970,6 @@ function IntegrationsSection({ organization, onUpdated }: { organization: Organi
           </div>
         </div>
 
-        {/* Config Railway */}
-        <div className="border border-dashed border-gray-200 rounded-xl p-4 bg-gray-50">
-          <p className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
-            <Lock className="w-3.5 h-3.5" />
-            Variable à ajouter sur Railway
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="text-xs bg-white border border-gray-200 px-2 py-1 rounded font-mono text-[#534AB7]">RESEND_API_KEY</code>
-            <span className="text-xs text-gray-400">→ votre clé API Resend (gratuit : 100 emails/jour)</span>
-          </div>
-          <p className="text-[11px] text-gray-400 mt-2">Créez un compte sur resend.com et copiez votre clé API.</p>
-        </div>
 
         {/* Boutons */}
         <div className="flex gap-3">

@@ -23,6 +23,7 @@ import { Revues } from '@/pages/Revues';
 import { OAuthCallback } from '@/pages/OAuthCallback';
 import { Rejoindre } from '@/pages/Rejoindre';
 import { useStore } from '@/hooks/useStore';
+import { Toaster } from '@/components/ui/sonner';
 
 function App() {
   const store = useStore();
@@ -237,4 +238,11 @@ function App() {
   );
 }
 
-export default App;
+export default function AppWithToaster() {
+  return (
+    <>
+      <App />
+      <Toaster position="bottom-right" richColors />
+    </>
+  );
+}

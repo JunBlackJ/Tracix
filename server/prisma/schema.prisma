@@ -12,6 +12,7 @@ model Organization {
   name                      String
   logo_url                  String   @default("")
   plan                      String   @default("free")
+  plan_expires_at           DateTime?
   max_admin_per_platform    Int      @default(3)
   access_review_delay_days  Int      @default(90)
   subscription_alert_days   Int      @default(30)

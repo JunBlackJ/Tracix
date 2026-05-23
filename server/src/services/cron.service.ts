@@ -23,6 +23,9 @@ export function startCronJobs(): void {
 
       // 4. Send email digest for new critical/warning alerts
       await checkCriticalAlertEmails(org.id, org.name);
+
+      // 5. Warn if Tracix plan is about to expire
+      await checkPlanExpiryEmail(org.id, org.name);
     }
 
     console.log('[Cron] Daily check done.');
@@ -213,4 +216,63 @@ async function checkSubscriptionEmails(orgId: string): Promise<void> {
       },
     });
   }
+}
+
+async function checkPlanExpiryEmail(orgId: string, orgName: string): Promise<void> {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { plan: true, plan_expires_at: true, alert_email_address: true, alert_email_enabled: true },
+  });
+
+  if (!org || org.plan === 'free' || !org.plan_expires_at) return;
+  if (!org.alert_email_enabled || !org.alert_email_address) return;
+
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const daysLeft = Math.floor((org.plan_expires_at.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  const notifyAt = [7, 1];
+  if (!notifyAt.includes(daysLeft)) return;
+
+  const alreadySent = await prisma.auditTrail.findFirst({
+    where: {
+      organization_id: orgId,
+      action: 'email.plan_expiry',
+      target_label: String(daysLeft),
+      created_at: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) },
+    },
+  });
+  if (alreadySent) return;
+
+  const planLabel = org.plan === 'enterprise' ? 'Enterprise' : 'Pro';
+
+  await sendAlertEmail({
+    to: org.alert_email_address,
+    orgName,
+    alerts: [{
+      type: 'subscription_expiring',
+      severity: daysLeft <= 1 ? 'critical' : 'warning',
+      message: `Votre plan Tracix ${planLabel} expire dans ${daysLeft} jour${daysLeft > 1 ? 's' : ''} (${org.plan_expires_at.toISOString().split('T')[0]}). Renouvelez pour conserver l'accès à toutes vos fonctionnalités.`,
+      source_label: `Plan Tracix ${planLabel}`,
+    }],
+    frontendUrl: config.frontendUrl,
+  });
+
+  await prisma.auditTrail.create({
+    data: {
+      id: `email_plan_${orgId}_${daysLeft}_${today}`,
+      organization_id: orgId,
+      actor: 'system',
+      action: 'email.plan_expiry',
+      target_type: 'organization',
+      target_id: orgId,
+      target_label: String(daysLeft),
+      old_value: {},
+      new_value: { recipient: org.alert_email_address, days_left: daysLeft, plan: org.plan },
+      ip_address: '127.0.0.1',
+      user_agent: 'Tracix-Cron/1.0',
+    },
+  });
+
+  console.log(`[Cron] Plan expiry email sent for ${orgName} (${daysLeft}j) → ${org.alert_email_address}`);
 }

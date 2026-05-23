@@ -13,6 +13,7 @@ export interface Organization {
   name: string;
   logo_url: string;
   plan: 'free' | 'pro' | 'enterprise';
+  plan_expires_at: string | null;
   max_admin_per_platform: number;
   access_review_delay_days: number;
   subscription_alert_days: number;

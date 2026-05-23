@@ -12,6 +12,7 @@ import { config } from '../config';
 // Helper — expose organization fields consistently including enabled_modules (Json)
 function serializeOrg(org: {
   id: string; name: string; logo_url: string; plan: string;
+  plan_expires_at?: Date | null;
   max_admin_per_platform: number; access_review_delay_days: number;
   subscription_alert_days: number; enabled_modules: JsonValue; created_at: Date;
   alert_email_enabled?: boolean; alert_email_address?: string; alert_email_frequency?: string;
@@ -21,6 +22,7 @@ function serializeOrg(org: {
     name: org.name,
     logo_url: org.logo_url,
     plan: org.plan,
+    plan_expires_at: org.plan_expires_at ? org.plan_expires_at.toISOString() : null,
     max_admin_per_platform: org.max_admin_per_platform,
     access_review_delay_days: org.access_review_delay_days,
     subscription_alert_days: org.subscription_alert_days,
@@ -250,6 +252,7 @@ router.get('/plan-limits', requireAuth, async (req: Request, res: Response): Pro
 router.put('/organization', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { name, max_admin_per_platform, access_review_delay_days, subscription_alert_days, enabled_modules, plan,
+          plan_expires_at,
           alert_email_enabled, alert_email_address, alert_email_frequency } = req.body;
 
   const updated = await prisma.organization.update({
@@ -261,6 +264,7 @@ router.put('/organization', requireAuth, async (req: Request, res: Response): Pr
       ...(subscription_alert_days !== undefined && { subscription_alert_days: Number(subscription_alert_days) }),
       ...(enabled_modules !== undefined && { enabled_modules }),
       ...(plan !== undefined && { plan }),
+      ...(plan_expires_at !== undefined && { plan_expires_at: plan_expires_at ? new Date(plan_expires_at) : null }),
       ...(alert_email_enabled !== undefined && { alert_email_enabled: Boolean(alert_email_enabled) }),
       ...(alert_email_address !== undefined && { alert_email_address: String(alert_email_address) }),
       ...(alert_email_frequency !== undefined && { alert_email_frequency: String(alert_email_frequency) }),

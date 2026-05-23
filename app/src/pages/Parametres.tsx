@@ -1489,6 +1489,9 @@ function PlanSection({ organization, onUpdated }: { organization: Organization |
   const currentPlan = PLANS.find((p) => p.id === organization.plan) ?? PLANS[0];
   const PlanIcon = currentPlan.icon;
 
+  const planExpiresAt = organization.plan_expires_at ? new Date(organization.plan_expires_at) : null;
+  const daysLeft = planExpiresAt ? Math.floor((planExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+
   return (
     <div className="space-y-4">
       {/* Plan actuel */}
@@ -1503,6 +1506,30 @@ function PlanSection({ organization, onUpdated }: { organization: Organization |
             <span className="text-sm font-bold" style={{ color: currentPlan.color }}>{currentPlan.label}</span>
           </div>
         </div>
+
+        {/* Avertissement expiration */}
+        {planExpiresAt && daysLeft !== null && daysLeft <= 7 && organization.plan !== 'free' && (
+          <div className={`flex items-start gap-3 p-3 rounded-xl border mb-4 ${daysLeft <= 1 ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
+            <AlertTriangle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${daysLeft <= 1 ? 'text-red-500' : 'text-amber-500'}`} />
+            <div>
+              <p className={`text-sm font-semibold ${daysLeft <= 1 ? 'text-red-700' : 'text-amber-700'}`}>
+                {daysLeft <= 0 ? 'Plan expiré' : `Plan expire dans ${daysLeft} jour${daysLeft > 1 ? 's' : ''}`}
+              </p>
+              <p className={`text-xs mt-0.5 ${daysLeft <= 1 ? 'text-red-600' : 'text-amber-600'}`}>
+                {daysLeft <= 0
+                  ? 'Votre plan est expiré. Renouvelez pour retrouver toutes vos fonctionnalités.'
+                  : `Échéance le ${planExpiresAt.toLocaleDateString('fr-FR')}. Renouvelez pour éviter toute interruption.`}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Date d'expiration si plan payant */}
+        {planExpiresAt && daysLeft !== null && daysLeft > 7 && organization.plan !== 'free' && (
+          <p className="text-xs text-gray-400 mb-4">
+            Renouvellement le {planExpiresAt.toLocaleDateString('fr-FR')} — dans {daysLeft} jours
+          </p>
+        )}
 
         {/* Usage */}
         {usage && (

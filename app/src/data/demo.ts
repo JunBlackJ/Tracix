@@ -13,6 +13,7 @@ export const DEMO_ORG: Organization = {
   name: 'Smartwave Technologies',
   logo_url: '',
   plan: 'pro',
+  plan_expires_at: null,
   max_admin_per_platform: 3,
   access_review_delay_days: 90,
   subscription_alert_days: 30,

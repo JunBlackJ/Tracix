@@ -22,6 +22,7 @@ import { CustomModulePage } from '@/pages/CustomModulePage';
 import { Revues } from '@/pages/Revues';
 import { OAuthCallback } from '@/pages/OAuthCallback';
 import { Rejoindre } from '@/pages/Rejoindre';
+import { Admin } from '@/pages/Admin';
 import { useStore } from '@/hooks/useStore';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -30,6 +31,18 @@ function App() {
 
   // Full-screen spinner while restoring session
   const isOAuthCallback = window.location.pathname === '/oauth/callback';
+  const isAdmin =
+    window.location.hostname.startsWith('admin.') ||
+    window.location.pathname === '/admin';
+
+  if (isAdmin) {
+    return (
+      <>
+        <Admin />
+        <Toaster position="bottom-right" richColors />
+      </>
+    );
+  }
 
   if (store.isLoading && !isOAuthCallback) {
     return (

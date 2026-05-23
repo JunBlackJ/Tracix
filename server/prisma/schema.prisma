@@ -50,6 +50,7 @@ model UserApp {
   oauth_provider  String?
   oauth_id        String?
   role            String   @default("viewer")
+  is_superadmin   Boolean  @default(false)
   last_login_at   DateTime @default(now())
   created_at      DateTime @default(now())
 

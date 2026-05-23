@@ -24,6 +24,7 @@ import invitationsRoutes from './routes/invitations';
 import reviewsRoutes from './routes/reviews';
 import reportsRoutes from './routes/reports';
 import samlRoutes from './routes/saml';
+import adminRoutes from './routes/admin';
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/api/invitations', invitationsRoutes);
 app.use('/api/reviews', reviewsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/saml', samlRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ─── 404 handler ───
 app.use((_req, res) => {

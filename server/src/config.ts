@@ -10,6 +10,7 @@ export const config = {
   apiUrl: process.env.API_URL || 'http://localhost:4000',
   databaseUrl: process.env.DATABASE_URL || '',
   nodeEnv: process.env.NODE_ENV || 'development',
+  superAdminSetupKey: process.env.SUPER_ADMIN_SETUP_KEY || '',
   email: {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT || '587', 10),

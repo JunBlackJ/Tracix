@@ -256,8 +256,8 @@ router.post('/batch', async (req: Request, res: Response): Promise<void> => {
     let membersCreated = 0;
     for (const m of membersToCreate) {
       const id = uuidv4();
-      const email = m.email.trim() || `${makeUsername(m.full_name)}@import.local`;
       const username = makeUsername(m.full_name);
+      const email = m.email.trim() || `${username}@import.local`;
       await tx.member.create({
         data: {
           id,

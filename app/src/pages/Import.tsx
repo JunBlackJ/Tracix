@@ -1458,7 +1458,7 @@ export function Import() {
                   const loading = aiLoadingSheets.has(i);
                   const selected = selectedSheets.has(i);
                   const typeLabel = sug
-                    ? sug.fileType === 'access_matrix' ? 'Matrice d'accès'
+                    ? sug.fileType === 'access_matrix' ? `Matrice d'accès`
                     : sug.fileType === 'access_matrix_transposed' ? 'Matrice inversée'
                     : sug.fileType === 'platform_inventory' ? 'Inventaire plateformes'
                     : sug.fileType === 'system_inventory' ? 'Inventaire systèmes'

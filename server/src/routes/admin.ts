@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../prisma/client';
 import { requireSuperAdmin, generateSuperAdminToken } from '../middleware/superadmin';
 import { config } from '../config';
-import { adminLimiter } from '../index';
+import { adminLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 

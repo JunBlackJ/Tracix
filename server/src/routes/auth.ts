@@ -8,7 +8,7 @@ import { requireAuth, generateToken } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
 import { config } from '../config';
-import { authLimiter } from '../index';
+import { authLimiter } from '../middleware/rateLimiter';
 
 // Helper — expose organization fields consistently including enabled_modules (Json)
 function serializeOrg(org: {

@@ -2,8 +2,8 @@ import 'express-async-errors';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import { config } from './config';
+import { globalLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/error';
 import { startCronJobs } from './services/cron.service';
 
@@ -49,34 +49,6 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-
-// ─── Rate limiting global ───
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de requêtes, réessayez dans 15 minutes.' },
-});
-
-// ─── Rate limiting strict sur les endpoints sensibles ───
-export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de tentatives de connexion, réessayez dans 15 minutes.' },
-  skipSuccessfulRequests: true,
-});
-
-export const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de tentatives, réessayez dans 15 minutes.' },
-  skipSuccessfulRequests: true,
-});
 
 app.use(globalLimiter);
 app.use(express.json({ limit: '1mb' }));

@@ -6,7 +6,7 @@ import {
   PlayCircle, BarChart2, Activity, Eye, ArrowLeft, X,
 } from 'lucide-react';
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { getToken, setToken, clearToken } from '@/lib/api';
 import { toast } from 'sonner';
@@ -390,11 +390,6 @@ export function Admin() {
     u.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const planPieData = stats ? [
-    { name: 'Free', value: stats.plans.free ?? 0 },
-    { name: 'Pro', value: stats.plans.pro ?? 0 },
-    { name: 'Enterprise', value: stats.plans.enterprise ?? 0 },
-  ] : [];
 
   return (
     <div className="min-h-screen bg-[#0E0C1E] text-white">
@@ -490,24 +485,32 @@ export function Admin() {
               </div>
 
               <div className="bg-white/5 border border-white/8 rounded-2xl p-5">
-                <p className="text-sm font-semibold text-white/70 mb-4">Répartition des plans</p>
-                <ResponsiveContainer width="100%" height={140}>
-                  <PieChart>
-                    <Pie data={planPieData} cx="50%" cy="50%" innerRadius={40} outerRadius={65}
-                      dataKey="value" paddingAngle={3}>
-                      {planPieData.map((_, i) => <Cell key={i} fill={PLAN_COLORS[i]} />)}
-                    </Pie>
-                    <Legend formatter={(v) => <span style={{ color: '#ffffff60', fontSize: 11 }}>{v}</span>} />
-                    <Tooltip contentStyle={{ background: '#1A1730', border: '1px solid #ffffff15', borderRadius: 8, color: '#fff', fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  {(['free', 'pro', 'enterprise'] as const).map((p, i) => (
-                    <div key={p} className="text-center">
-                      <p className="text-lg font-bold text-white">{stats.plans[p] ?? 0}</p>
-                      <p className="text-[10px]" style={{ color: PLAN_COLORS[i] }}>{PLAN_META[p].label}</p>
-                    </div>
-                  ))}
+                <p className="text-sm font-semibold text-white/70 mb-5">Répartition des plans</p>
+                <div className="space-y-4">
+                  {(['free', 'pro', 'enterprise'] as const).map((p, i) => {
+                    const m = PLAN_META[p];
+                    const Icon = m.icon;
+                    const count = stats.plans[p] ?? 0;
+                    const pct = stats.orgs_count > 0 ? Math.round((count / stats.orgs_count) * 100) : 0;
+                    return (
+                      <div key={p}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <Icon className="w-3.5 h-3.5" style={{ color: m.color }} />
+                            <span className="text-xs font-semibold text-white/70">{m.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white">{count}</span>
+                            <span className="text-[11px] text-white/30">{pct}%</span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 bg-white/8 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%`, backgroundColor: m.color }} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

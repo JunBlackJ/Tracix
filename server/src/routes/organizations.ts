@@ -175,6 +175,8 @@ router.post('/reset', requireAuth, async (req: Request, res: Response): Promise<
   await prisma.$transaction([
     prisma.auditTrail.deleteMany({ where: { organization_id: orgId } }),
     prisma.alert.deleteMany({ where: { organization_id: orgId } }),
+    prisma.reviewItem.deleteMany({ where: { organization_id: orgId } }),
+    prisma.reviewCampaign.deleteMany({ where: { organization_id: orgId } }),
     prisma.accessRight.deleteMany({ where: { organization_id: orgId } }),
     prisma.subscription.deleteMany({ where: { organization_id: orgId } }),
     prisma.networkFlow.deleteMany({ where: { organization_id: orgId } }),

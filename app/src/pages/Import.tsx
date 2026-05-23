@@ -1294,6 +1294,35 @@ export function Import() {
     }
   };
 
+  // Verifier les emails manquants sur toutes les feuilles selectionnees avant d'importer
+  const handleImportMulti = async () => {
+    let anyMissingEmail = false;
+    for (const idx of Array.from(selectedSheets)) {
+      const sug = aiSuggestions[idx];
+      const sheet = sheets[idx];
+      if (!sug || !sheet) continue;
+      const ft = sug.fileType;
+      if (ft !== 'access_matrix' && ft !== 'access_matrix_transposed' && ft !== 'member_list') continue;
+      const mCol = ft === 'access_matrix_transposed' ? 0
+        : (sug.firstNameCol !== null && sug.lastNameCol !== null) ? sheet.headers.length - 1
+        : sug.memberCol;
+      const eCol = sug.emailCol;
+      if (mCol === null) continue;
+      const hasMissing = sheet.rows.some((r) => {
+        const name = String(r[mCol!] ?? '').trim();
+        if (!name) return false;
+        const email = eCol !== null ? String(r[eCol!] ?? '').trim() : '';
+        return !email;
+      });
+      if (hasMissing) { anyMissingEmail = true; break; }
+    }
+    if (anyMissingEmail) {
+      setShowEmailDomainModal(true);
+      return;
+    }
+    await doImportMulti();
+  };
+
   // Import toutes les feuilles selectionnees en sequence
   const doImportMulti = async (domainOverride?: string) => {
     setMultiImporting(true);
@@ -1558,7 +1587,7 @@ export function Import() {
             </button>
             {rawSheets.length > 1 && selectedSheets.size > 1 ? (
               <button
-                onClick={() => doImportMulti()}
+                onClick={() => handleImportMulti()}
                 disabled={multiImporting || selectedSheets.size === 0}
                 className="flex-1 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
@@ -1707,7 +1736,7 @@ export function Import() {
           onToggleSheet={(i) => setSelectedSheets((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
           onSelectAll={() => setSelectedSheets(new Set(rawSheets.map((_, i) => i)))}
           onDeselectAll={() => setSelectedSheets(new Set())}
-          onConfirmMulti={() => doImportMulti()}
+          onConfirmMulti={() => handleImportMulti()}
         />
       )}
 
@@ -1779,14 +1808,14 @@ export function Import() {
               </div>
               <div className="flex gap-3 pt-1">
                 <button
-                  onClick={() => { setShowEmailDomainModal(false); doImport(); }}
+                  onClick={() => { setShowEmailDomainModal(false); if (selectedSheets.size > 1) { doImportMulti(); } else { doImport(); } }}
                   className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium"
                 >
                   Ignorer, importer sans email
                 </button>
                 <button
                   disabled={!emailDomain.trim() || importing}
-                  onClick={() => { setShowEmailDomainModal(false); doImport(emailDomain.trim()); }}
+                  onClick={() => { setShowEmailDomainModal(false); if (selectedSheets.size > 1) { doImportMulti(emailDomain.trim()); } else { doImport(emailDomain.trim()); } }}
                   className="flex-1 px-4 py-2.5 bg-[#534AB7] text-white rounded-xl text-sm font-semibold hover:bg-[#3C3489] transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm shadow-[#534AB7]/20"
                 >
                   {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}

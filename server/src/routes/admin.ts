@@ -6,16 +6,41 @@ import { adminLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
+// Compteur brute-force en mémoire pour le super-admin (compte unique, pas en DB)
+let adminFailedAttempts = 0;
+let adminLockedUntil: Date | null = null;
+
 // ─── POST /api/admin/login ───
-router.post('/login', adminLimiter, (req: Request, res: Response) => {
-  const { email, password } = req.body as { email?: string; password?: string };
-  if (
-    !config.superAdminEmail || !config.superAdminPassword ||
-    email !== config.superAdminEmail || password !== config.superAdminPassword
-  ) {
-    res.status(401).json({ error: 'Identifiants incorrects' });
+router.post('/login', adminLimiter, async (req: Request, res: Response) => {
+  // Vérifier le verrouillage
+  if (adminLockedUntil && adminLockedUntil > new Date()) {
+    const minutesLeft = Math.ceil((adminLockedUntil.getTime() - Date.now()) / 60000);
+    res.status(429).json({ error: `Panneau verrouillé. Réessayez dans ${minutesLeft} minute${minutesLeft > 1 ? 's' : ''}.` });
     return;
   }
+
+  const { email, password } = req.body as { email?: string; password?: string };
+  const valid =
+    config.superAdminEmail && config.superAdminPassword &&
+    email === config.superAdminEmail && password === config.superAdminPassword;
+
+  if (!valid) {
+    adminFailedAttempts++;
+    if (adminFailedAttempts >= 5) {
+      adminLockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 min
+      adminFailedAttempts = 0;
+      res.status(429).json({ error: 'Trop de tentatives. Panneau verrouillé 30 minutes.' });
+      return;
+    }
+    // Délai progressif
+    await new Promise((r) => setTimeout(r, adminFailedAttempts * 500));
+    res.status(401).json({ error: `Identifiants incorrects. ${5 - adminFailedAttempts} tentative${5 - adminFailedAttempts > 1 ? 's' : ''} restante${5 - adminFailedAttempts > 1 ? 's' : ''}.` });
+    return;
+  }
+
+  // Succès — réinitialiser
+  adminFailedAttempts = 0;
+  adminLockedUntil = null;
   res.json({ token: generateSuperAdminToken() });
 });
 

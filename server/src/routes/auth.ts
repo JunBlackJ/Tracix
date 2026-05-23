@@ -52,34 +52,70 @@ const RegisterSchema = z.object({
   organization_name: z.string().min(1).max(100),
 });
 
+const MAX_ATTEMPTS = 5;         // tentatives avant verrouillage
+const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
 // POST /api/auth/login
 router.post('/login', authLimiter, async (req: Request, res: Response): Promise<void> => {
   const body = LoginSchema.parse(req.body);
 
-  const user = await prisma.userApp.findUnique({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = await (prisma.userApp.findUnique as any)({
     where: { email: body.email },
     include: { organization: true },
   });
 
+  // Réponse identique que l'email existe ou non (anti-énumération)
   if (!user) {
-    res.status(401).json({ error: 'Invalid email or password' });
+    // Délai fixe pour éviter le timing attack
+    await new Promise((r) => setTimeout(r, 300));
+    res.status(401).json({ error: 'Email ou mot de passe incorrect.' });
+    return;
+  }
+
+  // Vérifier si le compte est verrouillé
+  if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    const minutesLeft = Math.ceil((new Date(user.locked_until).getTime() - Date.now()) / 60000);
+    res.status(429).json({ error: `Compte temporairement verrouillé. Réessayez dans ${minutesLeft} minute${minutesLeft > 1 ? 's' : ''}.` });
     return;
   }
 
   if (!user.password_hash) {
-    res.status(401).json({ error: 'Ce compte utilise la connexion via ' + (user.oauth_provider ?? 'OAuth') + '. Pas de mot de passe défini.' });
+    res.status(401).json({ error: 'Ce compte utilise la connexion OAuth. Pas de mot de passe défini.' });
     return;
   }
 
   const passwordValid = await bcrypt.compare(body.password, user.password_hash);
+
   if (!passwordValid) {
-    res.status(401).json({ error: 'Invalid email or password' });
+    const newAttempts = (user.failed_login_attempts ?? 0) + 1;
+    const shouldLock = newAttempts >= MAX_ATTEMPTS;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma.userApp.update as any)({
+      where: { id: user.id },
+      data: {
+        failed_login_attempts: newAttempts,
+        ...(shouldLock && { locked_until: new Date(Date.now() + LOCK_DURATION_MS) }),
+      },
+    });
+
+    // Délai progressif selon le nombre d'échecs (ralentit les robots)
+    await new Promise((r) => setTimeout(r, Math.min(newAttempts * 200, 2000)));
+
+    if (shouldLock) {
+      res.status(429).json({ error: `Trop de tentatives. Compte verrouillé 15 minutes.` });
+    } else {
+      res.status(401).json({ error: `Email ou mot de passe incorrect. ${MAX_ATTEMPTS - newAttempts} tentative${MAX_ATTEMPTS - newAttempts > 1 ? 's' : ''} restante${MAX_ATTEMPTS - newAttempts > 1 ? 's' : ''}.` });
+    }
     return;
   }
 
-  await prisma.userApp.update({
+  // Connexion réussie — réinitialiser le compteur
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma.userApp.update as any)({
     where: { id: user.id },
-    data: { last_login_at: new Date() },
+    data: { last_login_at: new Date(), failed_login_attempts: 0, locked_until: null },
   });
 
   const token = generateToken({

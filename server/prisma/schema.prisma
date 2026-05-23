@@ -50,10 +50,12 @@ model UserApp {
   password_hash   String?
   oauth_provider  String?
   oauth_id        String?
-  role            String   @default("viewer")
-  is_superadmin   Boolean  @default(false)
-  last_login_at   DateTime @default(now())
-  created_at      DateTime @default(now())
+  role                   String   @default("viewer")
+  is_superadmin          Boolean  @default(false)
+  failed_login_attempts  Int      @default(0)
+  locked_until           DateTime?
+  last_login_at          DateTime @default(now())
+  created_at             DateTime @default(now())
 
   organization      Organization       @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   userOrganizations UserOrganization[]

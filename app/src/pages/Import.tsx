@@ -834,9 +834,10 @@ function generateEmail(fullName: string, domain: string): string {
     .trim();
   const parts = normalized.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "";
-  if (parts.length === 1) return ${parts[0]}@;
-  // prenom.nom@domaine
-  return ${parts[0]}.@;
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  if (parts.length === 1) return first + "@" + domain;
+  return first + "." + last + "@" + domain;
 }
 // --- Composant principal ---
 export function Import() {
@@ -1040,16 +1041,16 @@ export function Import() {
   const handleImport = async () => {
     // Detecter si des membres n ont pas d email
     const ft = aiSuggestion?.fileType;
-    if (ft === access_matrix || ft === access_matrix_transposed || ft === member_list || !ft) {
+    if (ft === 'access_matrix' || ft === 'access_matrix_transposed' || ft === 'member_list' || !ft) {
       let membersToCheck: { full_name: string; email?: string }[] = [];
-      if (ft === member_list && currentSheet && aiSuggestion) {
+      if (ft === 'member_list' && currentSheet && aiSuggestion) {
         const mCol = aiSuggestion.memberCol;
         const eCol = aiSuggestion.emailCol;
         if (mCol !== null) {
           membersToCheck = currentSheet.rows
             .map((r) => ({
-              full_name: String(r[mCol] ?? ).trim(),
-              email: eCol !== null ? String(r[eCol] ?? ).trim() || undefined : undefined,
+              full_name: String(r[mCol] ?? '').trim(),
+              email: eCol !== null ? String(r[eCol] ?? '').trim() || undefined : undefined,
             }))
             .filter((m) => m.full_name);
         }
@@ -1060,17 +1061,17 @@ export function Import() {
       const hasNoEmail = membersToCheck.some((m) => !m.email);
       if (hasNoEmail) {
         // Sauvegarder les donnees et afficher la modal domaine
-        if (ft === member_list && currentSheet && aiSuggestion) {
+        if (ft === 'member_list' && currentSheet && aiSuggestion) {
           const mCol = aiSuggestion.memberCol!;
           const tCol = aiSuggestion.teamCol;
           const eCol = aiSuggestion.emailCol;
           setPendingImportData({
-            type: member_list,
+            type: 'member_list',
             members: currentSheet.rows
               .map((r) => ({
-                full_name: String(r[mCol] ?? ).trim(),
-                team: tCol !== null ? String(r[tCol] ?? ).trim() || undefined : undefined,
-                email: eCol !== null ? String(r[eCol] ?? ).trim() || undefined : undefined,
+                full_name: String(r[mCol] ?? '').trim(),
+                team: tCol !== null ? String(r[tCol] ?? '').trim() || undefined : undefined,
+                email: eCol !== null ? String(r[eCol] ?? '').trim() || undefined : undefined,
               }))
               .filter((m) => m.full_name),
           });

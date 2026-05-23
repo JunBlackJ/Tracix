@@ -816,6 +816,7 @@ function AiModal({
               </button>
             )}
             {selectedSheets.size <= 1 && (
+            <>
             {suggestion.fileType === 'access_matrix' && (
               <button
                 onClick={onConfirm}
@@ -870,8 +871,8 @@ function AiModal({
             {(suggestion.fileType === 'unknown' || !suggestion.fileType) && (
               <div className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-400 text-sm text-center">Type de fichier non reconnu</div>
             )}
+            </>
             )}
-          </div>
         )}
         {!loading && !suggestion && (
           <div className="flex gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white">

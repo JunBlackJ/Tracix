@@ -56,7 +56,7 @@ export function Login({ onLogin }: LoginProps) {
             <Shield className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Tracix</h1>
-          <p className="text-sm text-gray-500 mt-1">On trace tout. On rate rien.</p>
+          <p className="text-sm text-gray-500 mt-1">Visibilité totale. Zéro angle mort.</p>
         </div>
 
         {/* Card */}

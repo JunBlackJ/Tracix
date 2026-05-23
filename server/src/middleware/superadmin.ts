@@ -1,9 +1,26 @@
 import { Request, Response, NextFunction } from 'express';
-import prisma from '../prisma/client';
+import jwt from 'jsonwebtoken';
+import { config } from '../config';
 
-export async function requireSuperAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
-  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
-  const user = await prisma.userApp.findUnique({ where: { id: req.user.userId }, select: { is_superadmin: true } });
-  if (!user?.is_superadmin) { res.status(403).json({ error: 'Super-admin access required' }); return; }
-  next();
+export interface SuperAdminJwt {
+  superadmin: true;
+}
+
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Token manquant' });
+    return;
+  }
+  try {
+    const decoded = jwt.verify(authHeader.slice(7), config.jwtSecret) as SuperAdminJwt;
+    if (!decoded.superadmin) throw new Error();
+    next();
+  } catch {
+    res.status(403).json({ error: 'Accès réservé aux super-admins' });
+  }
+}
+
+export function generateSuperAdminToken(): string {
+  return jwt.sign({ superadmin: true }, config.jwtSecret, { expiresIn: '8h' });
 }

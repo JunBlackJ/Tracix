@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Users, Bell, Shield, TrendingUp, LogOut,
   ChevronDown, Save, Loader2, RefreshCw, Crown, Star,
-  Zap, Search, Calendar, AlertTriangle, Check, X,
+  Zap, Search, Calendar, AlertTriangle,
 } from 'lucide-react';
-import { api, getToken, setToken, clearToken } from '@/lib/api';
+import { getToken, setToken, clearToken } from '@/lib/api';
 import { toast } from 'sonner';
 
 // ─── Types ───
@@ -24,7 +24,6 @@ interface AdminUser {
   full_name: string;
   email: string;
   role: string;
-  is_superadmin: boolean;
   last_login_at: string;
   created_at: string;
   organization: { id: string; name: string; plan: string };
@@ -72,14 +71,13 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'}/auth/login`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'}/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json() as { token?: string; error?: string; user?: { is_superadmin?: boolean } };
+      const data = await res.json() as { token?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Erreur');
-      if (!data.user?.is_superadmin) throw new Error('Accès réservé aux super-admins');
       setToken(data.token!);
       onLogin();
     } catch (err) {
@@ -249,16 +247,13 @@ export function Admin() {
   const [search, setSearch] = useState('');
   const [editOrg, setEditOrg] = useState<AdminOrg | null>(null);
 
-  // Check if already logged in as superadmin
+  // Vérifier si un token super-admin est déjà présent
   useEffect(() => {
     const token = getToken();
-    if (token) {
-      api.auth.me()
-        .then((data) => {
-          if ((data as { user?: { is_superadmin?: boolean } }).user?.is_superadmin) setAuthed(true);
-        })
-        .catch(() => {});
-    }
+    if (!token) return;
+    adminRequest<{ orgs_count: number }>('/admin/stats')
+      .then(() => setAuthed(true))
+      .catch(() => clearToken());
   }, []);
 
   const load = useCallback(async () => {
@@ -500,7 +495,6 @@ export function Admin() {
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-white/30 uppercase tracking-wider hidden sm:table-cell">Organisation</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-white/30 uppercase tracking-wider">Rôle</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-white/30 uppercase tracking-wider hidden md:table-cell">Dernière connexion</th>
-                    <th className="text-center px-4 py-3 text-[11px] font-semibold text-white/30 uppercase tracking-wider">Super</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -539,17 +533,12 @@ export function Admin() {
                         <td className="px-4 py-3 text-xs text-white/30 hidden md:table-cell">
                           {new Date(u.last_login_at).toLocaleDateString('fr-FR')}
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          {u.is_superadmin
-                            ? <Check className="w-4 h-4 text-[#534AB7] mx-auto" />
-                            : <X className="w-4 h-4 text-white/15 mx-auto" />}
-                        </td>
                       </tr>
                     );
                   })}
                   {filteredUsers.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="text-center text-sm text-white/25 py-12">Aucun utilisateur trouvé</td>
+                      <td colSpan={4} className="text-center text-sm text-white/25 py-12">Aucun utilisateur trouvé</td>
                     </tr>
                   )}
                 </tbody>

@@ -1147,6 +1147,21 @@ export function Import() {
             }))
             .filter((m) => m.full_name);
         }
+      } else if (currentSheet && aiSuggestion) {
+        // Read emails directly from the raw sheet using the AI-detected emailCol
+        const mCol = aiSuggestion.fileType === 'access_matrix_transposed' ? 0
+          : (aiSuggestion.firstNameCol !== null && aiSuggestion.lastNameCol !== null)
+          ? currentSheet.headers.length - 1
+          : aiSuggestion.memberCol;
+        const eCol = mapping.emailCol;
+        if (mCol !== null) {
+          membersToCheck = currentSheet.rows
+            .map((r) => ({
+              full_name: String(r[mCol!] ?? '').trim(),
+              email: eCol !== null ? String(r[eCol!] ?? '').trim() || undefined : undefined,
+            }))
+            .filter((m) => m.full_name);
+        }
       } else {
         const p = buildPayload();
         membersToCheck = p.members;
@@ -1750,7 +1765,16 @@ export function Import() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-gray-900">Emails manquants détectés</h3>
-                <p className="text-xs text-gray-400">Certains membres n&apos;ont pas d&apos;adresse email dans le fichier</p>
+                <p className="text-xs text-gray-400">
+                  {(() => {
+                    const members = pendingImportData ? ("members" in pendingImportData ? pendingImportData.members : pendingImportData.members) : [];
+                    const missing = members.filter((m) => !m.email).length;
+                    const total = members.length;
+                    return total > 0
+                      ? missing + " membre" + (missing > 1 ? "s" : "") + " sur " + total + " sans email"
+                      : "Certains membres n’ont pas d’adresse email";
+                  })()}
+                </p>
               </div>
             </div>
             <div className="px-6 py-5 space-y-4">

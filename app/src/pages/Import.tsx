@@ -221,6 +221,15 @@ interface AiModalProps {
   onConfirm: () => void;
   onEdit: () => void;
   onClose: () => void;
+  // multi-sheet
+  aiSuggestions: Record<number, AiSuggestion | null>;
+  aiLoadingSheets: Set<number>;
+  selectedSheets: Set<number>;
+  multiImporting: boolean;
+  onToggleSheet: (i: number) => void;
+  onSelectAll: () => void;
+  onDeselectAll: () => void;
+  onConfirmMulti: () => void;
 }
 
 function AiModal({
@@ -228,6 +237,8 @@ function AiModal({
   rawSheets, activeSheet,
   mapping, platformCols, allPlatformCols, excludedPlatformCols,
   payload, importing, onSelectSheet, onTogglePlatform, onConfirm, onEdit, onClose,
+  aiSuggestions, aiLoadingSheets, selectedSheets, multiImporting,
+  onToggleSheet, onSelectAll, onDeselectAll, onConfirmMulti,
 }: AiModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -252,26 +263,7 @@ function AiModal({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-gray-900">Analyse IA</p>
-            {rawSheets.length > 1 ? (
-              <div className="flex gap-1.5 mt-1 flex-wrap">
-                {rawSheets.map((s, i) => (
-                  <button
-                    key={i}
-                    disabled={loading}
-                    onClick={() => onSelectSheet(i)}
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors ${
-                      activeSheet === i
-                        ? 'bg-[#534AB7] text-white'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200 disabled:opacity-50'
-                    }`}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400 truncate">{sheetName}</p>
-            )}
+            <p className="text-xs text-gray-400 truncate">{sheetName}</p>
           </div>
           {!loading && (
             <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0">
@@ -282,6 +274,60 @@ function AiModal({
 
         {/* Body */}
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+
+          {/* Multi-sheet selector */}
+          {rawSheets.length > 1 && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-700">{rawSheets.length} feuilles — choisissez lesquelles importer</p>
+                <div className="flex gap-1.5">
+                  <button onClick={onSelectAll} className="text-[10px] px-2 py-0.5 rounded bg-[#534AB7]/10 text-[#534AB7] hover:bg-[#534AB7]/20 font-medium transition-colors">Tout</button>
+                  <button onClick={onDeselectAll} className="text-[10px] px-2 py-0.5 rounded bg-gray-200 text-gray-500 hover:bg-gray-300 font-medium transition-colors">Aucun</button>
+                </div>
+              </div>
+              <div className="space-y-1">
+                {rawSheets.map((s, i) => {
+                  const sug = aiSuggestions[i];
+                  const isLoading = aiLoadingSheets.has(i);
+                  const isSelected = selectedSheets.has(i);
+                  const isActive = activeSheet === i;
+                  const typeLabel = sug
+                    ? sug.fileType === "access_matrix" || sug.fileType === "access_matrix_transposed" ? "Matrice"
+                    : sug.fileType === "platform_inventory" ? "Plateformes"
+                    : sug.fileType === "system_inventory" ? "Systèmes"
+                    : sug.fileType === "network_flow_inventory" ? "Flux réseau"
+                    : sug.fileType === "subscription_inventory" ? "Abonnements"
+                    : sug.fileType === "member_list" ? "Membres"
+                    : "Inconnu"
+                    : null;
+                  const typeColor = sug
+                    ? sug.fileType === "access_matrix" || sug.fileType === "access_matrix_transposed" ? "bg-[#534AB7]/10 text-[#534AB7]"
+                    : sug.fileType === "platform_inventory" ? "bg-emerald-100 text-emerald-700"
+                    : sug.fileType === "system_inventory" ? "bg-orange-100 text-orange-700"
+                    : sug.fileType === "network_flow_inventory" ? "bg-rose-100 text-rose-700"
+                    : sug.fileType === "subscription_inventory" ? "bg-blue-100 text-blue-700"
+                    : sug.fileType === "member_list" ? "bg-amber-100 text-amber-700"
+                    : "bg-gray-100 text-gray-500"
+                    : "bg-gray-100 text-gray-400";
+                  return (
+                    <div key={i}
+                      className={"flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors " + (isActive ? "border-[#534AB7]/40 bg-white" : isSelected ? "border-gray-200 bg-white/60" : "border-transparent bg-transparent opacity-50")}
+                      onClick={() => { onToggleSheet(i); onSelectSheet(i); }}
+                    >
+                      <input type="checkbox" checked={isSelected} onChange={() => {}} onClick={function(e){ e.stopPropagation(); onToggleSheet(i); }} className="w-3.5 h-3.5 accent-[#534AB7] flex-shrink-0" />
+                      <span className={"text-xs font-medium flex-1 truncate " + (isActive ? "text-[#534AB7]" : "text-gray-700")}>{s.name}</span>
+                      {isLoading
+                        ? <Loader2 className="w-3 h-3 text-[#534AB7] animate-spin flex-shrink-0" />
+                        : typeLabel
+                        ? <span className={"px-1.5 py-0.5 rounded-full text-[9px] font-bold flex-shrink-0 " + typeColor}>{typeLabel}</span>
+                        : <span className="text-[10px] text-gray-300 flex-shrink-0">…</span>
+                      }
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Loading */}
           {loading && (
@@ -757,6 +803,19 @@ function AiModal({
             <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
               <RefreshCw className="w-4 h-4" /> Modifier
             </button>
+            {selectedSheets.size > 1 && (
+              <button
+                onClick={onConfirmMulti}
+                disabled={multiImporting}
+                className="flex-1 py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {multiImporting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</>
+                  : <><CheckCircle2 className="w-4 h-4" />Importer {selectedSheets.size} feuilles</>
+                }
+              </button>
+            )}
+            {selectedSheets.size <= 1 && (
             {suggestion.fileType === 'access_matrix' && (
               <button
                 onClick={onConfirm}
@@ -810,6 +869,7 @@ function AiModal({
             )}
             {(suggestion.fileType === 'unknown' || !suggestion.fileType) && (
               <div className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-400 text-sm text-center">Type de fichier non reconnu</div>
+            )}
             )}
           </div>
         )}
@@ -1432,84 +1492,13 @@ export function Import() {
             </button>
           </div>
 
-          {/* Multi-select feuilles */}
+          {/* Sélecteur de feuille */}
           {rawSheets.length > 1 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-700">{rawSheets.length} feuilles détectées</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedSheets(new Set(rawSheets.map((_, i) => i)))}
-                    className="text-xs px-2.5 py-1 rounded-lg bg-[#534AB7]/5 text-[#534AB7] hover:bg-[#534AB7]/10 font-medium transition-colors"
-                  >
-                    Tout sélectionner
-                  </button>
-                  <button
-                    onClick={() => setSelectedSheets(new Set())}
-                    className="text-xs px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 font-medium transition-colors"
-                  >
-                    Tout déselectionner
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {rawSheets.map((s, i) => {
-                  const sug = aiSuggestions[i];
-                  const loading = aiLoadingSheets.has(i);
-                  const selected = selectedSheets.has(i);
-                  const typeLabel = sug
-                    ? sug.fileType === 'access_matrix' ? `Matrice d'accès`
-                    : sug.fileType === 'access_matrix_transposed' ? 'Matrice inversée'
-                    : sug.fileType === 'platform_inventory' ? 'Inventaire plateformes'
-                    : sug.fileType === 'system_inventory' ? 'Inventaire systèmes'
-                    : sug.fileType === 'network_flow_inventory' ? 'Flux réseau'
-                    : sug.fileType === 'subscription_inventory' ? 'Abonnements'
-                    : sug.fileType === 'member_list' ? 'Liste membres'
-                    : 'Type inconnu'
-                    : null;
-                  const typeColor = sug
-                    ? sug.fileType === 'access_matrix' || sug.fileType === 'access_matrix_transposed' ? 'bg-[#534AB7]/10 text-[#534AB7]'
-                    : sug.fileType === 'platform_inventory' ? 'bg-emerald-100 text-emerald-700'
-                    : sug.fileType === 'system_inventory' ? 'bg-orange-100 text-orange-700'
-                    : sug.fileType === 'network_flow_inventory' ? 'bg-rose-100 text-rose-700'
-                    : sug.fileType === 'subscription_inventory' ? 'bg-blue-100 text-blue-700'
-                    : sug.fileType === 'member_list' ? 'bg-amber-100 text-amber-700'
-                    : 'bg-gray-100 text-gray-500'
-                    : 'bg-gray-100 text-gray-400';
-                  return (
-                    <div key={i}
-                      className={`flex items-center gap-3 p-3 rounded-xl border transition-colors cursor-pointer ${selected ? 'border-[#534AB7]/30 bg-[#534AB7]/3' : 'border-gray-100 bg-gray-50 opacity-60'}`}
-                      onClick={() => {
-                        setSelectedSheets((prev) => {
-                          const n = new Set(prev);
-                          if (n.has(i)) n.delete(i); else n.add(i);
-                          return n;
-                        });
-                        handleSelectSheet(i);
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={() => {}}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-4 h-4 accent-[#534AB7] flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{s.name}</p>
-                        <p className="text-xs text-gray-400">{sheets[i]?.rows.length ?? 0} lignes</p>
-                      </div>
-                      {loading
-                        ? <Loader2 className="w-4 h-4 text-[#534AB7] animate-spin flex-shrink-0" />
-                        : typeLabel
-                        ? <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${typeColor}`}>{typeLabel}</span>
-                        : <span className="text-xs text-gray-300 italic flex-shrink-0">En attente…</span>
-                      }
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-sm font-semibold text-gray-700 mb-2">Ouvrez le rapport IA pour sélectionner les feuilles à importer</p>
             </div>
+          )}
+
           )}
 
           <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -1710,6 +1699,14 @@ export function Import() {
           onConfirm={handleImport}
           onEdit={() => setModalOpen(false)}
           onClose={() => setModalOpen(false)}
+          aiSuggestions={aiSuggestions}
+          aiLoadingSheets={aiLoadingSheets}
+          selectedSheets={selectedSheets}
+          multiImporting={multiImporting}
+          onToggleSheet={(i) => setSelectedSheets((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
+          onSelectAll={() => setSelectedSheets(new Set(rawSheets.map((_, i) => i)))}
+          onDeselectAll={() => setSelectedSheets(new Set())}
+          onConfirmMulti={() => doImportMulti()}
         />
       )}
 

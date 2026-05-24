@@ -2,7 +2,7 @@
 // Page Abonnements
 // ═══════════════════════════════════════════
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Search, Plus, Clock, XCircle, RefreshCw, FileSpreadsheet, X, Save, Loader2, Edit2, CreditCard } from 'lucide-react';
 import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
@@ -249,17 +249,19 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
           </thead>
           <tbody>
             {filtered.map((s) => {
-              const renewalDays = Math.floor((new Date(s.renewal_date).getTime() - new Date().getTime()) / 86400000);
-              const isExpiringSoon = renewalDays > 0 && renewalDays <= 30;
-              const isExpired = renewalDays < 0;
+              const renewalDays = s.renewal_date
+                ? Math.floor((new Date(s.renewal_date).getTime() - Date.now()) / 86400000)
+                : null;
+              const isExpiringSoon = renewalDays !== null && renewalDays > 0 && renewalDays <= 30;
+              const isExpired = renewalDays !== null && renewalDays < 0;
 
               return (
                 <tr key={s.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${isExpired ? 'bg-red-50/50' : isExpiringSoon ? 'bg-amber-50/50' : ''}`}>
                   <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{s.name}</td>
                   <td className="px-4 py-3 text-gray-600">{s.category}</td>
                   <td className="px-4 py-3 text-gray-600">{s.vendor}</td>
-                  <td className="px-4 py-3 text-right font-mono text-gray-700 whitespace-nowrap">{s.cost_monthly.toFixed(2)} {s.currency}</td>
-                  <td className="px-4 py-3 text-right font-mono text-gray-700 whitespace-nowrap">{s.cost_annual.toFixed(2)} {s.currency}</td>
+                  <td className="px-4 py-3 text-right font-mono text-gray-700 whitespace-nowrap">{(s.cost_monthly ?? 0).toFixed(2)} {s.currency}</td>
+                  <td className="px-4 py-3 text-right font-mono text-gray-700 whitespace-nowrap">{(s.cost_annual ?? 0).toFixed(2)} {s.currency}</td>
                   <td className="px-4 py-3 text-gray-600">{s.billing_cycle}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs flex items-center gap-1 whitespace-nowrap ${isExpired ? 'text-red-600 font-bold' : isExpiringSoon ? 'text-amber-600 font-medium' : 'text-gray-500'}`}>

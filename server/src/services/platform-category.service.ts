@@ -27,6 +27,46 @@ function categoryColor(label: string): string {
   return CATEGORY_COLORS[label] ?? '#6B7280';
 }
 
+/**
+ * For platforms that already have a category (from Excel), ensure a Category
+ * record exists so the UI can display and filter by it.
+ * Excel-provided categories are always respected as-is — no renaming or merging.
+ */
+export async function ensureExcelCategories(orgId: string): Promise<void> {
+  const platforms = await prisma.platform.findMany({
+    where: { organization_id: orgId, NOT: { category: '' } },
+    select: { category: true },
+  });
+  if (platforms.length === 0) return;
+
+  const labels = [...new Set(platforms.map((p) => p.category.trim()).filter(Boolean))];
+
+  await Promise.all(
+    labels.map(async (label) => {
+      const exists = await prisma.category.findFirst({
+        where: { organization_id: orgId, type: 'platform', label },
+      });
+      if (!exists) {
+        await prisma.category.create({
+          data: {
+            id: uuidv4(),
+            organization_id: orgId,
+            type: 'platform',
+            label,
+            color: categoryColor(label),
+          },
+        }).catch(() => {});
+      }
+    }),
+  );
+}
+
+/**
+ * For platforms with no category, call Claude to assign one, then group:
+ * - categories with >= MIN_PLATFORMS_PER_CATEGORY platforms → keep the category name
+ * - singletons → moved to "Autres"
+ * Excel-provided categories (category != '') are never touched here.
+ */
 export async function classifyAndCategorizePlatforms(orgId: string): Promise<void> {
   const awsRegion = process.env.AWS_REGION;
   const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;

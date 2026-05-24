@@ -8,7 +8,7 @@ import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
 import { recomputeAllRiskScores } from '../services/risk.service';
 import { generateAlerts } from '../services/alert.service';
-import { classifyAndCategorizePlatforms } from '../services/platform-category.service';
+import { classifyAndCategorizePlatforms, ensureExcelCategories } from '../services/platform-category.service';
 
 const router = Router();
 router.use(requireAuth);
@@ -382,7 +382,10 @@ router.post('/batch-platforms', async (req: Request, res: Response): Promise<voi
     created++;
   }
 
-  if (created > 0) classifyAndCategorizePlatforms(orgId).catch(() => {});
+  if (created > 0) {
+    ensureExcelCategories(orgId).catch(() => {});
+    classifyAndCategorizePlatforms(orgId).catch(() => {});
+  }
 
   await createAuditEntry({
     organizationId: orgId,

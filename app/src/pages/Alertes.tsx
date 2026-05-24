@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { Search, X, Sparkles, Loader2, ShieldAlert, CheckCircle2 } from 'lucide-react';
-import type { Alert, AccessRight, Member, System, NetworkFlow, Subscription } from '@/types';
+import type { Alert, Platform, Member, System, NetworkFlow, Subscription } from '@/types';
 import { api } from '@/lib/api';
 
 interface AlertesProps {
@@ -13,92 +13,148 @@ interface AlertesProps {
   alerts: Alert[];
 }
 
-// ─── Revoke Modal (2 steps: warning → edit form) ───
-type SourceData = AccessRight | Member | System | NetworkFlow | Subscription | null;
+// ─── Per-type remediation config ───
+const REMEDIATION: Record<string, {
+  title: string;
+  instruction: string;
+  fields: { key: string; label: string; type: 'select' | 'textarea'; options?: { value: string; label: string }[]; placeholder?: string }[];
+  // what API call to make on save; returns a thunk given (sourceId, fields)
+  save: (sourceId: string, fields: Record<string, string>) => Promise<unknown>;
+}> = {
+  no_mfa_on_admin: {
+    title: 'Activer le MFA sur la plateforme',
+    instruction: 'Activez le MFA directement dans les paramètres de sécurité de la plateforme, puis confirmez ci-dessous.',
+    fields: [
+      { key: 'has_mfa', label: 'MFA activé', type: 'select', options: [{ value: 'true', label: 'Oui — MFA activé' }, { value: 'false', label: 'Non (inchangé)' }] },
+      { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Ex: MFA activé via Okta le …' },
+    ],
+    save: (id, f) => api.platforms.update(id, { has_mfa: f.has_mfa === 'true', notes: f.notes }),
+  },
+  admin_count_high: {
+    title: 'Réduire le nombre d\'admins',
+    instruction: 'Révoquez les droits admin des comptes concernés directement sur la plateforme, puis indiquez ci-dessous ce qui a été fait.',
+    fields: [
+      { key: 'notes', label: 'Ce qui a été fait', type: 'textarea', placeholder: 'Ex: Droits admin retirés pour Jean D. et Marie L. le …' },
+    ],
+    save: (id, f) => api.platforms.update(id, { notes: f.notes }),
+  },
+  member_offboarding: {
+    title: 'Clôturer le compte du membre',
+    instruction: 'Révoquez tous les accès de ce membre sur chaque plateforme, puis mettez à jour son statut ici.',
+    fields: [
+      { key: 'status', label: 'Statut du membre', type: 'select', options: [{ value: 'inactif', label: 'Inactif — accès révoqués' }, { value: 'suspendu', label: 'Suspendu — en attente' }] },
+      { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Ex: Offboarding complet le …' },
+    ],
+    save: (id, f) => api.members.update(id, { status: f.status as Member['status'], notes: f.notes }),
+  },
+  orphan_account: {
+    title: 'Supprimer ou réassigner le compte orphelin',
+    instruction: 'Supprimez le compte directement sur la plateforme ou réassignez-le à un responsable, puis mettez à jour le statut.',
+    fields: [
+      { key: 'status', label: 'Statut du membre', type: 'select', options: [{ value: 'inactif', label: 'Inactif — compte supprimé' }, { value: 'actif', label: 'Actif — réassigné' }] },
+      { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Ex: Compte supprimé le …' },
+    ],
+    save: (id, f) => api.members.update(id, { status: f.status as Member['status'], notes: f.notes }),
+  },
+  shared_account_admin: {
+    title: 'Rétrograder ou supprimer les droits admin',
+    instruction: 'Réduisez les droits de ce compte partagé/service à lecture seule ou révoquez l\'accès admin sur chaque plateforme.',
+    fields: [
+      { key: 'notes', label: 'Ce qui a été fait', type: 'textarea', placeholder: 'Ex: Droits admin retirés, remplacés par RO le …' },
+    ],
+    save: (id, f) => api.members.update(id, { notes: f.notes }),
+  },
+  access_review_overdue: {
+    title: 'Effectuer la revue d\'accès',
+    instruction: 'Passez en revue les accès de ce membre et mettez à jour ou révoquez les droits obsolètes.',
+    fields: [
+      { key: 'notes', label: 'Notes de revue', type: 'textarea', placeholder: 'Ex: Revue effectuée le … — accès confirmés / réduits' },
+    ],
+    save: (id, f) => api.members.update(id, { notes: f.notes }),
+  },
+  subscription_expiring: {
+    title: 'Renouveler ou résilier l\'abonnement',
+    instruction: 'Prenez une décision sur cet abonnement avant son expiration et reflétez-la ici.',
+    fields: [
+      { key: 'status', label: 'Décision', type: 'select', options: [{ value: 'actif', label: 'Actif — renouvellement prévu' }, { value: 'à_résilier', label: 'À résilier' }, { value: 'en_négociation', label: 'En négociation' }] },
+      { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Ex: Renouvellement signé le …' },
+    ],
+    save: (id, f) => api.subscriptions.update(id, { status: f.status as Subscription['status'], notes: f.notes }),
+  },
+  subscription_expired: {
+    title: 'Régulariser l\'abonnement expiré',
+    instruction: 'Renouvelez l\'abonnement ou marquez-le comme résilié pour mettre fin à l\'alerte.',
+    fields: [
+      { key: 'status', label: 'Statut', type: 'select', options: [{ value: 'actif', label: 'Actif — renouvelé' }, { value: 'expiré', label: 'Expiré — accepté' }, { value: 'à_résilier', label: 'À résilier' }] },
+      { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Ex: Abonnement résilié définitivement le …' },
+    ],
+    save: (id, f) => api.subscriptions.update(id, { status: f.status as Subscription['status'], notes: f.notes }),
+  },
+  system_end_of_support: {
+    title: 'Planifier la migration ou mise à jour',
+    instruction: 'Planifiez la migration vers une version supportée ou mettez le système en maintenance.',
+    fields: [
+      { key: 'status', label: 'Statut du système', type: 'select', options: [{ value: 'actif', label: 'Actif — migration planifiée' }, { value: 'maintenance', label: 'En maintenance' }, { value: 'inactif', label: 'Désactivé' }] },
+      { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Ex: Migration vers Ubuntu 24.04 prévue le …' },
+    ],
+    save: (id, f) => api.systems.update(id, { status: f.status as System['status'], notes: f.notes }),
+  },
+  system_not_patched: {
+    title: 'Appliquer les correctifs de sécurité',
+    instruction: 'Appliquez les derniers patchs sur ce système, puis mettez à jour la date de dernière correction.',
+    fields: [
+      { key: 'last_patch_date', label: 'Date du dernier patch', type: 'select',
+        options: [
+          { value: new Date().toISOString().slice(0, 10), label: `Aujourd'hui — ${new Date().toLocaleDateString('fr-FR')}` },
+          { value: '', label: 'Autre (précisez dans les notes)' },
+        ],
+      },
+      { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Ex: Patch CVE-XXXX appliqué le …' },
+    ],
+    save: (id, f) => api.systems.update(id, { last_patch_date: f.last_patch_date || undefined, notes: f.notes }),
+  },
+  flow_review_overdue: {
+    title: 'Effectuer la revue du flux réseau',
+    instruction: 'Vérifiez que ce flux est toujours justifié et mettez à jour son statut.',
+    fields: [
+      { key: 'status', label: 'Statut du flux', type: 'select', options: [{ value: 'autorisé', label: 'Autorisé — toujours justifié' }, { value: 'bloqué', label: 'Bloqué — flux fermé' }, { value: 'conditionnel', label: 'Conditionnel — restreint' }] },
+    ],
+    save: (id, f) => api.networkFlows.update(id, { status: f.status as NetworkFlow['status'] }),
+  },
+};
 
+// ─── Revoke Modal — type-aware remediation ───
 function RevokeModal({ alert, onClose, onDone }: { alert: Alert; onClose: () => void; onDone: () => void }) {
+  const config = REMEDIATION[alert.type];
   const [step, setStep] = useState<'warning' | 'edit' | 'saving' | 'saved'>('warning');
-  const [sourceData, setSourceData] = useState<SourceData>(null);
-  const [loadingData, setLoadingData] = useState(false);
-  const [fields, setFields] = useState<Record<string, string>>({});
+  const [fields, setFields] = useState<Record<string, string>>(() => {
+    if (!config) return {};
+    return Object.fromEntries(config.fields.map((f) => [f.key, f.options?.[0]?.value ?? '']));
+  });
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  function loadAndEdit() {
-    setLoadingData(true);
-    const { source_module, source_id } = alert;
-
-    const fetch =
-      source_module === 'habilitation' ? api.accessRights.get(source_id) :
-      source_module === 'système'      ? api.systems.get(source_id) :
-      source_module === 'réseau'       ? api.networkFlows.get(source_id) :
-      source_module === 'abonnement'   ? api.subscriptions.get(source_id) :
-      null;
-
-    if (!fetch) {
-      setStep('edit');
-      setLoadingData(false);
-      return;
-    }
-
-    (fetch as Promise<SourceData>)
-      .then((data) => {
-        setSourceData(data);
-        // Pre-fill editable fields based on module
-        if (source_module === 'habilitation') {
-          const ar = data as AccessRight;
-          setFields({ level: ar.level, notes: ar.notes ?? '' });
-        } else if (source_module === 'système') {
-          const s = data as System;
-          setFields({ status: s.status, notes: s.notes ?? '' });
-        } else if (source_module === 'réseau') {
-          const f = data as NetworkFlow;
-          setFields({ status: f.status, notes: '' });
-        } else if (source_module === 'abonnement') {
-          const sub = data as Subscription;
-          setFields({ status: sub.status, notes: sub.notes ?? '' });
-        }
-        setStep('edit');
-        setLoadingData(false);
-      })
-      .catch(() => {
-        setStep('edit');
-        setLoadingData(false);
-      });
-  }
-
   function save() {
+    if (!config) { onDone(); return; }
     setSaveError(null);
     setStep('saving');
-    const { source_module, source_id } = alert;
-
-    let promise: Promise<unknown> | null = null;
-    if (source_module === 'habilitation') {
-      promise = api.accessRights.update(source_id, { level: fields.level as AccessRight['level'], notes: fields.notes });
-    } else if (source_module === 'système') {
-      promise = api.systems.update(source_id, { status: fields.status as System['status'], notes: fields.notes });
-    } else if (source_module === 'réseau') {
-      promise = api.networkFlows.update(source_id, { status: fields.status as NetworkFlow['status'] });
-    } else if (source_module === 'abonnement') {
-      promise = api.subscriptions.update(source_id, { status: fields.status as Subscription['status'], notes: fields.notes });
-    }
-
-    if (!promise) { setStep('saved'); onDone(); return; }
-
-    promise
+    config.save(alert.source_id, fields)
       .then(() => { setStep('saved'); onDone(); })
       .catch((err: Error) => { setSaveError(err.message || 'Erreur lors de la sauvegarde.'); setStep('edit'); });
   }
 
+  const selectStyle: React.CSSProperties = { padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '13px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit', width: '100%' };
+  const labelStyle: React.CSSProperties = { fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' };
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'oklch(0% 0 0 / 0.45)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={onClose}>
-      <div style={{ background: 'oklch(100% 0 0)', borderRadius: '12px', width: '100%', maxWidth: '460px', boxShadow: '0 20px 60px oklch(0% 0 0 / 0.2)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ background: 'oklch(100% 0 0)', borderRadius: '12px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 60px oklch(0% 0 0 / 0.2)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid oklch(90% 0.006 260)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'oklch(55% 0.22 25 / 0.12)', display: 'grid', placeItems: 'center' }}>
               <ShieldAlert style={{ width: '14px', height: '14px', color: 'oklch(55% 0.22 25)' }} />
             </div>
-            <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Révoquer les accès</span>
+            <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>{config?.title ?? 'Traiter l\'alerte'}</span>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'oklch(52% 0.012 260)', display: 'grid', placeItems: 'center', padding: '4px' }}>
             <X style={{ width: '16px', height: '16px' }} />
@@ -106,16 +162,16 @@ function RevokeModal({ alert, onClose, onDone }: { alert: Alert; onClose: () => 
         </div>
 
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
           {/* Step 1 — Warning */}
           {step === 'warning' && (
             <>
-              <div style={{ background: 'oklch(62% 0.18 52 / 0.1)', border: '1px solid oklch(62% 0.18 52 / 0.25)', borderRadius: '8px', padding: '14px 16px', display: 'flex', gap: '12px' }}>
+              <div style={{ background: 'oklch(62% 0.18 52 / 0.08)', border: '1px solid oklch(62% 0.18 52 / 0.22)', borderRadius: '8px', padding: '14px 16px', display: 'flex', gap: '12px' }}>
                 <ShieldAlert style={{ width: '18px', height: '18px', color: 'oklch(62% 0.18 52)', flexShrink: 0, marginTop: '1px' }} />
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'oklch(40% 0.14 52)', marginBottom: '6px' }}>Tracix ne révoque pas automatiquement les accès</div>
-                  <div style={{ fontSize: '12.5px', color: 'oklch(45% 0.08 52)', lineHeight: 1.6 }}>
-                    Cette action doit d'abord être effectuée <strong>directement sur la plateforme concernée</strong> par un administrateur habilité.<br /><br />
-                    Une fois que vous l'avez fait en dehors de Tracix, revenez ici pour mettre à jour le statut dans le système.
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'oklch(40% 0.14 52)', marginBottom: '6px' }}>Tracix ne modifie pas les systèmes à votre place</div>
+                  <div style={{ fontSize: '12.5px', color: 'oklch(45% 0.08 52)', lineHeight: 1.7 }}>
+                    {config?.instruction ?? 'Effectuez l\'action directement sur la plateforme ou le système concerné, puis confirmez ici.'}
                   </div>
                 </div>
               </div>
@@ -123,100 +179,38 @@ function RevokeModal({ alert, onClose, onDone }: { alert: Alert; onClose: () => 
                 <button onClick={onClose} style={{ padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
                   Annuler
                 </button>
-                <button onClick={() => { loadAndEdit(); }} disabled={loadingData}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 16px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: loadingData ? 'wait' : 'pointer', opacity: loadingData ? 0.7 : 1 }}>
-                  {loadingData && <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />}
-                  Je l'ai fait, mettre à jour Tracix
+                <button onClick={() => setStep('edit')}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 16px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+                  Je l'ai fait — mettre à jour Tracix
                 </button>
               </div>
             </>
           )}
 
           {/* Step 2 — Edit form */}
-          {(step === 'edit' || step === 'saving') && (
+          {(step === 'edit' || step === 'saving') && config && (
             <>
               <div style={{ fontSize: '12.5px', color: 'oklch(52% 0.012 260)' }}>
-                Modifiez les informations ci-dessous pour refléter la situation réelle.
+                Confirmez ce qui a été fait pour mettre Tracix à jour.
               </div>
-
               {saveError && (
                 <div style={{ background: 'oklch(55% 0.22 25 / 0.08)', borderRadius: '6px', padding: '10px 12px', fontSize: '12px', color: 'oklch(55% 0.22 25)' }}>{saveError}</div>
               )}
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {alert.source_module === 'habilitation' && (
-                  <>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Niveau d'accès</span>
-                      <select value={fields.level ?? ''} onChange={(e) => setFields((f) => ({ ...f, level: e.target.value }))}
-                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '13px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        <option value="admin">Admin</option>
-                        <option value="rw">Lecture / Écriture (RW)</option>
-                        <option value="ro">Lecture seule (RO)</option>
-                        <option value="req">Sur demande (REQ)</option>
-                        <option value="none">Aucun accès (révoqué)</option>
+                {config.fields.map((f) => (
+                  <label key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    <span style={labelStyle}>{f.label}</span>
+                    {f.type === 'select' ? (
+                      <select value={fields[f.key] ?? ''} onChange={(e) => setFields((prev) => ({ ...prev, [f.key]: e.target.value }))} style={selectStyle}>
+                        {f.options!.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes</span>
-                      <textarea value={fields.notes ?? ''} onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))} rows={3}
-                        placeholder="Ex: Accès révoqué suite au départ du collaborateur…"
-                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
-                    </label>
-                  </>
-                )}
-                {alert.source_module === 'système' && (
-                  <>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Statut du système</span>
-                      <select value={fields.status ?? ''} onChange={(e) => setFields((f) => ({ ...f, status: e.target.value }))}
-                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '13px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        <option value="actif">Actif</option>
-                        <option value="inactif">Inactif</option>
-                        <option value="maintenance">En maintenance</option>
-                      </select>
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes</span>
-                      <textarea value={fields.notes ?? ''} onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))} rows={3}
-                        placeholder="Ex: Système isolé du réseau suite à la vulnérabilité CVE-…"
-                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
-                    </label>
-                  </>
-                )}
-                {alert.source_module === 'réseau' && (
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Statut du flux</span>
-                    <select value={fields.status ?? ''} onChange={(e) => setFields((f) => ({ ...f, status: e.target.value }))}
-                      style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '13px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                      <option value="autorisé">Autorisé</option>
-                      <option value="bloqué">Bloqué</option>
-                      <option value="conditionnel">Conditionnel</option>
-                    </select>
+                    ) : (
+                      <textarea value={fields[f.key] ?? ''} onChange={(e) => setFields((prev) => ({ ...prev, [f.key]: e.target.value }))} rows={3} placeholder={f.placeholder}
+                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', resize: 'vertical', fontFamily: 'inherit', width: '100%' }} />
+                    )}
                   </label>
-                )}
-                {alert.source_module === 'abonnement' && (
-                  <>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Statut de l'abonnement</span>
-                      <select value={fields.status ?? ''} onChange={(e) => setFields((f) => ({ ...f, status: e.target.value }))}
-                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '13px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        <option value="actif">Actif</option>
-                        <option value="à_résilier">À résilier</option>
-                        <option value="expiré">Expiré</option>
-                        <option value="en_négociation">En négociation</option>
-                      </select>
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes</span>
-                      <textarea value={fields.notes ?? ''} onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))} rows={3}
-                        placeholder="Ex: Abonnement résilié le …"
-                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
-                    </label>
-                  </>
-                )}
+                ))}
               </div>
-
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                 <button onClick={onClose} style={{ padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
                   Annuler
@@ -644,7 +638,7 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
               {!sel.is_resolved && (
                 <button onClick={() => setRevokeAlert(sel)}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(55% 0.22 25 / 0.1)', color: 'oklch(55% 0.22 25)', border: '1px solid oklch(55% 0.22 25 / 0.2)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
-                  Révoquer les accès
+                  Traiter / Révoquer
                 </button>
               )}
             </div>

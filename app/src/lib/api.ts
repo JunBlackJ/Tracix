@@ -371,8 +371,8 @@ export const api = {
     switch(orgId: string): Promise<{ token: string; user: UserApp; organization: Organization }> {
       return request(`/organizations/${orgId}/switch`, { method: 'POST' });
     },
-    reset(): Promise<{ success: boolean }> {
-      return request('/organizations/reset', { method: 'POST' });
+    reset(password: string): Promise<{ success: boolean }> {
+      return request('/organizations/reset', { method: 'POST', body: JSON.stringify({ password }) });
     },
   },
 

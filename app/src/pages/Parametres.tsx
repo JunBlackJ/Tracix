@@ -1722,8 +1722,9 @@ function UpgradeModal({ currentPlan, onClose, onUpgraded }: {
   );
 }
 
-function ResetDataModal({ onClose, onConfirm, loading }: { onClose: () => void; onConfirm: () => void; loading: boolean }) {
+function ResetDataModal({ onClose, onConfirm, loading }: { onClose: () => void; onConfirm: (password: string) => void; loading: boolean }) {
   const [typed, setTyped] = useState('');
+  const [password, setPassword] = useState('');
   const confirmWord = 'RÉINITIALISER';
 
   return (
@@ -1769,6 +1770,17 @@ function ResetDataModal({ onClose, onConfirm, loading }: { onClose: () => void; 
             />
           </div>
 
+          <div>
+            <p className="text-sm text-gray-600 mb-2">Confirmez avec votre mot de passe :</p>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mot de passe"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+            />
+          </div>
+
           <div className="flex gap-3 pt-1">
             <button
               onClick={onClose}
@@ -1778,8 +1790,8 @@ function ResetDataModal({ onClose, onConfirm, loading }: { onClose: () => void; 
               Annuler
             </button>
             <button
-              onClick={onConfirm}
-              disabled={loading || typed !== confirmWord}
+              onClick={() => onConfirm(password)}
+              disabled={loading || typed !== confirmWord || !password}
               className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
@@ -1809,10 +1821,10 @@ function SecuriteSection() {
     }
   };
 
-  const handleReset = async () => {
+  const handleReset = async (password: string) => {
     setResetting(true);
     try {
-      await api.organizations.reset();
+      await api.organizations.reset(password);
       setResetModalOpen(false);
       toast.success('Toutes les données ont été réinitialisées');
     } catch {

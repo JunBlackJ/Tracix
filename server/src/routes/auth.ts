@@ -17,6 +17,7 @@ function serializeOrg(org: {
   max_admin_per_platform: number; access_review_delay_days: number;
   subscription_alert_days: number; enabled_modules: JsonValue; created_at: Date;
   alert_email_enabled?: boolean; alert_email_address?: string; alert_email_frequency?: string;
+  onboarding_completed?: boolean;
 }) {
   return {
     id: org.id,
@@ -32,6 +33,7 @@ function serializeOrg(org: {
     alert_email_enabled: org.alert_email_enabled ?? false,
     alert_email_address: org.alert_email_address ?? '',
     alert_email_frequency: org.alert_email_frequency ?? 'daily',
+    onboarding_completed: org.onboarding_completed ?? false,
   };
 }
 
@@ -325,6 +327,37 @@ router.put('/organization', requireAuth, async (req: Request, res: Response): Pr
       ...(alert_email_address !== undefined && { alert_email_address: String(alert_email_address).slice(0, 254) }),
       ...(safeFreq !== undefined && { alert_email_frequency: safeFreq }),
     },
+  });
+
+  res.json(serializeOrg(updated));
+});
+
+// POST /api/auth/onboarding — save onboarding data and mark org as completed
+router.post('/onboarding', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+  const { org_name, sector, size, objective, alert_email, alert_email_enabled } = req.body;
+
+  const updated = await prisma.organization.update({
+    where: { id: orgId },
+    data: {
+      ...(org_name && { name: String(org_name).slice(0, 100) }),
+      ...(alert_email && { alert_email_address: String(alert_email).slice(0, 254) }),
+      ...(alert_email_enabled !== undefined && { alert_email_enabled: Boolean(alert_email_enabled) }),
+      onboarding_completed: true,
+    },
+  });
+
+  await createAuditEntry({
+    organizationId: orgId,
+    actor: req.user!.email,
+    action: 'organization.onboarding_completed',
+    targetType: 'organization',
+    targetId: orgId,
+    targetLabel: updated.name,
+    oldValue: {},
+    newValue: { sector, size, objective },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
   });
 
   res.json(serializeOrg(updated));

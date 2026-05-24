@@ -22,6 +22,7 @@ export interface Organization {
   alert_email_enabled: boolean;
   alert_email_address: string;
   alert_email_frequency: 'immediate' | 'daily';
+  onboarding_completed: boolean;
 }
 
 // ─── Utilisateurs ───

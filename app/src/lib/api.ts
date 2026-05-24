@@ -132,6 +132,9 @@ export const api = {
     oauthUrl(provider: 'google' | 'microsoft' | 'github'): string {
       return `${BASE_URL}/auth/oauth/${provider}`;
     },
+    completeOnboarding(data: { org_name?: string; sector?: string; size?: string; objective?: string; alert_email?: string; alert_email_enabled?: boolean }): Promise<Organization> {
+      return request('/auth/onboarding', { method: 'POST', body: JSON.stringify(data) });
+    },
     testEmail(): Promise<{ success: boolean; sent_to: string }> {
       return request('/auth/test-email', { method: 'POST' });
     },

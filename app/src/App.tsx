@@ -23,6 +23,7 @@ import { Revues } from '@/pages/Revues';
 import { OAuthCallback } from '@/pages/OAuthCallback';
 import { Rejoindre } from '@/pages/Rejoindre';
 import { Admin } from '@/pages/Admin';
+import { Onboarding } from '@/pages/Onboarding';
 import { useStore } from '@/hooks/useStore';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -68,6 +69,21 @@ function App() {
   }
 
   const unresolvedAlerts = store.alerts.filter((a) => !a.is_resolved).length;
+
+  // Show onboarding wizard for first-time users
+  if (!store.organization?.onboarding_completed) {
+    return (
+      <>
+        <BrowserRouter>
+          <Onboarding
+            organization={store.organization!}
+            onComplete={(updatedOrg) => store.setOrganization(updatedOrg)}
+          />
+        </BrowserRouter>
+        <Toaster position="bottom-right" richColors />
+      </>
+    );
+  }
 
   return (
     <BrowserRouter>

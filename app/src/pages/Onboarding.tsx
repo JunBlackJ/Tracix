@@ -489,19 +489,6 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
               </div>
             </div>
 
-            {/* Bouton paiement */}
-            {!promoApplied && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <button
-                  style={{ width: '100%', padding: '13px 20px', borderRadius: 9, background: BRAND, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-                  onClick={() => { window.open('mailto:contact@agbaya.com?subject=Abonnement%20Pro%20Tracix', '_blank'); }}>
-                  <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                  Souscrire au plan Pro — 29 € / mois
-                </button>
-                <div style={{ textAlign: 'center', fontSize: 11.5, color: MUTED }}>Paiement sécurisé · Sans engagement · Annulable à tout moment</div>
-              </div>
-            )}
-
             {/* Code promo */}
             {!promoApplied ? (
               <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '16px 18px' }}>

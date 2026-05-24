@@ -79,6 +79,15 @@ function KpiSimpleCard({ label, value, delta, deltaUp, kpiColor }: {
 
 const TABS = ['Toutes', 'Cloud', 'SaaS', 'IdP', 'Dev', 'Communication'];
 
+function timeSince(dateStr: string): string {
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (mins < 1) return '< 1 min';
+  if (mins < 60) return `${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}j`;
+}
+
 function PlateformesList({ platforms, members: _members, alerts: _alerts, accessRights, onNew }: PlateformesProps & { onNew: () => void }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Toutes');
@@ -88,6 +97,29 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
 
   const activeCount = platforms.filter(p => p.status === 'actif').length;
   const errorCount = platforms.filter(p => p.status === 'inactif' || p.status === 'déprécié').length;
+
+  const newThisMonth = platforms.filter(p => {
+    const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    return new Date(p.created_at).getTime() > monthAgo;
+  }).length;
+  const activeDelta = newThisMonth > 0 ? `↑ +${newThisMonth} ce mois` : 'Stable ce mois';
+
+  const disponibilite = platforms.length > 0
+    ? `${Math.round((activeCount / platforms.length) * 100)}%`
+    : '—';
+
+  const mostRecentSync = platforms.reduce((best, p) => {
+    if (!p.last_check_date) return best;
+    const t = new Date(p.last_check_date).getTime();
+    return t > best ? t : best;
+  }, 0);
+  const lastSyncValue = mostRecentSync > 0 ? timeSince(new Date(mostRecentSync).toISOString()) : '—';
+  const oldestSync = platforms.reduce((oldest, p) => {
+    if (!p.last_check_date) return oldest;
+    const t = new Date(p.last_check_date).getTime();
+    return t < oldest ? t : oldest;
+  }, Infinity);
+  const lastSyncDelta = oldestSync < Infinity ? `Sync min: il y a ${timeSince(new Date(oldestSync).toISOString())}` : '— Aucune sync';
 
   const filtered = platforms.filter(p =>
     activeTab === 'Toutes' || p.category.toLowerCase() === activeTab.toLowerCase()
@@ -109,10 +141,10 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
 
       {/* KPI grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
-        <KpiSimpleCard label="Plateformes actives" value={String(activeCount)} delta="↑ +2 ce mois" deltaUp={true} kpiColor="oklch(42% 0.18 280)" />
-        <KpiSimpleCard label="En erreur" value={String(errorCount)} delta="Attention requise" deltaUp={false} kpiColor="oklch(55% 0.22 25)" />
-        <KpiSimpleCard label="Uptime moyen" value="98.4%" delta="— Stable" kpiColor="oklch(62% 0.16 155)" />
-        <KpiSimpleCard label="Dernière sync" value="2 min" delta="— Automatique" kpiColor="oklch(70% 0.14 88)" />
+        <KpiSimpleCard label="Plateformes actives" value={String(activeCount)} delta={activeDelta} deltaUp={newThisMonth > 0} kpiColor="oklch(42% 0.18 280)" />
+        <KpiSimpleCard label="En erreur / inactives" value={String(errorCount)} delta={errorCount > 0 ? 'Attention requise' : 'Tout est opérationnel'} deltaUp={errorCount === 0} kpiColor="oklch(55% 0.22 25)" />
+        <KpiSimpleCard label="Disponibilité" value={disponibilite} delta={platforms.length > 0 ? `${activeCount} / ${platforms.length} opérationnelles` : 'Aucune plateforme'} kpiColor="oklch(62% 0.16 155)" />
+        <KpiSimpleCard label="Dernière sync" value={lastSyncValue} delta={lastSyncDelta} kpiColor="oklch(70% 0.14 88)" />
       </div>
 
       {/* Tabs + grid section */}
@@ -297,7 +329,7 @@ function PlateformeDetail({ platformId, platforms, members, alerts, accessRights
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-gray-500">{new Date(a.granted_at).toLocaleDateString('fr-FR')}</td>
-                  <td className="px-3 py-2.5 text-gray-500">{new Date(a.last_review_date).toLocaleDateString('fr-FR')}</td>
+                  <td className="px-3 py-2.5 text-gray-500">{a.last_review_date ? new Date(a.last_review_date).toLocaleDateString('fr-FR') : '—'}</td>
                 </tr>
               );
             })}

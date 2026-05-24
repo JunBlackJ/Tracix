@@ -179,6 +179,7 @@ export function Journal({ auditTrail: initialTrail }: JournalProps) {
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Horodatage</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">Acteur</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">Action</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">Cible</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700">IP</th>
               </tr>
@@ -213,13 +214,20 @@ export function Journal({ auditTrail: initialTrail }: JournalProps) {
                       </span>
                     </div>
                   </td>
+                  <td className="px-4 py-3">
+                    {entry.target_type && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium capitalize">
+                        {entry.target_type}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-800 font-medium text-sm">{entry.target_label}</td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-400">{entry.ip_address}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-16 text-center">
+                  <td colSpan={6} className="px-4 py-16 text-center">
                     <Lock className="w-10 h-10 text-gray-200 mx-auto mb-3" />
                     <p className="text-gray-500 font-medium">Aucune entrée dans le journal</p>
                     <p className="text-xs text-gray-400 mt-1">

@@ -112,6 +112,7 @@ function App() {
                 members={store.members}
                 platforms={store.platforms}
                 alerts={store.alerts}
+                accessRights={store.accessRights}
                 onUpdateAccess={store.updateAccessLevel}
                 categories={store.categories.filter((c) => c.type === 'team')}
                 onMemberCreated={store.upsertMember}
@@ -127,6 +128,7 @@ function App() {
                 members={store.members}
                 platforms={store.platforms}
                 alerts={store.alerts}
+                accessRights={store.accessRights}
                 onUpdateAccess={store.updateAccessLevel}
                 categories={store.categories.filter((c) => c.type === 'team')}
                 onMemberCreated={store.upsertMember}

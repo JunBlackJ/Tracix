@@ -22,12 +22,13 @@ interface MembresProps {
   members: Member[];
   platforms: Platform[];
   alerts: Alert[];
+  accessRights?: AccessRight[];
   categories?: import('@/types').Category[];
   onMemberUpdated?: (member: Member) => void;
   onMemberCreated?: (member: Member) => void;
 }
 
-export function Membres({ onRevokeAccess, onUpdateAccess, members, platforms, alerts, categories = [], onMemberUpdated, onMemberCreated }: MembresProps) {
+export function Membres({ onRevokeAccess, onUpdateAccess, members, platforms, alerts, accessRights = [], categories = [], onMemberUpdated, onMemberCreated }: MembresProps) {
   const { id } = useParams<{ id: string }>();
   const [showForm, setShowForm] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
@@ -59,6 +60,7 @@ export function Membres({ onRevokeAccess, onUpdateAccess, members, platforms, al
       ) : (
         <MembresList
           members={members}
+          accessRights={accessRights}
           onNew={() => { setEditingMember(null); setShowForm(true); }}
         />
       )}
@@ -76,7 +78,7 @@ export function Membres({ onRevokeAccess, onUpdateAccess, members, platforms, al
 
 // ─── Liste ───
 
-function MembresList({ members, onNew }: { members: Member[]; onNew: () => void }) {
+function MembresList({ members, accessRights = [], onNew }: { members: Member[]; accessRights?: AccessRight[]; onNew: () => void }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [teamFilter, setTeamFilter] = useState('all');
@@ -169,6 +171,7 @@ function MembresList({ members, onNew }: { members: Member[]; onNew: () => void 
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Équipe</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Statut</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">Accès</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-700">Score risque</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -213,6 +216,22 @@ function MembresList({ members, onNew }: { members: Member[]; onNew: () => void 
                   </div>
                 </td>
                 <td className="px-4 py-3 text-center">
+                  {(() => {
+                    const count = accessRights.filter((a) => a.member_id === m.id && a.level !== 'none').length;
+                    const adminCount = accessRights.filter((a) => a.member_id === m.id && a.level === 'admin').length;
+                    return (
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="text-sm font-semibold text-gray-700">{count}</span>
+                        {adminCount > 0 && (
+                          <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
+                            <Shield className="w-2.5 h-2.5" />{adminCount}A
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </td>
+                <td className="px-4 py-3 text-center">
                   <RiskBadge score={m.risk_score} size="md" showLabel />
                 </td>
                 <td className="px-4 py-3">
@@ -222,7 +241,7 @@ function MembresList({ members, onNew }: { members: Member[]; onNew: () => void 
             ))}
             {members.length === 0 && (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <EmptyState
                     icon={Users}
                     title="Aucun membre"
@@ -235,7 +254,7 @@ function MembresList({ members, onNew }: { members: Member[]; onNew: () => void 
             )}
             {members.length > 0 && filtered.length === 0 && (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <FilterEmpty onReset={() => { setSearch(''); setTeamFilter('all'); setTypeFilter('all'); setStatusFilter('all'); }} />
                 </td>
               </tr>

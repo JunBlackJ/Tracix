@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, CheckCircle2, Shield, Server, Network, CreditCard, AlertTriangle, Info, X } from 'lucide-react';
+import { Bell, CheckCircle2, Shield, Server, Network, CreditCard, AlertTriangle, Info, X, ChevronRight, Clock, Tag } from 'lucide-react';
 import { SEVERITY_CONFIG } from '@/types';
 import type { Alert, AlertType } from '@/types';
 
@@ -63,6 +63,7 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('unresolved');
   const [moduleFilter, setModuleFilter] = useState<string>('all');
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
   const total = alerts.length;
   const critiques = alerts.filter((a) => a.severity === 'critical' && !a.is_resolved).length;
@@ -244,7 +245,9 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
           return (
             <div
               key={alert.id}
-              className={`bg-white rounded-xl border p-4 transition-all hover:shadow-sm ${
+              onClick={() => setSelectedAlert(alert)}
+              className={`bg-white rounded-xl border p-4 transition-all hover:shadow-sm cursor-pointer ${
+                selectedAlert?.id === alert.id ? 'ring-2 ring-[#534AB7]/40 border-[#534AB7]/40' :
                 alert.is_resolved ? 'border-gray-200 opacity-60' : cfg.border
               }`}
             >
@@ -254,9 +257,7 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}
-                    >
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>
                       {cfg.label}
                     </span>
                     <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
@@ -276,14 +277,7 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
                     {alert.is_resolved && alert.resolved_by && ` · Résolu par ${alert.resolved_by}`}
                   </p>
                 </div>
-                {!alert.is_resolved && (
-                  <button
-                    onClick={() => onResolveAlert(alert.id)}
-                    className="flex-shrink-0 text-xs text-[#534AB7] hover:text-[#3C3489] font-semibold px-3 py-1.5 rounded-lg hover:bg-[#534AB7]/10 transition-colors border border-[#534AB7]/20"
-                  >
-                    Résoudre
-                  </button>
-                )}
+                <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 mt-1" />
               </div>
             </div>
           );
@@ -300,6 +294,114 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
           </div>
         )}
       </div>
+
+      {/* Panneau de détail latéral */}
+      {selectedAlert && (() => {
+        const a = selectedAlert;
+        const cfg = SEVERITY_CONFIG[a.severity];
+        const ModIcon = MODULE_ICONS[a.source_module] || Bell;
+        const typeLabel = TYPE_LABELS[a.type] || a.type;
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setSelectedAlert(null)} />
+            <div className="fixed right-0 top-0 h-full w-[420px] max-w-full bg-white shadow-2xl z-50 flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-gray-200 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${cfg.bg}`}>
+                    <ModIcon className={`w-5 h-5 ${cfg.text}`} />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">{a.source_label}</p>
+                    <p className="text-[11px] text-gray-400 capitalize">{a.source_module}</p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedAlert(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                  <X className="w-4 h-4 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                {/* Badges */}
+                <div className="flex flex-wrap gap-2">
+                  <span className={`text-[11px] font-bold uppercase px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.text}`}>
+                    {cfg.label}
+                  </span>
+                  <span className="text-[11px] text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full flex items-center gap-1">
+                    <Tag className="w-3 h-3" />{typeLabel}
+                  </span>
+                  {a.is_resolved && (
+                    <span className="text-[11px] bg-green-100 text-green-700 px-2.5 py-1 rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Résolue
+                    </span>
+                  )}
+                </div>
+
+                {/* Message */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Message</p>
+                  <p className="text-sm text-gray-800 leading-relaxed">{a.message}</p>
+                </div>
+
+                {/* Chronologie */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Chronologie</p>
+                  <div className="space-y-0">
+                    <div className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-400 mt-1 flex-shrink-0" />
+                        <div className="w-px flex-1 bg-gray-200 mt-1" />
+                      </div>
+                      <div className="pb-4">
+                        <p className="text-xs font-medium text-gray-800">Alerte détectée</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {new Date(a.created_at).toLocaleString('fr-FR')}
+                        </p>
+                      </div>
+                    </div>
+                    {a.is_resolved && (
+                      <div className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className="w-2.5 h-2.5 rounded-full bg-green-400 mt-1 flex-shrink-0" />
+                        </div>
+                        <div className="pb-2">
+                          <p className="text-xs font-medium text-gray-800">Résolue{a.resolved_by ? ` par ${a.resolved_by}` : ''}</p>
+                          {a.resolved_at && (
+                            <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(a.resolved_at).toLocaleString('fr-FR')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {!a.is_resolved && (
+                      <div className="flex gap-3">
+                        <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-300 mt-1 flex-shrink-0" />
+                        <p className="text-xs text-gray-400 italic">En attente de résolution…</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              {!a.is_resolved && (
+                <div className="border-t border-gray-200 p-4 flex-shrink-0">
+                  <button
+                    onClick={() => { onResolveAlert(a.id); setSelectedAlert(null); }}
+                    className="w-full py-2.5 bg-[#534AB7] text-white rounded-xl text-sm font-semibold hover:bg-[#3C3489] transition-colors flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Marquer comme résolue
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

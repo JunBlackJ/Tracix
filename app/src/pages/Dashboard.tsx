@@ -53,10 +53,13 @@ function RiskBar({ label, count, total, color }: { label: string; count: number;
 function Gauge({ score }: { score: number }) {
   const arc = 175.93;
   const dash = arc - (score / 100) * arc;
-  const riskLabel = score >= 75 ? 'Risque élevé' : score >= 50 ? 'Risque modéré' : score >= 25 ? 'Risque faible' : 'Risque minimal';
-  const labelStyle: React.CSSProperties = score >= 75
+  // risk_score est un score de conformité : bas = dangereux, haut = bon
+  const riskLabel = score <= 39 ? 'Risque critique' : score <= 59 ? 'Risque élevé' : score <= 79 ? 'Risque modéré' : 'Risque faible';
+  const labelStyle: React.CSSProperties = score <= 39
     ? { background: 'oklch(55% 0.22 25 / 0.12)', color: 'oklch(55% 0.22 25)' }
-    : score >= 50
+    : score <= 59
+    ? { background: 'oklch(62% 0.18 52 / 0.12)', color: 'oklch(62% 0.18 52)' }
+    : score <= 79
     ? { background: 'oklch(70% 0.14 88 / 0.12)', color: 'oklch(70% 0.14 88)' }
     : { background: 'oklch(62% 0.16 155 / 0.12)', color: 'oklch(62% 0.16 155)' };
 

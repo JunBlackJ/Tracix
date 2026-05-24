@@ -73,12 +73,12 @@ router.get('/stats', async (req: Request, res: Response): Promise<void> => {
 
   const criticalAlerts = unresolvedAlerts.filter((a) => a.severity === 'critical').length;
 
-  // Risk distribution by level
+  // Risk distribution — risk_score est un score de conformité (100 = bon, 0 = dangereux)
   const riskDistribution = {
-    crit: allMembers.filter((m) => m.risk_score >= 80).length,
-    high: allMembers.filter((m) => m.risk_score >= 60 && m.risk_score < 80).length,
-    med:  allMembers.filter((m) => m.risk_score >= 40 && m.risk_score < 60).length,
-    low:  allMembers.filter((m) => m.risk_score < 40).length,
+    crit: allMembers.filter((m) => m.risk_score <= 39).length,
+    high: allMembers.filter((m) => m.risk_score >= 40 && m.risk_score <= 59).length,
+    med:  allMembers.filter((m) => m.risk_score >= 60 && m.risk_score <= 79).length,
+    low:  allMembers.filter((m) => m.risk_score >= 80).length,
   };
 
   const totalAccessRights = allAccessRights.filter((a) => a.level !== 'none').length;

@@ -13,23 +13,23 @@ interface ScoreRisqueProps {
   accessRights: AccessRight[];
 }
 
-// ─── Shared helpers ───
+// ─── Shared helpers — risk_score est un score de conformité (100 = bon, 0 = dangereux) ───
 function riskPillVariant(score: number): 'crit' | 'high' | 'med' | 'low' {
-  if (score >= 80) return 'crit';
-  if (score >= 60) return 'high';
-  if (score >= 40) return 'med';
+  if (score <= 39) return 'crit';
+  if (score <= 59) return 'high';
+  if (score <= 79) return 'med';
   return 'low';
 }
 function riskPillLabel(score: number): string {
-  if (score >= 80) return 'Critique';
-  if (score >= 60) return 'Élevé';
-  if (score >= 40) return 'Moyen';
+  if (score <= 39) return 'Critique';
+  if (score <= 59) return 'Élevé';
+  if (score <= 79) return 'Moyen';
   return 'Faible';
 }
 function riskScoreColor(score: number): string {
-  if (score >= 80) return 'oklch(55% 0.22 25)';
-  if (score >= 60) return 'oklch(62% 0.18 52)';
-  if (score >= 40) return 'oklch(70% 0.14 88)';
+  if (score <= 39) return 'oklch(55% 0.22 25)';
+  if (score <= 59) return 'oklch(62% 0.18 52)';
+  if (score <= 79) return 'oklch(70% 0.14 88)';
   return 'oklch(62% 0.16 155)';
 }
 
@@ -123,7 +123,7 @@ function Gauge({ score, color }: { score: number; color: string }) {
       <div style={{ fontSize: '42px', fontWeight: 700, fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", color }}>{score}</div>
       <div style={{ fontSize: '13px', color: 'oklch(52% 0.012 260)' }}>/ 100</div>
       <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '3px 10px', borderRadius: '999px', background: `${color}1e`, color }}>
-        {score >= 80 ? 'Risque critique' : score >= 60 ? 'Risque modéré' : score >= 40 ? 'Risque moyen' : 'Risque faible'}
+        {score <= 39 ? 'Risque critique' : score <= 59 ? 'Risque élevé' : score <= 79 ? 'Risque modéré' : 'Risque faible'}
       </span>
     </div>
   );
@@ -133,10 +133,11 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
   const navigate = useNavigate();
   const [period, setPeriod] = useState<'7j' | '30j' | '90j'>('30j');
 
-  const critiques   = members.filter((m) => m.risk_score >= 80).length;
-  const elevated    = members.filter((m) => m.risk_score >= 60 && m.risk_score < 80).length;
+  const critiques   = members.filter((m) => m.risk_score <= 39).length;
+  const elevated    = members.filter((m) => m.risk_score >= 40 && m.risk_score <= 59).length;
   const avgScore    = members.length > 0 ? Math.round(members.reduce((s, m) => s + m.risk_score, 0) / members.length) : 0;
-  const sorted      = [...members.filter(m => m.risk_score > 0)].sort((a, b) => b.risk_score - a.risk_score);
+  // Trier par score croissant : les plus bas = plus risqués en premier
+  const sorted      = [...members].sort((a, b) => a.risk_score - b.risk_score);
   const median      = sorted.length > 0 ? sorted[Math.floor(sorted.length / 2)].risk_score : 0;
 
   // Build sparkline from members' scores (simulated trend with noise)
@@ -197,9 +198,9 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
 
       {/* KPI grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
-        <KpiCard label="Score moyen global" value={avgScore} delta={members.length > 0 ? `${members.length} membres évalués` : '—'} deltaDir="neutral" color="oklch(70% 0.14 88)" svgPath="M22 12h-4l-3 9-6-18-3 9H2" />
-        <KpiCard label="Membres critiques (≥ 80)" value={critiques} delta={critiques > 0 ? `${((critiques / members.length) * 100).toFixed(1)}% des membres` : '→ Aucun'} deltaDir={critiques > 0 ? 'down' : 'neutral'} color="oklch(55% 0.22 25)" svgPath="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01" />
-        <KpiCard label="Membres à risque élevé (60–79)" value={elevated} delta={elevated > 0 ? `${((elevated / members.length) * 100).toFixed(1)}% des membres` : '→ Aucun'} deltaDir={elevated > 0 ? 'down' : 'neutral'} color="oklch(62% 0.18 52)" svgPath="M12 2a10 10 0 100 20A10 10 0 0012 2z M12 8v4 M12 16h.01" />
+        <KpiCard label="Score moyen global" value={avgScore} delta={members.length > 0 ? `${members.length} membres évalués` : '—'} deltaDir={avgScore <= 59 ? 'down' : avgScore >= 80 ? 'up' : 'neutral'} color={riskScoreColor(avgScore)} svgPath="M22 12h-4l-3 9-6-18-3 9H2" />
+        <KpiCard label="Score le plus bas (≤ 39)" value={critiques} delta={critiques > 0 ? `${((critiques / Math.max(1, members.length)) * 100).toFixed(1)}% des membres` : '→ Aucun'} deltaDir={critiques > 0 ? 'down' : 'neutral'} color="oklch(55% 0.22 25)" svgPath="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01" />
+        <KpiCard label="Score risqué (40–59)" value={elevated} delta={elevated > 0 ? `${((elevated / Math.max(1, members.length)) * 100).toFixed(1)}% des membres` : '→ Aucun'} deltaDir={elevated > 0 ? 'down' : 'neutral'} color="oklch(62% 0.18 52)" svgPath="M12 2a10 10 0 100 20A10 10 0 0012 2z M12 8v4 M12 16h.01" />
         <KpiCard label="Score médian (P50)" value={median} delta={sorted.length > 0 ? `sur ${sorted.length} membres actifs` : '—'} deltaDir="neutral" color="oklch(62% 0.16 155)" svgPath="M5 12h14 M12 5l7 7-7 7" />
       </div>
 

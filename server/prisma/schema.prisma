@@ -209,6 +209,7 @@ model Subscription {
   vendor          String   @default("")
   cost_monthly    Float    @default(0)
   cost_annual     Float    @default(0)
+  cost_weekly     Float    @default(0)
   currency        String   @default("EUR")
   billing_cycle   String   @default("mensuel")
   renewal_date    String   @default("")

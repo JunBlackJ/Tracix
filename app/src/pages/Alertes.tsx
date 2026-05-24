@@ -3,8 +3,9 @@
 // ═══════════════════════════════════════════
 
 import { useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search, X, Sparkles, Loader2 } from 'lucide-react';
 import type { Alert } from '@/types';
+import { api } from '@/lib/api';
 
 interface AlertesProps {
   onResolveAlert: (id: string) => void;
@@ -90,6 +91,114 @@ const TYPE_LABELS: Record<string, string> = {
   flow_review_overdue: 'Revue flux dépassée',
 };
 
+// ─── AI Advice Modal ───
+function AdviceModal({ alert, onClose, onResolve }: { alert: Alert; onClose: () => void; onResolve: () => void }) {
+  const [advice, setAdvice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
+
+  function fetchAdvice() {
+    setLoading(true);
+    setError(null);
+    api.alerts.getAdvice(alert.id)
+      .then((res) => {
+        setAdvice(res.advice);
+        setRemaining(res.remaining);
+        setLoading(false);
+      })
+      .catch((err: Error) => {
+        const msg = err.message ?? '';
+        if (msg.includes('Limite atteinte') || msg.includes('limitReached')) {
+          setLimitReached(true);
+        }
+        setError(msg || 'Erreur lors de la génération du conseil.');
+        setLoading(false);
+      });
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'oklch(0% 0 0 / 0.45)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={onClose}>
+      <div style={{ background: 'oklch(100% 0 0)', borderRadius: '12px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 60px oklch(0% 0 0 / 0.2)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid oklch(90% 0.006 260)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'oklch(42% 0.18 280 / 0.12)', display: 'grid', placeItems: 'center' }}>
+              <Sparkles style={{ width: '14px', height: '14px', color: 'oklch(42% 0.18 280)' }} />
+            </div>
+            <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Conseil IA</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'oklch(52% 0.012 260)', display: 'grid', placeItems: 'center', padding: '4px' }}>
+            <X style={{ width: '16px', height: '16px' }} />
+          </button>
+        </div>
+
+        {/* Alert context */}
+        <div style={{ padding: '14px 20px', background: 'oklch(97% 0.005 260)', borderBottom: '1px solid oklch(90% 0.006 260)', fontSize: '12px', color: 'oklch(40% 0.012 260)' }}>
+          <span style={{ fontWeight: 600 }}>{alert.source_label}</span>
+          <span style={{ margin: '0 6px', color: 'oklch(65% 0.008 260)' }}>·</span>
+          {alert.message}
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '20px', minHeight: '120px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {!advice && !loading && !error && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', textAlign: 'center' }}>
+              <p style={{ fontSize: '13px', color: 'oklch(52% 0.012 260)', margin: 0 }}>
+                Obtenez un conseil personnalisé pour résoudre cette alerte.
+              </p>
+              <button onClick={fetchAdvice} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 18px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                <Sparkles style={{ width: '13px', height: '13px' }} />
+                Générer un conseil
+              </button>
+            </div>
+          )}
+
+          {loading && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+              <Loader2 style={{ width: '22px', height: '22px', color: 'oklch(42% 0.18 280)', animation: 'spin 1s linear infinite' }} />
+              <p style={{ fontSize: '12.5px', color: 'oklch(52% 0.012 260)', margin: 0 }}>Analyse en cours…</p>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ background: limitReached ? 'oklch(62% 0.18 52 / 0.1)' : 'oklch(55% 0.22 25 / 0.08)', borderRadius: '8px', padding: '14px', fontSize: '12.5px', color: limitReached ? 'oklch(62% 0.18 52)' : 'oklch(55% 0.22 25)' }}>
+              {error}
+            </div>
+          )}
+
+          {advice && (
+            <div style={{ background: 'oklch(42% 0.18 280 / 0.06)', borderRadius: '8px', padding: '14px', fontSize: '13px', color: 'oklch(18% 0.02 260)', lineHeight: 1.6, border: '1px solid oklch(42% 0.18 280 / 0.15)' }}>
+              {advice}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '14px 20px', borderTop: '1px solid oklch(90% 0.006 260)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+          <div style={{ fontSize: '11px', color: 'oklch(62% 0.012 260)' }}>
+            {remaining !== null && remaining >= 0
+              ? `${remaining} conseil${remaining !== 1 ? 's' : ''} restant${remaining !== 1 ? 's' : ''} ce mois`
+              : null}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {advice && !alert.is_resolved && (
+              <button onClick={() => { onResolve(); onClose(); }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(62% 0.16 155 / 0.12)', color: 'oklch(40% 0.16 155)', border: '1px solid oklch(62% 0.16 155 / 0.3)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+                J'ai appliqué — Marquer comme traité
+              </button>
+            )}
+            <button onClick={onClose} style={{ padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type TabFilter = 'all' | 'open' | 'review' | 'closed';
 
 export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) {
@@ -97,6 +206,7 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
   const [search, setSearch] = useState('');
   const [sevFilter, setSevFilter] = useState('all');
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(alerts[0] ?? null);
+  const [adviceAlert, setAdviceAlert] = useState<Alert | null>(null);
 
   const openAlerts    = alerts.filter((a) => !a.is_resolved);
   const closedAlerts  = alerts.filter((a) => a.is_resolved);
@@ -291,11 +401,10 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
 
             {/* Actions */}
             <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
-                Assigner à un analyste
-              </button>
-              <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
-                Ajouter un commentaire
+              <button onClick={() => setAdviceAlert(sel)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+                <Sparkles style={{ width: '13px', height: '13px' }} />
+                Conseiller IA
               </button>
               {!sel.is_resolved && (
                 <button onClick={() => { onResolveAlert(sel.id); setSelectedAlert(null); }}
@@ -307,6 +416,14 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
           </div>
         )}
       </div>
+
+      {adviceAlert && (
+        <AdviceModal
+          alert={adviceAlert}
+          onClose={() => setAdviceAlert(null)}
+          onResolve={() => { onResolveAlert(adviceAlert.id); setSelectedAlert(null); }}
+        />
+      )}
     </div>
   );
 }

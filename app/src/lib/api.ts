@@ -283,6 +283,9 @@ export const api = {
         body: JSON.stringify({ ids }),
       });
     },
+    getAdvice(id: string): Promise<{ advice: string; remaining: number; limit: number }> {
+      return request(`/alerts/${id}/advice`, { method: 'POST' });
+    },
   },
 
   auditTrail: {

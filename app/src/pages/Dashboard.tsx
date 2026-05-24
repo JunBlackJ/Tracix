@@ -131,6 +131,10 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
   const openAlerts = alerts.filter(a => !a.is_resolved).length;
 
   const riskDist = stats?.riskDistribution ?? { crit: 0, high: 0, med: 0, low: 0 };
+  const adminCount      = stats?.adminCount ?? 0;
+  const mfaDisabled     = stats?.mfaDisabledCount ?? 0;
+  const inactiveAccess  = stats?.inactiveWithAccess ?? 0;
+  const multiPlatform   = stats?.multiPlatformCount ?? 0;
 
   const feedDotColor = (entry: AuditTrail) =>
     entry.action.includes('delete') || entry.action.includes('revoke') ? 'oklch(55% 0.22 25)'
@@ -227,10 +231,10 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
           <Gauge score={avgScore} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 16 }}>
             {[
-              { label: 'Accès privilégiés', val: 74, color: 'oklch(62% 0.18 52)' },
-              { label: 'MFA désactivé', val: 68, color: 'oklch(62% 0.18 52)' },
-              { label: 'Inactivité prolongée', val: 55, color: 'oklch(70% 0.14 88)' },
-              { label: 'Accès multi-plateformes', val: 51, color: 'oklch(70% 0.14 88)' },
+              { label: 'Accès privilégiés (admin)', val: adminCount,     color: 'oklch(62% 0.18 52)' },
+              { label: 'MFA désactivé',             val: mfaDisabled,    color: 'oklch(62% 0.18 52)' },
+              { label: 'Inactifs avec accès',       val: inactiveAccess, color: 'oklch(70% 0.14 88)' },
+              { label: 'Accès multi-plateformes',   val: multiPlatform,  color: 'oklch(70% 0.14 88)' },
             ].map(row => (
               <div key={row.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, padding: '0 20px' }}>
                 <span style={{ color: 'oklch(52% 0.012 260)' }}>{row.label}</span>

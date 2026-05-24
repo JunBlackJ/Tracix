@@ -42,6 +42,9 @@ export interface DashboardStats {
   riskByTeam: { team: string; score: number; count: number }[];
   accessLevelDistribution: { name: string; value: number; color: string }[];
   riskHistory: { date: string; score: number }[];
+  mfaDisabledCount: number;
+  inactiveWithAccess: number;
+  multiPlatformCount: number;
 }
 
 // ─── Core request function ───

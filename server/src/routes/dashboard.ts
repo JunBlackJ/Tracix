@@ -38,6 +38,31 @@ router.get('/stats', async (req: Request, res: Response): Promise<void> => {
 
   const adminCount = allAccessRights.filter((a) => a.level === 'admin').length;
 
+  // Platforms without MFA that have at least one admin account
+  const platformsWithAdmin = new Set(
+    allAccessRights.filter((a) => a.level === 'admin').map((a) => a.platform_id)
+  );
+  const mfaDisabledCount = platforms.filter(
+    (p) => !p.has_mfa && platformsWithAdmin.has(p.id)
+  ).length;
+
+  // Members inactive/suspended who still have active access rights
+  const inactiveMembers = new Set(
+    allMembers.filter((m) => m.status === 'inactif' || m.status === 'suspendu').map((m) => m.id)
+  );
+  const inactiveWithAccess = allAccessRights.filter(
+    (a) => a.level !== 'none' && inactiveMembers.has(a.member_id)
+  ).length;
+
+  // Members with access to >= 3 platforms
+  const accessCountByMember = new Map<string, number>();
+  for (const ar of allAccessRights) {
+    if (ar.level !== 'none') {
+      accessCountByMember.set(ar.member_id, (accessCountByMember.get(ar.member_id) ?? 0) + 1);
+    }
+  }
+  const multiPlatformCount = [...accessCountByMember.values()].filter((n) => n >= 3).length;
+
   const overdueThreshold = new Date(now.getTime() - org.access_review_delay_days * 24 * 60 * 60 * 1000);
   const overdueReviews = allAccessRights.filter((a) => {
     if (!a.last_review_date) return false;
@@ -144,6 +169,9 @@ router.get('/stats', async (req: Request, res: Response): Promise<void> => {
     riskByTeam,
     accessLevelDistribution,
     riskHistory,
+    mfaDisabledCount,
+    inactiveWithAccess,
+    multiPlatformCount,
   });
 });
 

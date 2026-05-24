@@ -3,14 +3,248 @@
 // ═══════════════════════════════════════════
 
 import { useState } from 'react';
-import { Search, X, Sparkles, Loader2 } from 'lucide-react';
-import type { Alert } from '@/types';
+import { Search, X, Sparkles, Loader2, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import type { Alert, AccessRight, Member, System, NetworkFlow, Subscription } from '@/types';
 import { api } from '@/lib/api';
 
 interface AlertesProps {
   onResolveAlert: (id: string) => void;
   onResolveAll: (ids: string[]) => void;
   alerts: Alert[];
+}
+
+// ─── Revoke Modal (2 steps: warning → edit form) ───
+type SourceData = AccessRight | Member | System | NetworkFlow | Subscription | null;
+
+function RevokeModal({ alert, onClose, onDone }: { alert: Alert; onClose: () => void; onDone: () => void }) {
+  const [step, setStep] = useState<'warning' | 'edit' | 'saving' | 'saved'>('warning');
+  const [sourceData, setSourceData] = useState<SourceData>(null);
+  const [loadingData, setLoadingData] = useState(false);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function loadAndEdit() {
+    setLoadingData(true);
+    const { source_module, source_id } = alert;
+
+    const fetch =
+      source_module === 'habilitation' ? api.accessRights.get(source_id) :
+      source_module === 'système'      ? api.systems.get(source_id) :
+      source_module === 'réseau'       ? api.networkFlows.get(source_id) :
+      source_module === 'abonnement'   ? api.subscriptions.get(source_id) :
+      null;
+
+    if (!fetch) {
+      setStep('edit');
+      setLoadingData(false);
+      return;
+    }
+
+    (fetch as Promise<SourceData>)
+      .then((data) => {
+        setSourceData(data);
+        // Pre-fill editable fields based on module
+        if (source_module === 'habilitation') {
+          const ar = data as AccessRight;
+          setFields({ level: ar.level, notes: ar.notes ?? '' });
+        } else if (source_module === 'système') {
+          const s = data as System;
+          setFields({ status: s.status, notes: s.notes ?? '' });
+        } else if (source_module === 'réseau') {
+          const f = data as NetworkFlow;
+          setFields({ status: f.status, notes: '' });
+        } else if (source_module === 'abonnement') {
+          const sub = data as Subscription;
+          setFields({ status: sub.status, notes: sub.notes ?? '' });
+        }
+        setStep('edit');
+        setLoadingData(false);
+      })
+      .catch(() => {
+        setStep('edit');
+        setLoadingData(false);
+      });
+  }
+
+  function save() {
+    setSaveError(null);
+    setStep('saving');
+    const { source_module, source_id } = alert;
+
+    let promise: Promise<unknown> | null = null;
+    if (source_module === 'habilitation') {
+      promise = api.accessRights.update(source_id, { level: fields.level as AccessRight['level'], notes: fields.notes });
+    } else if (source_module === 'système') {
+      promise = api.systems.update(source_id, { status: fields.status as System['status'], notes: fields.notes });
+    } else if (source_module === 'réseau') {
+      promise = api.networkFlows.update(source_id, { status: fields.status as NetworkFlow['status'] });
+    } else if (source_module === 'abonnement') {
+      promise = api.subscriptions.update(source_id, { status: fields.status as Subscription['status'], notes: fields.notes });
+    }
+
+    if (!promise) { setStep('saved'); onDone(); return; }
+
+    promise
+      .then(() => { setStep('saved'); onDone(); })
+      .catch((err: Error) => { setSaveError(err.message || 'Erreur lors de la sauvegarde.'); setStep('edit'); });
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'oklch(0% 0 0 / 0.45)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={onClose}>
+      <div style={{ background: 'oklch(100% 0 0)', borderRadius: '12px', width: '100%', maxWidth: '460px', boxShadow: '0 20px 60px oklch(0% 0 0 / 0.2)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid oklch(90% 0.006 260)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: 'oklch(55% 0.22 25 / 0.12)', display: 'grid', placeItems: 'center' }}>
+              <ShieldAlert style={{ width: '14px', height: '14px', color: 'oklch(55% 0.22 25)' }} />
+            </div>
+            <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Révoquer les accès</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'oklch(52% 0.012 260)', display: 'grid', placeItems: 'center', padding: '4px' }}>
+            <X style={{ width: '16px', height: '16px' }} />
+          </button>
+        </div>
+
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Step 1 — Warning */}
+          {step === 'warning' && (
+            <>
+              <div style={{ background: 'oklch(62% 0.18 52 / 0.1)', border: '1px solid oklch(62% 0.18 52 / 0.25)', borderRadius: '8px', padding: '14px 16px', display: 'flex', gap: '12px' }}>
+                <ShieldAlert style={{ width: '18px', height: '18px', color: 'oklch(62% 0.18 52)', flexShrink: 0, marginTop: '1px' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'oklch(40% 0.14 52)', marginBottom: '6px' }}>Tracix ne révoque pas automatiquement les accès</div>
+                  <div style={{ fontSize: '12.5px', color: 'oklch(45% 0.08 52)', lineHeight: 1.6 }}>
+                    Cette action doit d'abord être effectuée <strong>directement sur la plateforme concernée</strong> par un administrateur habilité.<br /><br />
+                    Une fois que vous l'avez fait en dehors de Tracix, revenez ici pour mettre à jour le statut dans le système.
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={onClose} style={{ padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+                  Annuler
+                </button>
+                <button onClick={() => { loadAndEdit(); }} disabled={loadingData}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 16px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: loadingData ? 'wait' : 'pointer', opacity: loadingData ? 0.7 : 1 }}>
+                  {loadingData && <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />}
+                  Je l'ai fait, mettre à jour Tracix
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Step 2 — Edit form */}
+          {(step === 'edit' || step === 'saving') && (
+            <>
+              <div style={{ fontSize: '12.5px', color: 'oklch(52% 0.012 260)' }}>
+                Modifiez les informations ci-dessous pour refléter la situation réelle.
+              </div>
+
+              {saveError && (
+                <div style={{ background: 'oklch(55% 0.22 25 / 0.08)', borderRadius: '6px', padding: '10px 12px', fontSize: '12px', color: 'oklch(55% 0.22 25)' }}>{saveError}</div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {alert.source_module === 'habilitation' && (
+                  <>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Niveau d'accès</span>
+                      <select value={fields.level ?? ''} onChange={(e) => setFields((f) => ({ ...f, level: e.target.value }))}
+                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '13px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        <option value="admin">Admin</option>
+                        <option value="rw">Lecture / Écriture (RW)</option>
+                        <option value="ro">Lecture seule (RO)</option>
+                        <option value="req">Sur demande (REQ)</option>
+                        <option value="none">Aucun accès (révoqué)</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes</span>
+                      <textarea value={fields.notes ?? ''} onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))} rows={3}
+                        placeholder="Ex: Accès révoqué suite au départ du collaborateur…"
+                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
+                    </label>
+                  </>
+                )}
+                {alert.source_module === 'système' && (
+                  <>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Statut du système</span>
+                      <select value={fields.status ?? ''} onChange={(e) => setFields((f) => ({ ...f, status: e.target.value }))}
+                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '13px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        <option value="actif">Actif</option>
+                        <option value="inactif">Inactif</option>
+                        <option value="maintenance">En maintenance</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes</span>
+                      <textarea value={fields.notes ?? ''} onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))} rows={3}
+                        placeholder="Ex: Système isolé du réseau suite à la vulnérabilité CVE-…"
+                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
+                    </label>
+                  </>
+                )}
+                {alert.source_module === 'réseau' && (
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Statut du flux</span>
+                    <select value={fields.status ?? ''} onChange={(e) => setFields((f) => ({ ...f, status: e.target.value }))}
+                      style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '13px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      <option value="autorisé">Autorisé</option>
+                      <option value="bloqué">Bloqué</option>
+                      <option value="conditionnel">Conditionnel</option>
+                    </select>
+                  </label>
+                )}
+                {alert.source_module === 'abonnement' && (
+                  <>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Statut de l'abonnement</span>
+                      <select value={fields.status ?? ''} onChange={(e) => setFields((f) => ({ ...f, status: e.target.value }))}
+                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '13px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        <option value="actif">Actif</option>
+                        <option value="à_résilier">À résilier</option>
+                        <option value="expiré">Expiré</option>
+                        <option value="en_négociation">En négociation</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'oklch(40% 0.012 260)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes</span>
+                      <textarea value={fields.notes ?? ''} onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))} rows={3}
+                        placeholder="Ex: Abonnement résilié le …"
+                        style={{ padding: '8px 10px', border: '1px solid oklch(85% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
+                    </label>
+                  </>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={onClose} style={{ padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+                  Annuler
+                </button>
+                <button onClick={save} disabled={step === 'saving'}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 16px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: step === 'saving' ? 'wait' : 'pointer', opacity: step === 'saving' ? 0.7 : 1 }}>
+                  {step === 'saving' && <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} />}
+                  Enregistrer
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Step 3 — Saved */}
+          {step === 'saved' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '12px 0' }}>
+              <CheckCircle2 style={{ width: '40px', height: '40px', color: 'oklch(62% 0.16 155)' }} />
+              <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Mis à jour avec succès</div>
+              <div style={{ fontSize: '12.5px', color: 'oklch(52% 0.012 260)', textAlign: 'center' }}>Les modifications ont été enregistrées dans Tracix.</div>
+              <button onClick={onClose} style={{ padding: '7px 20px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+                Fermer
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Helpers ───
@@ -207,6 +441,7 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
   const [sevFilter, setSevFilter] = useState('all');
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(alerts[0] ?? null);
   const [adviceAlert, setAdviceAlert] = useState<Alert | null>(null);
+  const [revokeAlert, setRevokeAlert] = useState<Alert | null>(null);
 
   const openAlerts    = alerts.filter((a) => !a.is_resolved);
   const closedAlerts  = alerts.filter((a) => a.is_resolved);
@@ -407,7 +642,7 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
                 Conseiller IA
               </button>
               {!sel.is_resolved && (
-                <button onClick={() => { onResolveAlert(sel.id); setSelectedAlert(null); }}
+                <button onClick={() => setRevokeAlert(sel)}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(55% 0.22 25 / 0.1)', color: 'oklch(55% 0.22 25)', border: '1px solid oklch(55% 0.22 25 / 0.2)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
                   Révoquer les accès
                 </button>
@@ -422,6 +657,14 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
           alert={adviceAlert}
           onClose={() => setAdviceAlert(null)}
           onResolve={() => { onResolveAlert(adviceAlert.id); setSelectedAlert(null); }}
+        />
+      )}
+
+      {revokeAlert && (
+        <RevokeModal
+          alert={revokeAlert}
+          onClose={() => setRevokeAlert(null)}
+          onDone={() => { onResolveAlert(revokeAlert.id); setSelectedAlert(null); setRevokeAlert(null); }}
         />
       )}
     </div>

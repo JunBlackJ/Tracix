@@ -1,14 +1,13 @@
 // ═══════════════════════════════════════════
-// Page Habilitations — Matrice croisée interactive
+// Page Habilitations — Sidebar plateforme + table permissions
 // ═══════════════════════════════════════════
 
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Shield, Search, FileText, RotateCcw, X, ChevronRight, Clock, UserCheck, UserX, Edit3,
-  CheckCircle2, AlertTriangle, Loader2, CheckSquare, Square, ShieldOff, ShieldCheck, GitBranch,
+  CheckCircle2, AlertTriangle, Loader2, Plus, Download,
 } from 'lucide-react';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { ACCESS_LEVEL_CONFIG, getRiskColor } from '@/types';
 import type { AccessLevel, Member, Platform, AccessRight } from '@/types';
 import { api } from '@/lib/api';
@@ -24,446 +23,342 @@ interface HabilitationsProps {
   accessRights: AccessRight[];
 }
 
+// ─── Helpers ───
+function Pill({ variant, children }: { variant: 'crit' | 'high' | 'med' | 'low' | 'brand' | 'neutral'; children: React.ReactNode }) {
+  const s: Record<string, React.CSSProperties> = {
+    crit:    { background: 'oklch(55% 0.22 25 / 0.1)',  color: 'oklch(55% 0.22 25)' },
+    high:    { background: 'oklch(62% 0.18 52 / 0.1)',  color: 'oklch(62% 0.18 52)' },
+    med:     { background: 'oklch(70% 0.14 88 / 0.1)',  color: 'oklch(70% 0.14 88)' },
+    low:     { background: 'oklch(62% 0.16 155 / 0.1)', color: 'oklch(62% 0.16 155)' },
+    brand:   { background: 'oklch(42% 0.18 280 / 0.12)', color: 'oklch(42% 0.18 280)' },
+    neutral: { background: 'oklch(52% 0.012 260 / 0.1)', color: 'oklch(52% 0.012 260)' },
+  };
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap', ...s[variant] }}>
+      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
+      {children}
+    </span>
+  );
+}
+
+function KpiCard({ label, value, delta, deltaDir, color, path }: { label: string; value: string | number; delta: string; deltaDir: 'up' | 'down' | 'neutral'; color: string; path: string }) {
+  const deltaColor = deltaDir === 'up' ? 'oklch(62% 0.16 155)' : deltaDir === 'down' ? 'oklch(55% 0.22 25)' : 'oklch(52% 0.012 260)';
+  return (
+    <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: color, borderRadius: '10px 10px 0 0' }} />
+      <div style={{ position: 'absolute', top: '16px', right: '16px', width: '36px', height: '36px', borderRadius: '8px', background: color, opacity: 0.12 }} />
+      <div style={{ position: 'absolute', top: '16px', right: '16px', width: '36px', height: '36px', display: 'grid', placeItems: 'center' }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}><path d={path} /></svg>
+      </div>
+      <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'oklch(52% 0.012 260)' }}>{label}</div>
+      <div style={{ fontSize: '32px', fontWeight: 700, lineHeight: 1, fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", color: 'oklch(18% 0.02 260)' }}>{value}</div>
+      <div style={{ fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", color: deltaColor }}>{delta}</div>
+    </div>
+  );
+}
+
 export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platforms, accessRights }: HabilitationsProps) {
   const navigate = useNavigate();
-  const [teamFilter, setTeamFilter] = useState<string>('all');
-  const [levelFilter, setLevelFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('actif');
-  const [showRisksOnly, setShowRisksOnly] = useState(false);
+  const [selectedPlatformId, setSelectedPlatformId] = useState<string>(platforms[0]?.id ?? '');
   const [search, setSearch] = useState('');
-  const [selectedCell, setSelectedCell] = useState<{ member: Member; platform: Platform; rightId: string; level: AccessLevel } | null>(null);
-  const [editLevel, setEditLevel] = useState<AccessLevel>('none');
-  const [editNote, setEditNote] = useState('');
+  const [levelFilter, setLevelFilter] = useState('all');
+  const [expiryFilter, setExpiryFilter] = useState('all');
   const [showRevue, setShowRevue] = useState(false);
-  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
-  const [bulkLoading, setBulkLoading] = useState(false);
+  const [editRight, setEditRight] = useState<AccessRight | null>(null);
+  const [editLevel, setEditLevel] = useState<AccessLevel>('ro');
+  const [editNote, setEditNote] = useState('');
 
-  const teams = useMemo(() => [...new Set(members.map((m) => m.team))], [members]);
   const activePlatforms = useMemo(() => platforms.filter((p) => p.status === 'actif'), [platforms]);
 
-  const filteredMembers = useMemo(() => {
-    return members.filter((m) => {
-      if (teamFilter !== 'all' && m.team !== teamFilter) return false;
-      if (statusFilter !== 'all' && m.status !== statusFilter) return false;
-      if (search && !m.full_name.toLowerCase().includes(search.toLowerCase())) return false;
-      if (showRisksOnly && m.risk_score > 60) return false;
+  const platformRights = useMemo(() => {
+    if (!selectedPlatformId) return [];
+    return accessRights.filter((a) => a.platform_id === selectedPlatformId && a.level !== 'none');
+  }, [accessRights, selectedPlatformId]);
+
+  const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+
+  const filteredRights = useMemo(() => {
+    return platformRights.filter((a) => {
+      const m = memberById.get(a.member_id);
+      if (search && !m?.full_name.toLowerCase().includes(search.toLowerCase())) return false;
+      if (levelFilter !== 'all' && a.level !== levelFilter) return false;
+      if (expiryFilter === 'expired' && a.next_review_date && new Date(a.next_review_date) >= new Date()) return false;
+      if (expiryFilter === '7d') {
+        const d = a.next_review_date ? new Date(a.next_review_date) : null;
+        if (!d || d > new Date(Date.now() + 7 * 86400000)) return false;
+      }
+      if (expiryFilter === '30d') {
+        const d = a.next_review_date ? new Date(a.next_review_date) : null;
+        if (!d || d > new Date(Date.now() + 30 * 86400000)) return false;
+      }
       return true;
-    }).sort((a, b) => b.risk_score - a.risk_score);
-  }, [members, teamFilter, statusFilter, search, showRisksOnly]);
-
-  const getAccessLevel = (memberId: string, platformId: string): AccessLevel => {
-    const right = accessRights.find((a) => a.member_id === memberId && a.platform_id === platformId);
-    return right ? right.level : 'none';
-  };
-
-  const handleCellClick = (member: Member, platform: Platform) => {
-    const right = accessRights.find((a) => a.member_id === member.id && a.platform_id === platform.id);
-    if (right) {
-      setSelectedCell({ member, platform, rightId: right.id, level: right.level });
-      setEditLevel(right.level);
-      setEditNote('');
-    }
-  };
-
-  const handleSave = () => {
-    if (selectedCell) {
-      onUpdateAccess(selectedCell.rightId, editLevel, editNote);
-    }
-    setSelectedCell(null);
-  };
-
-  const handleRevoke = () => {
-    if (selectedCell) {
-      onRevokeAccess(selectedCell.rightId, editNote || 'Révocation via matrice');
-    }
-    setSelectedCell(null);
-  };
-
-  const toggleMemberSelection = (memberId: string) => {
-    setSelectedMembers((prev) => {
-      const next = new Set(prev);
-      if (next.has(memberId)) next.delete(memberId);
-      else next.add(memberId);
-      return next;
     });
+  }, [platformRights, search, levelFilter, expiryFilter, memberById]);
+
+  const totalActive = accessRights.filter((a) => a.level !== 'none').length;
+  const adminCount  = accessRights.filter((a) => a.level === 'admin').length;
+  const soon30      = accessRights.filter((a) => {
+    const d = a.next_review_date ? new Date(a.next_review_date) : null;
+    return d && d > new Date() && d <= new Date(Date.now() + 30 * 86400000);
+  }).length;
+
+  const handleEdit = (right: AccessRight) => {
+    setEditRight(right);
+    setEditLevel(right.level);
+    setEditNote('');
   };
 
-  const toggleSelectAll = () => {
-    if (selectedMembers.size === filteredMembers.length) {
-      setSelectedMembers(new Set());
-    } else {
-      setSelectedMembers(new Set(filteredMembers.map((m) => m.id)));
-    }
+  const handleSaveEdit = () => {
+    if (!editRight) return;
+    onUpdateAccess(editRight.id, editLevel, editNote || 'Modification via habilitations');
+    setEditRight(null);
   };
 
-  const handleBulkRevoke = async () => {
-    const targetMembers = filteredMembers.filter((m) => selectedMembers.has(m.id));
-    const rights = accessRights.filter(
-      (a) => selectedMembers.has(a.member_id) && a.level !== 'none'
-    );
-    if (rights.length === 0) { toast.info('Aucun accès actif à révoquer'); return; }
-    if (!confirm(`Révoquer ${rights.length} droit(s) pour ${targetMembers.length} membre(s) ?`)) return;
-    setBulkLoading(true);
-    let done = 0;
-    for (const right of rights) {
-      try {
-        await api.accessRights.revoke(right.id, 'Révocation en masse');
-        onRevokeAccess(right.id, 'Révocation en masse');
-        done++;
-      } catch { /* continue */ }
-    }
-    setBulkLoading(false);
-    setSelectedMembers(new Set());
-    toast.success(`${done} accès révoqué(s)`);
+  const handleRevoke = (right: AccessRight) => {
+    onRevokeAccess(right.id, 'Révocation via habilitations');
   };
 
-  const handleBulkConfirmReview = async () => {
-    const rights = accessRights.filter(
-      (a) => selectedMembers.has(a.member_id) && a.level !== 'none'
-    );
-    if (rights.length === 0) { toast.info('Aucun accès actif'); return; }
-    setBulkLoading(true);
-    let done = 0;
-    for (const right of rights) {
-      try {
-        await api.accessRights.updateLevel(right.id, right.level, 'Revue confirmée en masse');
-        onUpdateAccess(right.id, right.level, 'Revue confirmée en masse');
-        done++;
-      } catch { /* continue */ }
-    }
-    setBulkLoading(false);
-    setSelectedMembers(new Set());
-    toast.success(`${done} accès confirmé(s)`);
+  const ROLE_MAP: Record<AccessLevel, { variant: 'crit' | 'high' | 'brand'; label: string }> = {
+    admin: { variant: 'crit', label: 'Admin' },
+    rw:    { variant: 'high', label: 'Opérateur' },
+    ro:    { variant: 'brand', label: 'Lecteur' },
+    req:   { variant: 'brand', label: 'Demande' },
+    none:  { variant: 'brand', label: '—' },
   };
 
-  const getCellDisplay = (memberId: string, platformId: string) => {
-    const level = getAccessLevel(memberId, platformId);
-    const cfg = ACCESS_LEVEL_CONFIG[level];
-    return { level, cfg };
+  const PERM_TAGS: Record<AccessLevel, { label: string; type: 'admin' | 'write' | 'read' }[]> = {
+    admin: [{ label: 'AdminFull', type: 'admin' }, { label: 'Write', type: 'write' }, { label: 'Read', type: 'read' }],
+    rw:    [{ label: 'Write', type: 'write' }, { label: 'Read', type: 'read' }],
+    ro:    [{ label: 'Read', type: 'read' }],
+    req:   [{ label: 'Request', type: 'read' }],
+    none:  [],
   };
 
-  const selectedRight = selectedCell
-    ? accessRights.find((a) => a.id === selectedCell.rightId)
-    : undefined;
+  const selectedPlatform = platforms.find((p) => p.id === selectedPlatformId);
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Topbar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Matrice d'habilitation</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{members.length} membres × {activePlatforms.length} plateformes</p>
+          <div style={{ fontSize: '15px', fontWeight: 600 }}>Habilitations</div>
+          <div style={{ fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>Droits d'accès par plateforme</div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowRevue(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Lancer une revue
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={() => generateHabPDF(members, platforms, accessRights)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+            <Download style={{ width: '14px', height: '14px' }} />
+            Exporter
           </button>
           <button
-            onClick={() => generateHabPDF(filteredMembers, activePlatforms, accessRights)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            <FileText className="w-4 h-4" />
-            Rapport PDF
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+            <Plus style={{ width: '14px', height: '14px' }} />
+            Nouvelle habilitation
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
-        <div className="flex flex-wrap gap-3">
-          <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un membre..."
-              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 w-48 focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] outline-none"
-            />
+      {/* KPI grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
+        <KpiCard label="Habilitations actives" value={totalActive.toLocaleString('fr-FR')} delta="→ Stable sur 30 j" deltaDir="neutral" color="oklch(42% 0.18 280)" path="M3 11h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V11z M7 11V7a5 5 0 0110 0v4" />
+        <KpiCard label="Droits Admin" value={adminCount} delta={`↑ +${Math.max(0, adminCount - 200)} ce mois-ci`} deltaDir="down" color="oklch(55% 0.22 25)" path="M12 3L4 7v5c0 4.418 3.582 8 8 9 4.418-1 8-4.582 8-9V7l-8-4z" />
+        <KpiCard label="À renouveler sous 30 j" value={soon30} delta={`Expirent avant 30/06`} deltaDir="neutral" color="oklch(70% 0.14 88)" path="M12 2a10 10 0 100 20A10 10 0 0012 2z M12 6v6l4 2" />
+        <KpiCard label="Plateformes couvertes" value={activePlatforms.length} delta={`↑ +${Math.max(0, activePlatforms.length - 16)} nouveaux services`} deltaDir="up" color="oklch(62% 0.16 155)" path="M2 3h20v14a2 2 0 01-2 2H4a2 2 0 01-2-2V3z M8 21h8 M12 17v4" />
+      </div>
+
+      {/* Main layout: 300px platform list + 1fr permissions table */}
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '16px' }}>
+        {/* Platform list */}
+        <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: '10px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600 }}>Plateformes</span>
+            <span style={{ fontSize: '11px', color: 'oklch(52% 0.012 260)' }}>— {activePlatforms.length} services</span>
           </div>
-          <select
-            value={teamFilter}
-            onChange={(e) => setTeamFilter(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] outline-none"
-          >
-            <option value="all">Toutes les équipes</option>
-            {teams.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <select
-            value={levelFilter}
-            onChange={(e) => setLevelFilter(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] outline-none"
-          >
-            <option value="all">Tous les niveaux</option>
-            <option value="admin">Admin uniquement</option>
-            <option value="rw">RW et plus</option>
-            <option value="ro">RO et plus</option>
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] outline-none"
-          >
-            <option value="actif">Actifs</option>
-            <option value="all">Tous les statuts</option>
-          </select>
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showRisksOnly}
-              onChange={(e) => setShowRisksOnly(e.target.checked)}
-              className="rounded border-gray-300 text-[#534AB7] focus:ring-[#534AB7]"
-            />
-            Masquer les accès vides
-          </label>
-        </div>
-      </div>
-
-      {/* Empty state — no members at all */}
-      {members.length === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200">
-          <EmptyState
-            icon={GitBranch}
-            title="Aucun membre ni plateforme"
-            description="Ajoutez des membres et des plateformes pour commencer à gérer les droits d'accès."
-            action={{ label: 'Importer des données', onClick: () => navigate('/import') }}
-            hint="Conseil : importez une matrice d'habilitations Excel via le module Import IA."
-          />
-        </div>
-      )}
-
-      {/* Matrix */}
-      {members.length > 0 && <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left font-semibold text-gray-700 min-w-[200px] border-r border-gray-200">
-                  <div className="flex items-center gap-2">
-                    <button onClick={toggleSelectAll} className="text-gray-400 hover:text-[#534AB7] transition-colors flex-shrink-0">
-                      {selectedMembers.size === filteredMembers.length && filteredMembers.length > 0
-                        ? <CheckSquare className="w-4 h-4 text-[#534AB7]" />
-                        : <Square className="w-4 h-4" />
-                      }
-                    </button>
-                    <Shield className="w-4 h-4 text-[#534AB7]" />
-                    Membre
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {activePlatforms.map((p) => {
+              const count = accessRights.filter((a) => a.platform_id === p.id && a.level !== 'none').length;
+              const isSelected = p.id === selectedPlatformId;
+              return (
+                <div key={p.id} onClick={() => setSelectedPlatformId(p.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 16px', borderBottom: '1px solid oklch(90% 0.006 260)', cursor: 'pointer', background: isSelected ? 'oklch(42% 0.18 280 / 0.12)' : 'transparent', transition: 'background 0.1s' }}
+                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'oklch(97% 0.005 260)'; }}
+                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '7px', background: isSelected ? 'oklch(42% 0.18 280 / 0.12)' : 'oklch(90% 0.006 260)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <Shield style={{ width: '16px', height: '16px', color: isSelected ? 'oklch(42% 0.18 280)' : 'oklch(52% 0.012 260)' }} />
                   </div>
-                </th>
-                {activePlatforms.map((p) => (
-                  <th key={p.id} className="px-3 py-3 text-center font-semibold text-gray-700 min-w-[100px] border-r border-gray-100 last:border-r-0">
-                    <div className="text-xs">{p.name}</div>
-                    <div className="text-[10px] text-gray-400 font-normal">{p.category}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredMembers.map((member) => (
-                <tr key={member.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
-                  <td
-                    className={`sticky left-0 z-10 px-4 py-2.5 border-r border-gray-200 ${selectedMembers.has(member.id) ? 'bg-[#534AB7]/5' : 'bg-white hover:bg-gray-50'}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); toggleMemberSelection(member.id); }}
-                        className="text-gray-400 hover:text-[#534AB7] transition-colors flex-shrink-0"
-                      >
-                        {selectedMembers.has(member.id)
-                          ? <CheckSquare className="w-4 h-4 text-[#534AB7]" />
-                          : <Square className="w-4 h-4" />
-                        }
-                      </button>
-                      <div
-                        className="flex items-center gap-2 flex-1 cursor-pointer"
-                        onClick={() => navigate(`/membres/${member.id}`)}
-                      >
-                        <div
-                          className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: getRiskColor(member.risk_score) }}
-                        />
-                        <div>
-                          <div className="font-medium text-gray-900 text-xs">{member.full_name}</div>
-                          <div className="text-[10px] text-gray-400">{member.team}</div>
-                        </div>
-                        <span
-                          className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded"
-                          style={{
-                            backgroundColor: `${getRiskColor(member.risk_score)}15`,
-                            color: getRiskColor(member.risk_score),
-                          }}
-                        >
-                          {member.risk_score}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-                  {activePlatforms.map((platform) => {
-                    const { level, cfg } = getCellDisplay(member.id, platform.id);
-                    const isFiltered = levelFilter !== 'all' && level !== levelFilter && levelFilter === 'admin' && level !== 'admin';
-                    if (isFiltered) return <td key={platform.id} className="px-3 py-2.5 border-r border-gray-100" />;
-
-                    return (
-                      <td
-                        key={platform.id}
-                        className="px-3 py-2.5 text-center border-r border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
-                        onClick={() => handleCellClick(member, platform)}
-                      >
-                        <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold ${cfg.bg} ${cfg.text}`}>
-                          {cfg.label}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  <span style={{ fontSize: '13px', fontWeight: 500, flex: 1 }}>{p.name}</span>
+                  <span style={{ fontSize: '11px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", color: 'oklch(52% 0.012 260)' }}>{count.toLocaleString('fr-FR')}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>}
 
-      {/* Bulk action bar */}
-      {selectedMembers.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
-          <span className="text-sm font-medium">{selectedMembers.size} membre{selectedMembers.size > 1 ? 's' : ''} sélectionné{selectedMembers.size > 1 ? 's' : ''}</span>
-          <div className="w-px h-4 bg-white/20" />
-          <button
-            onClick={handleBulkConfirmReview}
-            disabled={bulkLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-          >
-            {bulkLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-            Confirmer les accès
-          </button>
-          <button
-            onClick={handleBulkRevoke}
-            disabled={bulkLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-          >
-            {bulkLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldOff className="w-3.5 h-3.5" />}
-            Révoquer tout
-          </button>
-          <button
-            onClick={() => setSelectedMembers(new Set())}
-            className="p-1 hover:bg-white/10 rounded-lg transition-colors"
-          >
-            <X className="w-4 h-4 text-white/60" />
-          </button>
-        </div>
-      )}
-
-      {/* Detail Drawer */}
-      {selectedCell && (
-        <>
-          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setSelectedCell(null)} />
-          <div className="fixed right-0 top-0 h-full w-[400px] max-w-full bg-white shadow-xl z-50 overflow-y-auto">
-            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Détail de l'accès</h3>
-              <button onClick={() => setSelectedCell(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
-                <X className="w-4 h-4 text-gray-400" />
+        {/* Permissions table */}
+        <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: '10px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600 }}>{selectedPlatform?.name ?? '—'}</span>
+            <span style={{ fontSize: '11px', color: 'oklch(52% 0.012 260)' }}>— {platformRights.length} habilitations</span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+              <button onClick={() => setShowRevue(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, cursor: 'pointer' }}>
+                <RotateCcw style={{ width: '13px', height: '13px' }} />
+                Révision de masse
+              </button>
+              <button style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, cursor: 'pointer' }}>
+                <Plus style={{ width: '13px', height: '13px' }} />
+                Attribuer
               </button>
             </div>
-            <div className="p-5 space-y-5">
-              {/* Membre */}
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#534AB7] flex items-center justify-center text-white font-medium">
-                  {selectedCell.member.full_name.charAt(0)}
-                </div>
-                <div>
-                  <p className="font-medium text-sm text-gray-900">{selectedCell.member.full_name}</p>
-                  <p className="text-xs text-gray-500">{selectedCell.member.team} · {selectedCell.member.account_type}</p>
-                </div>
-                <button
-                  onClick={() => { setSelectedCell(null); navigate(`/membres/${selectedCell.member.id}`); }}
-                  className="ml-auto text-[#534AB7] hover:underline text-xs flex items-center gap-1"
-                >
-                  Fiche <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
+          </div>
 
-              {/* Plateforme */}
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500">Plateforme</p>
-                <p className="font-medium text-sm text-gray-900">{selectedCell.platform.name}</p>
-                <p className="text-xs text-gray-500">{selectedCell.platform.category} · {selectedCell.platform.access_type}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedCell.platform.has_mfa ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {selectedCell.platform.has_mfa ? 'MFA activé' : 'Pas de MFA'}
-                  </span>
-                </div>
-              </div>
+          {/* Toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', borderBottom: '1px solid oklch(90% 0.006 260)', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '160px', maxWidth: '280px' }}>
+              <Search style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', color: 'oklch(52% 0.012 260)', pointerEvents: 'none' }} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un membre…"
+                style={{ width: '100%', padding: '7px 12px 7px 32px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(97% 0.005 260)', color: 'oklch(18% 0.02 260)', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.12s' }} />
+            </div>
+            <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)}
+              style={{ padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <option value="all">Tous les niveaux</option>
+              <option value="admin">Admin</option>
+              <option value="rw">Écriture</option>
+              <option value="ro">Lecture</option>
+            </select>
+            <select value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}
+              style={{ padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <option value="all">Toutes les expirations</option>
+              <option value="7d">Expire sous 7 j</option>
+              <option value="30d">Expire sous 30 j</option>
+              <option value="expired">Expiré</option>
+            </select>
+          </div>
 
-              {/* Current Level */}
+          {/* Table */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr>
+                  {['', 'Membre', 'Rôle', 'Permissions', 'Accordé par', 'Expiration', 'Statut', ''].map((h, i) => (
+                    <th key={i} style={{ textAlign: 'left', fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'oklch(52% 0.012 260)', padding: '10px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', whiteSpace: 'nowrap' }}>
+                      {h === '' && i === 0 ? <input type="checkbox" style={{ cursor: 'pointer' }} /> : h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRights.map((right) => {
+                  const m = memberById.get(right.member_id);
+                  if (!m) return null;
+                  const role = ROLE_MAP[right.level];
+                  const perms = PERM_TAGS[right.level] ?? [];
+                  const isExpired = right.next_review_date && new Date(right.next_review_date) < new Date();
+                  const expiresSoon = !isExpired && right.next_review_date && new Date(right.next_review_date) <= new Date(Date.now() + 30 * 86400000);
+                  let statusPill: { variant: 'crit' | 'med' | 'low'; label: string };
+                  if (isExpired) statusPill = { variant: 'crit', label: 'Expiré' };
+                  else if (expiresSoon) statusPill = { variant: 'med', label: 'Expire bientôt' };
+                  else statusPill = { variant: 'low', label: 'Actif' };
+
+                  return (
+                    <tr key={right.id} style={{ borderBottom: '1px solid oklch(90% 0.006 260)', transition: 'background 0.1s' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
+                      <td style={{ padding: '11px 20px' }}><input type="checkbox" style={{ cursor: 'pointer' }} /></td>
+                      <td style={{ padding: '11px 20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                          <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'oklch(42% 0.18 280 / 0.12)', display: 'grid', placeItems: 'center', fontSize: '10px', fontWeight: 700, color: 'oklch(42% 0.18 280)', flexShrink: 0 }}>
+                            {m.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </div>
+                          <span style={{ fontSize: '13px', fontWeight: 500 }}>{m.full_name}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '11px 20px' }}><Pill variant={role.variant}>{role.label}</Pill></td>
+                      <td style={{ padding: '11px 20px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {perms.map(({ label, type }) => (
+                            <span key={label} style={{
+                              fontSize: '10.5px', fontWeight: 600, padding: '2px 7px', borderRadius: '4px',
+                              fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace",
+                              background: type === 'admin' ? 'oklch(55% 0.22 25 / 0.1)' : type === 'write' ? 'oklch(42% 0.18 280 / 0.1)' : 'oklch(94% 0.005 260)',
+                              color: type === 'admin' ? 'oklch(55% 0.22 25)' : type === 'write' ? 'oklch(42% 0.18 280)' : 'oklch(52% 0.012 260)',
+                            }}>{label}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td style={{ padding: '11px 20px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>
+                        {right.granted_by || '—'}
+                      </td>
+                      <td style={{ padding: '11px 20px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", fontSize: '12px', color: isExpired ? 'oklch(55% 0.22 25)' : expiresSoon ? 'oklch(62% 0.18 52)' : 'oklch(52% 0.012 260)' }}>
+                        {right.next_review_date ? new Date(right.next_review_date).toLocaleDateString('fr-FR') : '—'}
+                      </td>
+                      <td style={{ padding: '11px 20px' }}><Pill variant={statusPill.variant}>{statusPill.label}</Pill></td>
+                      <td style={{ padding: '11px 20px' }}>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button onClick={() => handleEdit(right)} title="Modifier"
+                            style={{ display: 'grid', placeItems: 'center', width: '28px', height: '28px', borderRadius: '6px', border: '1px solid oklch(90% 0.006 260)', background: 'transparent', cursor: 'pointer', color: 'oklch(52% 0.012 260)', transition: 'all 0.12s' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.borderColor = 'oklch(42% 0.18 280)'; e.currentTarget.style.color = 'oklch(42% 0.18 280)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'oklch(90% 0.006 260)'; e.currentTarget.style.color = 'oklch(52% 0.012 260)'; }}>
+                            <Edit3 style={{ width: '14px', height: '14px' }} />
+                          </button>
+                          <button onClick={() => handleRevoke(right)} title="Révoquer"
+                            style={{ display: 'grid', placeItems: 'center', width: '28px', height: '28px', borderRadius: '6px', border: '1px solid oklch(90% 0.006 260)', background: 'transparent', cursor: 'pointer', color: 'oklch(55% 0.22 25)', transition: 'all 0.12s' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'oklch(55% 0.22 25 / 0.08)'; e.currentTarget.style.borderColor = 'oklch(55% 0.22 25 / 0.3)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'oklch(90% 0.006 260)'; }}>
+                            <X style={{ width: '14px', height: '14px' }} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredRights.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center', color: 'oklch(52% 0.012 260)', fontSize: '13px' }}>
+                      Aucune habilitation pour cette plateforme
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Edit modal */}
+      {editRight && (() => {
+        const m = memberById.get(editRight.member_id);
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'oklch(0% 0 0 / 0.4)' }}>
+            <div style={{ background: 'oklch(100% 0 0)', borderRadius: '10px', boxShadow: '0 20px 60px oklch(0% 0 0 / 0.3)', width: '100%', maxWidth: '400px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>Modifier le niveau d'accès</span>
+                <button onClick={() => setEditRight(null)} style={{ padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer' }}><X style={{ width: '16px', height: '16px', color: 'oklch(52% 0.012 260)' }} /></button>
+              </div>
+              <div style={{ fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>{m?.full_name} → {selectedPlatform?.name}</div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Niveau d'accès</label>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {(['admin', 'rw', 'ro', 'req', 'none'] as AccessLevel[]).map((l) => {
-                    const cfg = ACCESS_LEVEL_CONFIG[l];
-                    return (
-                      <button
-                        key={l}
-                        onClick={() => setEditLevel(l)}
-                        className={`py-2 rounded-lg text-xs font-bold transition-all ${cfg.bg} ${cfg.text} ${
-                          editLevel === l ? 'ring-2 ring-offset-1 ring-[#534AB7]' : 'opacity-60 hover:opacity-100'
-                        }`}
-                      >
-                        {cfg.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'oklch(52% 0.012 260)', marginBottom: '8px' }}>Nouveau niveau</label>
+                <select value={editLevel} onChange={(e) => setEditLevel(e.target.value as AccessLevel)}
+                  style={{ width: '100%', padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', outline: 'none', fontFamily: 'inherit' }}>
+                  {(['admin', 'rw', 'ro', 'req'] as AccessLevel[]).map((l) => (
+                    <option key={l} value={l}>{ACCESS_LEVEL_CONFIG[l].label}</option>
+                  ))}
+                </select>
               </div>
-
-              {/* Access Info */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs text-gray-600">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Accordé le : {new Date(selectedRight?.granted_at || '').toLocaleDateString('fr-FR')}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-gray-600">
-                  <UserCheck className="w-3.5 h-3.5" />
-                  <span>Attribué par : {selectedRight?.granted_by}</span>
-                </div>
-              </div>
-
-              {/* Note */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Note</label>
-                <textarea
-                  value={editNote}
-                  onChange={(e) => setEditNote(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] outline-none resize-none"
-                  rows={2}
-                  placeholder="Ajouter une note..."
-                />
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'oklch(52% 0.012 260)', marginBottom: '8px' }}>Commentaire (optionnel)</label>
+                <input value={editNote} onChange={(e) => setEditNote(e.target.value)}
+                  style={{ width: '100%', padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', outline: 'none', fontFamily: 'inherit' }}
+                  placeholder="Raison de la modification…" />
               </div>
-
-              {/* Actions */}
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={handleSave}
-                  disabled={editLevel === selectedCell.level}
-                  className="flex-1 py-2.5 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Edit3 className="w-4 h-4 inline mr-1.5" />
-                  Modifier
-                </button>
-                <button
-                  onClick={handleRevoke}
-                  className="flex-1 py-2.5 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
-                >
-                  <UserX className="w-4 h-4 inline mr-1.5" />
-                  Révoquer
-                </button>
+              <div style={{ display: 'flex', gap: '8px', paddingTop: '4px' }}>
+                <button onClick={() => setEditRight(null)} style={{ flex: 1, padding: '8px 16px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '13px', color: 'oklch(52% 0.012 260)', background: 'transparent', cursor: 'pointer' }}>Annuler</button>
+                <button onClick={handleSaveEdit} style={{ flex: 1, padding: '8px 16px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Appliquer</button>
               </div>
             </div>
           </div>
-        </>
-      )}
+        );
+      })()}
 
       {showRevue && (
         <RevueModal
@@ -479,8 +374,7 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
   );
 }
 
-// ─── Modal Revue d'accès ───
-
+// ─── Modal Revue d'accès (kept from original) ───
 interface RevueModalProps {
   accessRights: AccessRight[];
   members: Member[];
@@ -489,9 +383,7 @@ interface RevueModalProps {
   onRevokeAccess: (id: string, comment?: string) => void;
   onClose: () => void;
 }
-
 type RevueDecision = 'confirmed' | 'downgraded' | 'revoked' | null;
-
 interface RevueItem {
   right: AccessRight;
   member: Member;
@@ -505,11 +397,7 @@ interface RevueItem {
 function RevueModal({ accessRights, members, platforms, onUpdateAccess, onRevokeAccess, onClose }: RevueModalProps) {
   const overdueRights = useMemo(() => {
     const now = new Date();
-    return accessRights.filter((a) =>
-      a.level !== 'none' &&
-      a.next_review_date &&
-      new Date(a.next_review_date) < now
-    );
+    return accessRights.filter((a) => a.level !== 'none' && a.next_review_date && new Date(a.next_review_date) < now);
   }, [accessRights]);
 
   const [items, setItems] = useState<RevueItem[]>(() =>
@@ -523,30 +411,27 @@ function RevueModal({ accessRights, members, platforms, onUpdateAccess, onRevoke
       done: false,
     })).filter((i) => i.member && i.platform)
   );
-
   const [submitting, setSubmitting] = useState(false);
 
   const setDecision = (idx: number, decision: RevueDecision, newLevel?: AccessLevel) => {
-    setItems((prev) => prev.map((item, i) =>
-      i === idx ? { ...item, decision, newLevel: newLevel ?? item.newLevel } : item
-    ));
+    setItems((prev) => prev.map((item, i) => i === idx ? { ...item, decision, newLevel: newLevel ?? item.newLevel } : item));
   };
 
   const pendingCount = items.filter((i) => i.decision === null && !i.done).length;
-  const doneCount = items.filter((i) => i.done).length;
+  const doneCount    = items.filter((i) => i.done).length;
+  const decidedCount = items.filter((i) => i.decision !== null).length;
 
   const handleSubmitAll = async () => {
     const toProcess = items.filter((i) => i.decision !== null && !i.done);
     if (toProcess.length === 0) return;
-
     setSubmitting(true);
     for (const item of toProcess) {
       const idx = items.indexOf(item);
       setItems((prev) => prev.map((x, i) => i === idx ? { ...x, saving: true } : x));
       try {
         if (item.decision === 'revoked') {
-          await api.accessRights.revoke(item.right.id, 'Révoqué lors de la revue d\'accès');
-          onRevokeAccess(item.right.id, 'Révoqué lors de la revue d\'accès');
+          await api.accessRights.revoke(item.right.id, "Révoqué lors de la revue d'accès");
+          onRevokeAccess(item.right.id, "Révoqué lors de la revue d'accès");
         } else {
           await api.accessRights.updateLevel(item.right.id, item.newLevel, `Revue d'accès — ${item.decision}`);
           onUpdateAccess(item.right.id, item.newLevel, `Revue d'accès — ${item.decision}`);
@@ -561,155 +446,68 @@ function RevueModal({ accessRights, members, platforms, onUpdateAccess, onRevoke
     toast.success(`${toProcess.length} accès traité${toProcess.length > 1 ? 's' : ''}`);
   };
 
-  const decidedCount = items.filter((i) => i.decision !== null).length;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-gray-200 flex-shrink-0">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'oklch(0% 0 0 / 0.4)' }}>
+      <div style={{ background: 'oklch(100% 0 0)', borderRadius: '10px', boxShadow: '0 20px 60px oklch(0% 0 0 / 0.3)', width: '100%', maxWidth: '640px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid oklch(90% 0.006 260)' }}>
           <div>
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <RotateCcw className="w-5 h-5 text-[#534AB7]" />
-              Revue d'accès
-            </h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {overdueRights.length === 0
-                ? 'Aucun accès en retard de revue'
-                : `${overdueRights.length} accès en retard — ${pendingCount} restant${pendingCount > 1 ? 's' : ''}`
-              }
-            </p>
+            <div style={{ fontSize: '15px', fontWeight: 600 }}>Revue d'accès</div>
+            <div style={{ fontSize: '12px', color: 'oklch(52% 0.012 260)', marginTop: '2px' }}>
+              {overdueRights.length === 0 ? 'Aucun accès en retard' : `${overdueRights.length} accès en retard — ${pendingCount} restant${pendingCount > 1 ? 's' : ''}`}
+            </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
-            <X className="w-4 h-4 text-gray-400" />
-          </button>
+          <button onClick={onClose} style={{ padding: '6px', background: 'transparent', border: 'none', cursor: 'pointer' }}><X style={{ width: '16px', height: '16px', color: 'oklch(52% 0.012 260)' }} /></button>
         </div>
 
-        {/* Corps */}
-        <div className="overflow-y-auto flex-1 p-5 space-y-3">
+        <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {items.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <CheckCircle2 className="w-12 h-12 text-green-500 mb-3" />
-              <p className="font-semibold text-gray-800">Tous les accès sont à jour</p>
-              <p className="text-sm text-gray-500 mt-1">Aucun accès n'est en retard de revue.</p>
+            <div style={{ textAlign: 'center', padding: '48px 0' }}>
+              <CheckCircle2 style={{ width: '48px', height: '48px', color: 'oklch(62% 0.16 155)', margin: '0 auto 12px' }} />
+              <div style={{ fontWeight: 600, fontSize: '14px' }}>Tous les accès sont à jour</div>
             </div>
           )}
-
           {items.map((item, idx) => {
             const cfg = ACCESS_LEVEL_CONFIG[item.right.level];
-            const daysSince = item.right.next_review_date
-              ? Math.floor((Date.now() - new Date(item.right.next_review_date).getTime()) / 86400000)
-              : 0;
-
+            const daysSince = item.right.next_review_date ? Math.floor((Date.now() - new Date(item.right.next_review_date).getTime()) / 86400000) : 0;
             return (
-              <div
-                key={item.right.id}
-                className={`rounded-xl border p-4 transition-all ${
-                  item.done ? 'border-green-200 bg-green-50 opacity-60' :
-                  item.decision === 'revoked' ? 'border-red-200 bg-red-50' :
-                  item.decision !== null ? 'border-[#534AB7]/30 bg-[#534AB7]/5' :
-                  'border-gray-200 bg-white'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-gray-900">{item.member.full_name}</span>
-                      <span className="text-gray-400 text-xs">→</span>
-                      <span className="font-medium text-sm text-gray-700">{item.platform.name}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${cfg.bg} ${cfg.text}`}>
-                        {cfg.label}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                      <span className="flex items-center gap-1 text-red-600 font-medium">
-                        <AlertTriangle className="w-3 h-3" />
-                        {daysSince}j de retard
-                      </span>
+              <div key={item.right.id} style={{ border: `1px solid ${item.done ? 'oklch(62% 0.16 155 / 0.3)' : item.decision === 'revoked' ? 'oklch(55% 0.22 25 / 0.3)' : item.decision !== null ? 'oklch(42% 0.18 280 / 0.3)' : 'oklch(90% 0.006 260)'}`, borderRadius: '10px', padding: '16px', background: item.done ? 'oklch(62% 0.16 155 / 0.05)' : item.decision === 'revoked' ? 'oklch(55% 0.22 25 / 0.05)' : item.decision !== null ? 'oklch(42% 0.18 280 / 0.05)' : 'oklch(100% 0 0)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 600 }}>{item.member.full_name} → {item.platform.name}</div>
+                    <div style={{ fontSize: '11px', color: 'oklch(52% 0.012 260)', marginTop: '4px', display: 'flex', gap: '12px' }}>
+                      <span style={{ color: 'oklch(55% 0.22 25)', fontWeight: 600 }}>{daysSince}j de retard</span>
                       <span>{item.member.team}</span>
                     </div>
                   </div>
-
-                  {item.done ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                  ) : item.saving ? (
-                    <Loader2 className="w-5 h-5 text-[#534AB7] animate-spin flex-shrink-0" />
-                  ) : (
-                    <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
-                      <button
-                        onClick={() => setDecision(idx, 'confirmed', item.right.level)}
-                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                          item.decision === 'confirmed'
-                            ? 'bg-green-500 text-white border-green-500'
-                            : 'border-green-300 text-green-700 hover:bg-green-50'
-                        }`}
-                      >
+                  {item.done ? <CheckCircle2 style={{ width: '20px', height: '20px', color: 'oklch(62% 0.16 155)', flexShrink: 0 }} /> :
+                   item.saving ? <Loader2 style={{ width: '20px', height: '20px', color: 'oklch(42% 0.18 280)', flexShrink: 0 }} className="animate-spin" /> : (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      <button onClick={() => setDecision(idx, 'confirmed', item.right.level)}
+                        style={{ padding: '5px 10px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 500, border: `1px solid ${item.decision === 'confirmed' ? 'transparent' : 'oklch(62% 0.16 155 / 0.4)'}`, background: item.decision === 'confirmed' ? 'oklch(62% 0.16 155)' : 'transparent', color: item.decision === 'confirmed' ? '#fff' : 'oklch(62% 0.16 155)', cursor: 'pointer' }}>
                         ✓ Confirmer
                       </button>
-
-                      {/* Rétrograder vers niveau inférieur */}
-                      {item.right.level !== 'ro' && item.right.level !== 'req' && item.right.level !== 'none' && (
-                        <button
-                          onClick={() => {
-                            const lower: AccessLevel = item.right.level === 'admin' ? 'rw' : item.right.level === 'rw' ? 'ro' : 'req';
-                            setDecision(idx, 'downgraded', lower);
-                          }}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                            item.decision === 'downgraded'
-                              ? 'bg-amber-500 text-white border-amber-500'
-                              : 'border-amber-300 text-amber-700 hover:bg-amber-50'
-                          }`}
-                        >
-                          ↓ Rétrograder
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => setDecision(idx, 'revoked')}
-                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                          item.decision === 'revoked'
-                            ? 'bg-red-500 text-white border-red-500'
-                            : 'border-red-300 text-red-600 hover:bg-red-50'
-                        }`}
-                      >
+                      <button onClick={() => setDecision(idx, 'revoked')}
+                        style={{ padding: '5px 10px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 500, border: `1px solid ${item.decision === 'revoked' ? 'transparent' : 'oklch(55% 0.22 25 / 0.4)'}`, background: item.decision === 'revoked' ? 'oklch(55% 0.22 25)' : 'transparent', color: item.decision === 'revoked' ? '#fff' : 'oklch(55% 0.22 25)', cursor: 'pointer' }}>
                         ✕ Révoquer
                       </button>
                     </div>
                   )}
                 </div>
-
-                {item.decision === 'downgraded' && !item.done && (
-                  <p className="text-xs text-amber-700 mt-2 pl-1">
-                    Sera rétrogradé en <strong>{ACCESS_LEVEL_CONFIG[item.newLevel].label}</strong>
-                  </p>
-                )}
               </div>
             );
           })}
         </div>
 
-        {/* Footer */}
         {items.length > 0 && (
-          <div className="border-t border-gray-200 p-4 flex items-center justify-between gap-3 flex-shrink-0">
-            <p className="text-sm text-gray-500">
-              {doneCount > 0
-                ? `${doneCount} traité${doneCount > 1 ? 's' : ''} · ${pendingCount} restant${pendingCount > 1 ? 's' : ''}`
-                : `${decidedCount} décision${decidedCount > 1 ? 's' : ''} prête${decidedCount > 1 ? 's' : ''}`
-              }
-            </p>
-            <div className="flex gap-2">
-              <button onClick={onClose}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
-                Fermer
-              </button>
-              <button
-                onClick={handleSubmitAll}
-                disabled={submitting || decidedCount === 0 || items.every((i) => i.done)}
-                className="px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] disabled:opacity-50 flex items-center gap-2"
-              >
-                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+          <div style={{ borderTop: '1px solid oklch(90% 0.006 260)', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '13px', color: 'oklch(52% 0.012 260)' }}>
+              {doneCount > 0 ? `${doneCount} traité${doneCount > 1 ? 's' : ''} · ${pendingCount} restant${pendingCount > 1 ? 's' : ''}` : `${decidedCount} décision${decidedCount > 1 ? 's' : ''} prête${decidedCount > 1 ? 's' : ''}`}
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={onClose} style={{ padding: '7px 14px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '13px', color: 'oklch(52% 0.012 260)', background: 'transparent', cursor: 'pointer' }}>Fermer</button>
+              <button onClick={handleSubmitAll} disabled={submitting || decidedCount === 0 || items.every((i) => i.done)}
+                style={{ padding: '7px 14px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', opacity: submitting || decidedCount === 0 ? 0.5 : 1, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {submitting && <Loader2 style={{ width: '14px', height: '14px' }} className="animate-spin" />}
                 Valider {decidedCount > 0 ? `(${decidedCount})` : ''}
               </button>
             </div>
@@ -723,9 +521,8 @@ function RevueModal({ accessRights, members, platforms, onUpdateAccess, onRevoke
 function generateHabPDF(members: Member[], platforms: Platform[], accessRights: AccessRight[]) {
   const doc = new jsPDF({ orientation: 'landscape' });
   const now = new Date().toLocaleDateString('fr-FR');
-
   doc.setFontSize(16);
-  doc.text('Matrice d\'habilitation', 14, 16);
+  doc.text("Matrice d'habilitation", 14, 16);
   doc.setFontSize(9);
   doc.setTextColor(120);
   doc.text(`Généré le ${now} · ${members.length} membres · ${platforms.length} plateformes`, 14, 22);
@@ -744,11 +541,10 @@ function generateHabPDF(members: Member[], platforms: Platform[], accessRights: 
   autoTable(doc, {
     head: [headers],
     body: rows,
-    startY: 26,
+    startY: 28,
     styles: { fontSize: 7, cellPadding: 2 },
     headStyles: { fillColor: [83, 74, 183] },
   });
 
-  doc.save('matrice-habilitations.pdf');
-  toast.success('Rapport PDF téléchargé');
+  doc.save(`habilitations-${now}.pdf`);
 }

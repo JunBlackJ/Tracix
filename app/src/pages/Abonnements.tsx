@@ -107,8 +107,72 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
     setEditingSub(null);
   };
 
+  const actifs = subscriptions.filter((s) => s.status === 'actif').length;
+  const expiringSoon = subscriptions.filter((s) => {
+    if (!s.renewal_date || s.status !== 'actif') return false;
+    const days = Math.floor((new Date(s.renewal_date).getTime() - Date.now()) / 86400000);
+    return days > 0 && days <= 30;
+  }).length;
+  const expired = subscriptions.filter((s) => {
+    if (!s.renewal_date) return false;
+    return new Date(s.renewal_date) < new Date() && s.status !== 'expiré';
+  }).length;
+
+  const totalAnnualAll = subscriptions.reduce((sum, s) => {
+    const annual = s.billing_cycle === 'annuel' ? s.cost_annual : s.cost_monthly * 12;
+    return sum + convertAmount(annual, s.currency, 'EUR');
+  }, 0);
+
   return (
     <div className="space-y-4">
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-[#534AB7]/10 flex items-center justify-center flex-shrink-0">
+            <CreditCard className="w-5 h-5 text-[#534AB7]" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900 leading-tight">{actifs}</p>
+            <p className="text-xs text-gray-500 font-medium">Actifs</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{subscriptions.length} au total</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+            <Clock className="w-5 h-5 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900 leading-tight">{expiringSoon}</p>
+            <p className="text-xs text-gray-500 font-medium">Renouvellements</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Dans les 30 jours</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
+          <div className={`w-11 h-11 rounded-xl ${expired > 0 ? 'bg-red-50' : 'bg-green-50'} flex items-center justify-center flex-shrink-0`}>
+            <XCircle className={`w-5 h-5 ${expired > 0 ? 'text-red-500' : 'text-green-500'}`} />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900 leading-tight">{expired}</p>
+            <p className="text-xs text-gray-500 font-medium">Expirés</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Non mis à jour</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
+            <RefreshCw className="w-5 h-5 text-green-500" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900 leading-tight font-mono tabular-nums">
+              {totalAnnualAll >= 10000
+                ? `${(totalAnnualAll / 1000).toFixed(0)}k€`
+                : `${totalAnnualAll.toFixed(0)}€`}
+            </p>
+            <p className="text-xs text-gray-500 font-medium">Budget annuel</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Total converti EUR</p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Abonnements</h1>

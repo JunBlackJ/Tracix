@@ -227,6 +227,18 @@ model Subscription {
   @@map("subscriptions")
 }
 
+model PromoCode {
+  id         String    @id
+  code       String    @unique
+  months     Int       @default(1)
+  max_uses   Int       @default(1)
+  uses       Int       @default(0)
+  created_at DateTime  @default(now())
+  expires_at DateTime?
+
+  @@map("promo_codes")
+}
+
 model Category {
   id              String   @id
   organization_id String

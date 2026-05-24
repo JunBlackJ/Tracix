@@ -38,6 +38,10 @@ interface AuditEntry {
   target_label: string; ip_address: string; created_at: string;
   organization: { id: string; name: string };
 }
+interface PromoCode {
+  id: string; code: string; months: number; max_uses: number; uses: number;
+  created_at: string; expires_at: string | null;
+}
 
 // ─── API helper ───
 async function adminReq<T>(path: string, options?: RequestInit): Promise<T> {
@@ -340,17 +344,22 @@ function OrgDetail({ orgId, onBack, onUpdated }: { orgId: string; onBack: () => 
 // ─── Main Admin Panel ───
 export function Admin() {
   const [authed, setAuthed] = useState(false);
-  const [tab, setTab] = useState<'stats' | 'orgs' | 'users' | 'audit'>('stats');
+  const [tab, setTab] = useState<'stats' | 'orgs' | 'users' | 'promos' | 'audit'>('stats');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [orgs, setOrgs] = useState<AdminOrg[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [editOrg, setEditOrg] = useState<AdminOrg | null>(null);
   const [deleteOrg, setDeleteOrg] = useState<AdminOrg | null>(null);
   const [detailOrgId, setDetailOrgId] = useState<string | null>(null);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  // promo form
+  const [promoForm, setPromoForm] = useState({ code: '', months: 1, max_uses: 1, expires_at: '' });
+  const [promoSaving, setPromoSaving] = useState(false);
 
   useEffect(() => {
     if (!getToken()) return;
@@ -360,14 +369,16 @@ export function Admin() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, o, u, a] = await Promise.all([
+      const [s, o, u, a, p] = await Promise.all([
         adminReq<AdminStats>('/admin/stats'),
         adminReq<AdminOrg[]>('/admin/orgs'),
         adminReq<AdminUser[]>('/admin/users'),
         adminReq<{ total: number; entries: AuditEntry[] }>('/admin/audit?limit=50'),
+        adminReq<PromoCode[]>('/admin/promo-codes'),
       ]);
       setStats(s); setOrgs(o); setUsers(u);
       setAuditEntries(a.entries); setAuditTotal(a.total);
+      setPromoCodes(p);
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Erreur de chargement'); }
     finally { setLoading(false); }
   }, []);
@@ -395,6 +406,42 @@ export function Admin() {
     <div className="min-h-screen bg-[#0E0C1E] text-white">
       {editOrg && <EditPlanModal org={editOrg} onClose={() => setEditOrg(null)} onSaved={(u) => { setOrgs((p) => p.map((o) => o.id === u.id ? { ...o, ...u } : o)); setEditOrg(null); }} />}
       {deleteOrg && <DeleteOrgModal org={deleteOrg} onClose={() => setDeleteOrg(null)} onDeleted={() => { setOrgs((p) => p.filter((o) => o.id !== deleteOrg.id)); setDeleteOrg(null); }} />}
+      {deleteUserId && (() => {
+        const u = users.find((x) => x.id === deleteUserId);
+        if (!u) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+            <div className="bg-[#1A1730] border border-red-500/30 rounded-2xl w-full max-w-sm p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                  <Trash2 className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Supprimer l'utilisateur</h3>
+                  <p className="text-xs text-red-400">Cette action est irréversible</p>
+                </div>
+              </div>
+              <p className="text-sm text-white/60">
+                Supprimer <span className="font-bold text-white">{u.full_name}</span> ({u.email}) ?
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeleteUserId(null)} className="flex-1 py-2.5 rounded-xl border border-white/15 text-sm text-white/60 hover:bg-white/5">Annuler</button>
+                <button onClick={async () => {
+                  try {
+                    await adminReq(`/admin/users/${u.id}`, { method: 'DELETE' });
+                    setUsers((p) => p.filter((x) => x.id !== u.id));
+                    toast.success(`Utilisateur "${u.full_name}" supprimé`);
+                  } catch (err) { toast.error(err instanceof Error ? err.message : 'Erreur'); }
+                  finally { setDeleteUserId(null); }
+                }} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 flex items-center justify-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Header */}
       <header className="border-b border-white/8 px-6 py-4 flex items-center justify-between sticky top-0 bg-[#0E0C1E]/95 backdrop-blur z-30">
@@ -423,10 +470,11 @@ export function Admin() {
         {/* Tabs */}
         <div className="flex gap-1 bg-white/5 rounded-xl p-1 w-fit mb-6 overflow-x-auto">
           {([
-            { id: 'stats', label: 'Statistiques', icon: BarChart2 },
-            { id: 'orgs',  label: 'Organisations', icon: Building2 },
-            { id: 'users', label: 'Utilisateurs',  icon: Users },
-            { id: 'audit', label: 'Journal global', icon: Activity },
+            { id: 'stats',  label: 'Statistiques',  icon: BarChart2 },
+            { id: 'orgs',   label: 'Organisations', icon: Building2 },
+            { id: 'users',  label: 'Utilisateurs',  icon: Users },
+            { id: 'promos', label: 'Codes promo',   icon: Zap },
+            { id: 'audit',  label: 'Journal global', icon: Activity },
           ] as const).map((t) => (
             <button key={t.id} onClick={() => { setTab(t.id); setSearch(''); setDetailOrgId(null); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${tab === t.id ? 'bg-[#534AB7] text-white' : 'text-white/40 hover:text-white'}`}>
@@ -625,6 +673,7 @@ export function Admin() {
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-white/30 uppercase tracking-wider hidden sm:table-cell">Organisation</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-white/30 uppercase tracking-wider">Rôle</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-white/30 uppercase tracking-wider hidden md:table-cell">Dernière connexion</th>
+                    <th className="px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody>
@@ -661,14 +710,126 @@ export function Admin() {
                         <td className="px-4 py-3 text-xs text-white/30 hidden md:table-cell">
                           {new Date(u.last_login_at).toLocaleDateString('fr-FR')}
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          <button onClick={() => setDeleteUserId(u.id)}
+                            className="p-1.5 rounded-lg border border-white/10 text-white/30 hover:text-red-400 hover:border-red-500/30 transition-all"
+                            title="Supprimer l'utilisateur">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
                   {filteredUsers.length === 0 && (
-                    <tr><td colSpan={4} className="text-center text-sm text-white/25 py-12">Aucun utilisateur trouvé</td></tr>
+                    <tr><td colSpan={5} className="text-center text-sm text-white/25 py-12">Aucun utilisateur trouvé</td></tr>
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Codes promo ─── */}
+        {tab === 'promos' && (
+          <div className="space-y-5">
+            {/* Create form */}
+            <div className="bg-white/5 border border-white/8 rounded-2xl p-5">
+              <p className="text-sm font-semibold text-white/70 mb-4">Générer un code promo</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div>
+                  <label className="block text-xs font-semibold text-white/40 mb-1.5">Code</label>
+                  <input value={promoForm.code} onChange={(e) => setPromoForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+                    placeholder="EX: LAUNCH2026" style={{ background: '#0E0C1E' }}
+                    className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-[#534AB7]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-white/40 mb-1.5">Mois offerts</label>
+                  <input type="number" min={1} max={24} value={promoForm.months}
+                    onChange={(e) => setPromoForm((f) => ({ ...f, months: parseInt(e.target.value) || 1 }))}
+                    style={{ background: '#0E0C1E' }}
+                    className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#534AB7]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-white/40 mb-1.5">Utilisations max</label>
+                  <input type="number" min={1} value={promoForm.max_uses}
+                    onChange={(e) => setPromoForm((f) => ({ ...f, max_uses: parseInt(e.target.value) || 1 }))}
+                    style={{ background: '#0E0C1E' }}
+                    className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#534AB7]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-white/40 mb-1.5">Expire le (optionnel)</label>
+                  <input type="date" value={promoForm.expires_at}
+                    onChange={(e) => setPromoForm((f) => ({ ...f, expires_at: e.target.value }))}
+                    style={{ background: '#0E0C1E' }}
+                    className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#534AB7]" />
+                </div>
+              </div>
+              <button disabled={promoSaving || !promoForm.code.trim()} onClick={async () => {
+                setPromoSaving(true);
+                try {
+                  const created = await adminReq<PromoCode>('/admin/promo-codes', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      code: promoForm.code.trim(),
+                      months: promoForm.months,
+                      max_uses: promoForm.max_uses,
+                      expires_at: promoForm.expires_at || null,
+                    }),
+                  });
+                  setPromoCodes((p) => [created, ...p]);
+                  setPromoForm({ code: '', months: 1, max_uses: 1, expires_at: '' });
+                  toast.success(`Code "${created.code}" créé`);
+                } catch (err) { toast.error(err instanceof Error ? err.message : 'Erreur'); }
+                finally { setPromoSaving(false); }
+              }} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors">
+                {promoSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                {promoSaving ? 'Création…' : 'Créer le code'}
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="bg-white/5 border border-white/8 rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-white/8">
+                <p className="text-sm font-semibold text-white/70">{promoCodes.length} code{promoCodes.length > 1 ? 's' : ''}</p>
+              </div>
+              {promoCodes.length === 0 && (
+                <p className="text-center text-sm text-white/25 py-12">Aucun code promo</p>
+              )}
+              <div className="divide-y divide-white/5">
+                {promoCodes.map((p) => {
+                  const expired = p.expires_at && new Date(p.expires_at) < new Date();
+                  const exhausted = p.uses >= p.max_uses;
+                  return (
+                    <div key={p.id} className="px-4 py-3 flex items-center gap-4 hover:bg-white/3 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-white font-mono tracking-wider">{p.code}</span>
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#534AB7]/20 text-[#8B82D4] font-semibold">
+                            {p.months} mois
+                          </span>
+                          {expired && <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-semibold">Expiré</span>}
+                          {!expired && exhausted && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-semibold">Épuisé</span>}
+                          {!expired && !exhausted && <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-semibold">Actif</span>}
+                        </div>
+                        <div className="flex items-center gap-4 mt-0.5 flex-wrap">
+                          <span className="text-[11px] text-white/35">{p.uses}/{p.max_uses} utilisations</span>
+                          {p.expires_at && <span className="text-[11px] text-white/25">Expire le {new Date(p.expires_at).toLocaleDateString('fr-FR')}</span>}
+                          <span className="text-[11px] text-white/20">Créé le {new Date(p.created_at).toLocaleDateString('fr-FR')}</span>
+                        </div>
+                      </div>
+                      <button onClick={async () => {
+                        try {
+                          await adminReq(`/admin/promo-codes/${p.id}`, { method: 'DELETE' });
+                          setPromoCodes((prev) => prev.filter((x) => x.id !== p.id));
+                          toast.success(`Code "${p.code}" supprimé`);
+                        } catch (err) { toast.error(err instanceof Error ? err.message : 'Erreur'); }
+                      }} className="p-1.5 rounded-lg border border-white/10 text-white/30 hover:text-red-400 hover:border-red-500/30 transition-all flex-shrink-0" title="Supprimer">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

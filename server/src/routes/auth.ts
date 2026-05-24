@@ -363,14 +363,7 @@ router.post('/onboarding', requireAuth, async (req: Request, res: Response): Pro
   res.json(serializeOrg(updated));
 });
 
-// POST /api/auth/promo — validate a promo code and upgrade org to pro for 1 month
-const PROMO_CODES: Record<string, { months: number }> = {
-  'TRACIX1MOIS':   { months: 1 },
-  'AGBAYA2026':    { months: 1 },
-  'LAUNCH2026':    { months: 1 },
-  'BIENVENUE':     { months: 1 },
-};
-
+// POST /api/auth/promo — validate a promo code and upgrade org to pro
 router.post('/promo', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { code } = req.body;
@@ -380,9 +373,19 @@ router.post('/promo', requireAuth, async (req: Request, res: Response): Promise<
     return;
   }
 
-  const promo = PROMO_CODES[code.trim().toUpperCase()];
+  const normalizedCode = code.trim().toUpperCase();
+  const promo = await prisma.promoCode.findUnique({ where: { code: normalizedCode } });
+
   if (!promo) {
-    res.status(400).json({ error: 'Code promo invalide ou déjà utilisé' });
+    res.status(400).json({ error: 'Code promo invalide' });
+    return;
+  }
+  if (promo.uses >= promo.max_uses) {
+    res.status(400).json({ error: 'Ce code promo a déjà été utilisé le nombre maximum de fois' });
+    return;
+  }
+  if (promo.expires_at && promo.expires_at < new Date()) {
+    res.status(400).json({ error: 'Ce code promo est expiré' });
     return;
   }
 
@@ -397,10 +400,16 @@ router.post('/promo', requireAuth, async (req: Request, res: Response): Promise<
   const expiresAt = new Date();
   expiresAt.setMonth(expiresAt.getMonth() + promo.months);
 
-  const updated = await prisma.organization.update({
-    where: { id: orgId },
-    data: { plan: 'pro', plan_expires_at: expiresAt },
-  });
+  const [updated] = await prisma.$transaction([
+    prisma.organization.update({
+      where: { id: orgId },
+      data: { plan: 'pro', plan_expires_at: expiresAt },
+    }),
+    prisma.promoCode.update({
+      where: { id: promo.id },
+      data: { uses: { increment: 1 } },
+    }),
+  ]);
 
   await createAuditEntry({
     organizationId: orgId,
@@ -410,7 +419,7 @@ router.post('/promo', requireAuth, async (req: Request, res: Response): Promise<
     targetId: orgId,
     targetLabel: org.name,
     oldValue: { plan: 'free' },
-    newValue: { plan: 'pro', plan_expires_at: expiresAt.toISOString(), code: code.trim().toUpperCase() },
+    newValue: { plan: 'pro', plan_expires_at: expiresAt.toISOString(), code: normalizedCode },
     ipAddress: getClientIp(req),
     userAgent: req.headers['user-agent'] ?? '',
   });

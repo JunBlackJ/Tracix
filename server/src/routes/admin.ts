@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { requireSuperAdmin, generateSuperAdminToken } from '../middleware/superadmin';
 import { config } from '../config';
@@ -186,6 +187,57 @@ router.get('/users', requireSuperAdmin, async (_req: Request, res: Response) => 
     orderBy: { created_at: 'desc' },
   });
   res.json(users);
+});
+
+// ─── DELETE /api/admin/users/:id ───
+router.delete('/users/:id', requireSuperAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  await prisma.userApp.delete({ where: { id } });
+  res.json({ ok: true });
+});
+
+// ─── GET /api/admin/promo-codes ───
+router.get('/promo-codes', requireSuperAdmin, async (_req: Request, res: Response) => {
+  const codes = await prisma.promoCode.findMany({ orderBy: { created_at: 'desc' } });
+  res.json(codes);
+});
+
+// ─── POST /api/admin/promo-codes ───
+router.post('/promo-codes', requireSuperAdmin, async (req: Request, res: Response) => {
+  const { code, months, max_uses, expires_at } = req.body as {
+    code?: string; months?: number; max_uses?: number; expires_at?: string | null;
+  };
+
+  if (!code || typeof code !== 'string' || code.trim() === '') {
+    res.status(400).json({ error: 'Code requis' });
+    return;
+  }
+
+  const normalized = code.trim().toUpperCase();
+  const existing = await prisma.promoCode.findUnique({ where: { code: normalized } });
+  if (existing) {
+    res.status(409).json({ error: 'Ce code existe déjà' });
+    return;
+  }
+
+  const created = await prisma.promoCode.create({
+    data: {
+      id: uuidv4(),
+      code: normalized,
+      months: months ?? 1,
+      max_uses: max_uses ?? 1,
+      expires_at: expires_at ? new Date(expires_at) : null,
+    },
+  });
+
+  res.json(created);
+});
+
+// ─── DELETE /api/admin/promo-codes/:id ───
+router.delete('/promo-codes/:id', requireSuperAdmin, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  await prisma.promoCode.delete({ where: { id } });
+  res.json({ ok: true });
 });
 
 // ─── GET /api/admin/audit ───

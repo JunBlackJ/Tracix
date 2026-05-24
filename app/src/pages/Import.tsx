@@ -1477,17 +1477,17 @@ export function Import() {
   const payload = buildPayload();
 
   return (
-    <div className="space-y-5 max-w-3xl">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 760 }}>
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Import depuis Excel</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Importez membres, plateformes et droits d'accès en un seul fichier</p>
+        <div style={{ fontSize: 15, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Import depuis Excel</div>
+        <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)', marginTop: 2 }}>Importez membres, plateformes et droits d'accès en un seul fichier</div>
       </div>
 
       {parseError && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200">
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <p className="flex-1 text-sm text-red-700">{parseError}</p>
-          <button onClick={() => setParseError(null)}><X className="w-4 h-4 text-red-400" /></button>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: 16, borderRadius: 10, background: 'oklch(55% 0.22 25 / 0.08)', border: '1px solid oklch(55% 0.22 25 / 0.2)' }}>
+          <AlertCircle style={{ width: 18, height: 18, color: 'oklch(55% 0.22 25)', flexShrink: 0, marginTop: 1 }} />
+          <p style={{ flex: 1, fontSize: 13, color: 'oklch(55% 0.22 25)' }}>{parseError}</p>
+          <button onClick={() => setParseError(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'oklch(55% 0.22 25)' }}><X style={{ width: 14, height: 14 }} /></button>
         </div>
       )}
 
@@ -1497,24 +1497,26 @@ export function Import() {
           <div
             onDragEnter={handleDrag} onDragLeave={handleDrag}
             onDragOver={handleDrag} onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-2xl p-12 text-center transition-colors cursor-pointer ${
-              isDragging ? 'border-[#534AB7] bg-[#534AB7]/5' : 'border-gray-300 bg-white hover:border-[#534AB7]/40'
-            }`}
+            style={{
+              border: `2px dashed ${isDragging ? 'oklch(42% 0.18 280)' : 'oklch(90% 0.006 260)'}`,
+              borderRadius: 10, padding: '48px 40px', textAlign: 'center', transition: 'all 0.12s', cursor: 'pointer',
+              background: isDragging ? 'oklch(42% 0.18 280 / 0.05)' : 'oklch(100% 0 0)',
+            }}
           >
-            <div className="w-16 h-16 rounded-2xl bg-[#534AB7]/10 flex items-center justify-center mx-auto mb-5">
-              <Upload className="w-7 h-7 text-[#534AB7]" />
+            <div style={{ width: 56, height: 56, borderRadius: 12, background: 'oklch(42% 0.18 280 / 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <Upload style={{ width: 24, height: 24, color: 'oklch(42% 0.18 280)' }} />
             </div>
-            <p className="text-base font-semibold text-gray-800 mb-1">Glissez votre fichier Excel ici</p>
-            <p className="text-sm text-gray-400 mb-5">.xlsx, .xls, .csv — n'importe quel format</p>
-            <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#534AB7] text-white rounded-xl text-sm font-medium hover:bg-[#3C3489] transition-colors cursor-pointer">
-              <FileSpreadsheet className="w-4 h-4" />
+            <p style={{ fontSize: 14, fontWeight: 600, color: 'oklch(18% 0.02 260)', marginBottom: 4 }}>Glissez votre fichier Excel ici</p>
+            <p style={{ fontSize: 12.5, color: 'oklch(52% 0.012 260)', marginBottom: 20 }}>.xlsx, .xls, .csv — n'importe quel format</p>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 20px', background: 'oklch(42% 0.18 280)', color: '#fff', borderRadius: 7, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              <FileSpreadsheet style={{ width: 15, height: 15 }} />
               Choisir un fichier
-              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} />
+              <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleFileInput} />
             </label>
           </div>
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-[#534AB7]/5 border border-[#534AB7]/20">
-            <Sparkles className="w-4 h-4 text-[#534AB7] flex-shrink-0" />
-            <p className="text-xs text-[#534AB7]">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 12, borderRadius: 8, background: 'oklch(42% 0.18 280 / 0.06)', border: '1px solid oklch(42% 0.18 280 / 0.15)' }}>
+            <Sparkles style={{ width: 14, height: 14, color: 'oklch(42% 0.18 280)', flexShrink: 0 }} />
+            <p style={{ fontSize: 12, color: 'oklch(42% 0.18 280)' }}>
               <strong>Analyse IA activée</strong> — Claude détecte la structure réelle de votre fichier, ignore les titres et légendes, et comprend tout format de valeurs.
             </p>
           </div>
@@ -1523,46 +1525,44 @@ export function Import() {
 
       {/* ── STEP 2 : Modification manuelle ── */}
       {step === 'map' && currentSheet && !modalOpen && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200">
-            <FileSpreadsheet className="w-8 h-8 text-green-600 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">{file?.name}</p>
-              <p className="text-xs text-gray-400">{currentSheet.rows.length} lignes · {currentSheet.headers.length} colonnes</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 16, background: 'oklch(100% 0 0)', borderRadius: 10, border: '1px solid oklch(90% 0.006 260)' }}>
+            <FileSpreadsheet style={{ width: 30, height: 30, color: 'oklch(62% 0.16 155)', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, color: 'oklch(18% 0.02 260)' }}>{file?.name}</p>
+              <p style={{ fontSize: 11, color: 'oklch(52% 0.012 260)' }}>{currentSheet.rows.length} lignes · {currentSheet.headers.length} colonnes</p>
             </div>
-            <button onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#534AB7] bg-[#534AB7]/5 hover:bg-[#534AB7]/10 rounded-lg transition-colors">
-              <Sparkles className="w-3 h-3" /> Voir rapport IA
+            <button onClick={() => setModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 11.5, fontWeight: 500, color: 'oklch(42% 0.18 280)', background: 'oklch(42% 0.18 280 / 0.06)', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+              <Sparkles style={{ width: 11, height: 11 }} /> Voir rapport IA
             </button>
-            <button onClick={reset} className="p-1.5 hover:bg-gray-100 rounded-lg ml-1">
-              <X className="w-4 h-4 text-gray-400" />
+            <button onClick={reset} style={{ padding: 6, background: 'transparent', border: 'none', cursor: 'pointer' }}>
+              <X style={{ width: 14, height: 14, color: 'oklch(52% 0.012 260)' }} />
             </button>
           </div>
 
-          {/* Sélecteur de feuille */}
           {rawSheets.length > 1 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <p className="text-sm font-semibold text-gray-700 mb-2">Ouvrez le rapport IA pour sélectionner les feuilles à importer</p>
+            <div style={{ background: 'oklch(100% 0 0)', borderRadius: 10, border: '1px solid oklch(90% 0.006 260)', padding: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Ouvrez le rapport IA pour sélectionner les feuilles à importer</p>
             </div>
           )}
 
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">Mappage des colonnes</h3>
-            <p className="text-xs text-gray-400 mb-4">Corrigez les colonnes si nécessaire.</p>
-            <div className="grid sm:grid-cols-3 gap-4 mb-5">
+          <div style={{ background: 'oklch(100% 0 0)', borderRadius: 10, border: '1px solid oklch(90% 0.006 260)', padding: 20 }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)', marginBottom: 4 }}>Mappage des colonnes</p>
+            <p style={{ fontSize: 11.5, color: 'oklch(52% 0.012 260)', marginBottom: 16 }}>Corrigez les colonnes si nécessaire.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 20 }}>
               {([
                 { key: 'memberCol' as const, label: 'Colonne Membres', required: true },
                 { key: 'teamCol' as const, label: 'Colonne Équipe', required: false },
                 { key: 'emailCol' as const, label: 'Colonne Email', required: false },
               ] as const).map(({ key, label, required }) => (
                 <div key={key}>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">
-                    {label} {required && <span className="text-red-500">*</span>}
+                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'oklch(52% 0.012 260)', marginBottom: 6 }}>
+                    {label} {required && <span style={{ color: 'oklch(55% 0.22 25)' }}>*</span>}
                   </label>
                   <select
                     value={mapping[key] ?? -1}
                     onChange={(e) => setMapping((m) => ({ ...m, [key]: Number(e.target.value) === -1 ? null : Number(e.target.value) }))}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 focus:border-[#534AB7] outline-none"
+                    style={{ width: '100%', padding: '7px 12px', borderRadius: 7, border: '1px solid oklch(90% 0.006 260)', fontSize: 12.5, color: 'oklch(18% 0.02 260)', background: 'oklch(100% 0 0)', outline: 'none', fontFamily: 'inherit' }}
                   >
                     <option value={-1}>— Non défini —</option>
                     {currentSheet.headers.map((h, i) => (
@@ -1573,20 +1573,18 @@ export function Import() {
               ))}
             </div>
             {allPlatformCols.length > 0 && (
-              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                <p className="text-xs font-semibold text-emerald-700 mb-1.5 flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5" />
+              <div style={{ padding: 12, borderRadius: 8, background: 'oklch(62% 0.16 155 / 0.06)', border: '1px solid oklch(62% 0.16 155 / 0.2)' }}>
+                <p style={{ fontSize: 11.5, fontWeight: 600, color: 'oklch(62% 0.16 155)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ShieldCheck style={{ width: 13, height: 13 }} />
                   {platformCols.length} plateforme{platformCols.length > 1 ? 's' : ''}
-                  <span className="font-normal text-emerald-600">(cliquez pour exclure)</span>
+                  <span style={{ fontWeight: 400, color: 'oklch(52% 0.012 260)' }}>(cliquez pour exclure)</span>
                 </p>
-                <div className="flex flex-wrap gap-1.5">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {allPlatformCols.map(({ h, i }) => {
                     const excluded = excludedPlatformCols.has(i);
                     return (
                       <button key={i} onClick={() => togglePlatformCol(i)}
-                        className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors ${
-                          excluded ? 'bg-gray-100 text-gray-400 line-through' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                        }`}>
+                        style={{ padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500, border: 'none', cursor: 'pointer', transition: 'all 0.12s', background: excluded ? 'oklch(90% 0.006 260)' : 'oklch(62% 0.16 155 / 0.12)', color: excluded ? 'oklch(52% 0.012 260)' : 'oklch(62% 0.16 155)', textDecoration: excluded ? 'line-through' : 'none' }}>
                         {h}
                       </button>
                     );
@@ -1596,30 +1594,30 @@ export function Import() {
             )}
           </div>
 
-          <div className="flex gap-3">
-            <button onClick={reset} className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-2">
-              <ChevronRight className="w-4 h-4 rotate-180" /> Retour
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={reset} style={{ padding: '10px 16px', borderRadius: 7, border: '1px solid oklch(90% 0.006 260)', fontSize: 13, fontWeight: 500, color: 'oklch(52% 0.012 260)', background: 'transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <ChevronRight style={{ width: 14, height: 14, transform: 'rotate(180deg)' }} /> Retour
             </button>
             {rawSheets.length > 1 && selectedSheets.size > 1 ? (
               <button
                 onClick={() => handleImportMulti()}
                 disabled={multiImporting || selectedSheets.size === 0}
-                className="flex-1 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                style={{ flex: 1, padding: '10px 16px', borderRadius: 7, background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: multiImporting || selectedSheets.size === 0 ? 0.5 : 1 }}
               >
                 {multiImporting
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</>
-                  : <><CheckCircle2 className="w-4 h-4" />Importer {selectedSheets.size} feuilles sélectionnées</>
+                  ? <><Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />Import en cours…</>
+                  : <><CheckCircle2 style={{ width: 14, height: 14 }} />Importer {selectedSheets.size} feuilles sélectionnées</>
                 }
               </button>
             ) : (
               <button
                 onClick={handleImport}
                 disabled={importing || mapping.memberCol === null || payload.members.length === 0}
-                className="flex-1 py-3 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                style={{ flex: 1, padding: '10px 16px', borderRadius: 7, background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: importing || mapping.memberCol === null || payload.members.length === 0 ? 0.5 : 1 }}
               >
                 {importing
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Import en cours…</>
-                  : <><CheckCircle2 className="w-4 h-4" />Lancer l'import ({payload.members.length} membres)</>
+                  ? <><Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />Import en cours…</>
+                  : <><CheckCircle2 style={{ width: 14, height: 14 }} />Lancer l'import ({payload.members.length} membres)</>
                 }
               </button>
             )}

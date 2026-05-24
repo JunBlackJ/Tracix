@@ -4,34 +4,42 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 220 20% 97%;
+    --foreground: 240 10% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 240 10% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 246 43% 50%;
+    --popover-foreground: 240 10% 12%;
+    --primary: 246 43% 57%;
     --primary-foreground: 0 0% 100%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
     --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 246 43% 57% / 0.08;
+    --accent-foreground: 246 43% 40%;
+    --destructive: 2 72% 56%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 246 43% 50%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 246 43% 57%;
     --radius: 0.625rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Sidebar sombre — tokens des maquettes */
+    --sidebar-background: 246 20% 14%;
+    --sidebar-foreground: 246 8% 72%;
+    --sidebar-primary: 246 43% 57%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 246 43% 57% / 0.18;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 246 10% 22%;
+    --sidebar-ring: 246 43% 57%;
+
+    /* Risk colors */
+    --risk-crit: 2 72% 56%;
+    --risk-high: 32 85% 57%;
+    --risk-med: 43 90% 57%;
+    --risk-low: 158 60% 40%;
   }
 
   .dark {

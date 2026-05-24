@@ -20,6 +20,7 @@ const STEPS = [
   { label: 'Plateformes',       sub: 'Vos services à surveiller' },
   { label: "Inviter l'équipe",  sub: 'Emails et rôles' },
   { label: 'Alertes',           sub: 'Notifications et seuils' },
+  { label: 'Passer à Pro',      sub: 'Import Excel, modules avancés' },
 ];
 const TOTAL = STEPS.length;
 
@@ -71,10 +72,31 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
   const [alertChecks, setAlertChecks] = useState<Record<string, boolean>>(
     Object.fromEntries(ALERT_OPTIONS.map(a => [a.key, a.defaultChecked]))
   );
+  const [promoCode, setPromoCode] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoApplied, setPromoApplied] = useState(false);
+  const [promoError, setPromoError] = useState('');
 
   const goTo = (idx: number) => setCurrent(idx);
   const goNext = () => { if (current < TOTAL) setCurrent(c => c + 1); };
   const goPrev = () => { if (current > 0) setCurrent(c => c - 1); };
+
+  const applyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    setPromoError('');
+    try {
+      const result = await api.auth.applyPromo(promoCode.trim());
+      setPromoApplied(true);
+      toast.success(result.message || 'Plan Pro activé pour 1 mois !');
+      onComplete(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Code invalide';
+      setPromoError(msg);
+    } finally {
+      setPromoLoading(false);
+    }
+  };
 
   const skipAll = async () => {
     await save();
@@ -405,16 +427,136 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
             <Actions>
               <GhostBtn onClick={goPrev}><ArrowLeft /> Retour</GhostBtn>
               <span style={{ flex: 1 }} />
+              <PrimaryBtn onClick={goNext}>
+                Continuer <ArrowRight />
+              </PrimaryBtn>
+            </Actions>
+          </StepPane>
+        )}
+
+        {/* ── Step 5 : Passer à Pro ── */}
+        {current === 5 && (
+          <StepPane>
+            <div>
+              <Badge>Dernière étape</Badge>
+              <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: FG, lineHeight: 1.25, marginTop: 12 }}>
+                Débloquez tout Tracix
+              </h1>
+              <p style={{ fontSize: 14, color: MUTED, lineHeight: 1.65, marginTop: 8 }}>
+                Le plan gratuit vous permet de démarrer. Passez à <strong>Pro</strong> pour importer vos fichiers et accéder à toutes les fonctionnalités avancées.
+              </p>
+            </div>
+
+            {/* Comparaison Free vs Pro */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {/* Free */}
+              <div style={{ border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '18px 18px', background: SURFACE }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Gratuit</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: FG, marginBottom: 14 }}>0 €<span style={{ fontSize: 12, fontWeight: 400, color: MUTED }}> / mois</span></div>
+                {[
+                  '10 membres maximum',
+                  '3 plateformes',
+                  '3 utilisateurs Tracix',
+                  'Alertes et rapports basiques',
+                  '❌ Import Excel / CSV',
+                  '❌ Modules personnalisés',
+                ].map((f, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, fontSize: 12.5, color: f.startsWith('❌') ? 'oklch(65% 0.01 260)' : FG }}>
+                    {!f.startsWith('❌') && <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="oklch(62% 0.16 155)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                    <span>{f.replace('❌ ', '')}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pro */}
+              <div style={{ border: `2px solid ${BRAND}`, borderRadius: 10, padding: '18px 18px', background: BRAND_MUTED, position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 10, right: 10, background: BRAND, color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, letterSpacing: '0.06em' }}>RECOMMANDÉ</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: BRAND, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Pro</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: FG, marginBottom: 14 }}>29 €<span style={{ fontSize: 12, fontWeight: 400, color: MUTED }}> / mois</span></div>
+                {[
+                  'Membres & plateformes illimités',
+                  '5 utilisateurs Tracix',
+                  '✅ Import Excel / CSV / JSON',
+                  '✅ Modules personnalisés',
+                  '✅ Rapports PDF avancés',
+                  '✅ Conseiller IA illimité',
+                ].map((f, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, fontSize: 12.5, color: FG }}>
+                    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke={BRAND} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span>{f.replace('✅ ', '')}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Bouton paiement */}
+            {!promoApplied && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <button
+                  style={{ width: '100%', padding: '13px 20px', borderRadius: 9, background: BRAND, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                  onClick={() => { window.open('mailto:contact@agbaya.com?subject=Abonnement%20Pro%20Tracix', '_blank'); }}>
+                  <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                  Souscrire au plan Pro — 29 € / mois
+                </button>
+                <div style={{ textAlign: 'center', fontSize: 11.5, color: MUTED }}>Paiement sécurisé · Sans engagement · Annulable à tout moment</div>
+              </div>
+            )}
+
+            {/* Code promo */}
+            {!promoApplied ? (
+              <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '16px 18px' }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: FG, marginBottom: 8 }}>
+                  Vous avez un code promo ? <span style={{ fontWeight: 400, color: MUTED }}>1 mois Pro offert</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={promoCode}
+                    onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoError(''); }}
+                    placeholder="ex. TRACIX1MOIS"
+                    onKeyDown={e => e.key === 'Enter' && applyPromo()}
+                    style={{ ...inputStyle, flex: 1, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'ui-monospace,monospace', fontSize: 13 }}
+                  />
+                  <button
+                    onClick={applyPromo}
+                    disabled={promoLoading || !promoCode.trim()}
+                    style={{ padding: '10px 16px', borderRadius: 8, background: promoCode.trim() ? BRAND : BORDER, color: promoCode.trim() ? '#fff' : MUTED, border: 'none', fontWeight: 600, fontSize: 13, cursor: promoCode.trim() ? 'pointer' : 'default', flexShrink: 0, transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    {promoLoading ? <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" /> : null}
+                    Appliquer
+                  </button>
+                </div>
+                {promoError && (
+                  <div style={{ fontSize: 12, color: 'oklch(55% 0.22 25)', marginTop: 7, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    {promoError}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ background: 'oklch(62% 0.16 155 / 0.08)', border: '1.5px solid oklch(62% 0.16 155 / 0.3)', borderRadius: 10, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'oklch(62% 0.16 155 / 0.15)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                  <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="oklch(55% 0.16 155)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: FG }}>Plan Pro activé pour 1 mois !</div>
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Accès complet à toutes les fonctionnalités Tracix Pro.</div>
+                </div>
+              </div>
+            )}
+
+            <Actions>
+              <GhostBtn onClick={goPrev}><ArrowLeft /> Retour</GhostBtn>
+              <span style={{ flex: 1 }} />
+              <TextBtn onClick={save} disabled={saving}>Passer pour l'instant</TextBtn>
               <PrimaryBtn onClick={save} disabled={saving}>
                 {saving ? <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" /> : null}
-                {saving ? 'Sauvegarde…' : 'Terminer la configuration'}
+                {saving ? 'Finalisation…' : 'Accéder au dashboard'}
                 {!saving && <ArrowRight />}
               </PrimaryBtn>
             </Actions>
           </StepPane>
         )}
 
-        {/* ── Step 5 : Succès ── */}
+        {/* ── Step 6 : Succès ── */}
         {current >= TOTAL && (
           <StepPane>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 16, padding: '20px 0 8px' }}>

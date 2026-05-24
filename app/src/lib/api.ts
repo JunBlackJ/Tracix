@@ -135,6 +135,9 @@ export const api = {
     completeOnboarding(data: { org_name?: string; sector?: string; size?: string; objective?: string; alert_email?: string; alert_email_enabled?: boolean }): Promise<Organization> {
       return request('/auth/onboarding', { method: 'POST', body: JSON.stringify(data) });
     },
+    applyPromo(code: string): Promise<Organization & { message: string }> {
+      return request('/auth/promo', { method: 'POST', body: JSON.stringify({ code }) });
+    },
     testEmail(): Promise<{ success: boolean; sent_to: string }> {
       return request('/auth/test-email', { method: 'POST' });
     },

@@ -363,6 +363,61 @@ router.post('/onboarding', requireAuth, async (req: Request, res: Response): Pro
   res.json(serializeOrg(updated));
 });
 
+// POST /api/auth/promo — validate a promo code and upgrade org to pro for 1 month
+const PROMO_CODES: Record<string, { months: number }> = {
+  'TRACIX1MOIS':   { months: 1 },
+  'AGBAYA2026':    { months: 1 },
+  'LAUNCH2026':    { months: 1 },
+  'BIENVENUE':     { months: 1 },
+};
+
+router.post('/promo', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+  const { code } = req.body;
+
+  if (!code || typeof code !== 'string') {
+    res.status(400).json({ error: 'Code manquant' });
+    return;
+  }
+
+  const promo = PROMO_CODES[code.trim().toUpperCase()];
+  if (!promo) {
+    res.status(400).json({ error: 'Code promo invalide ou déjà utilisé' });
+    return;
+  }
+
+  const org = await prisma.organization.findUnique({ where: { id: orgId } });
+  if (!org) { res.status(404).json({ error: 'Organisation introuvable' }); return; }
+
+  if (org.plan !== 'free') {
+    res.status(400).json({ error: 'Votre organisation bénéficie déjà d\'un plan payant' });
+    return;
+  }
+
+  const expiresAt = new Date();
+  expiresAt.setMonth(expiresAt.getMonth() + promo.months);
+
+  const updated = await prisma.organization.update({
+    where: { id: orgId },
+    data: { plan: 'pro', plan_expires_at: expiresAt },
+  });
+
+  await createAuditEntry({
+    organizationId: orgId,
+    actor: req.user!.email,
+    action: 'organization.promo_applied',
+    targetType: 'organization',
+    targetId: orgId,
+    targetLabel: org.name,
+    oldValue: { plan: 'free' },
+    newValue: { plan: 'pro', plan_expires_at: expiresAt.toISOString(), code: code.trim().toUpperCase() },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ ...serializeOrg(updated), message: `Plan Pro activé jusqu'au ${expiresAt.toLocaleDateString('fr-FR')}` });
+});
+
 // ─────────────────────────────────────────────────────
 //  OAuth helpers
 // ─────────────────────────────────────────────────────

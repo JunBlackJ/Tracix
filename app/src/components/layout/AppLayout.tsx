@@ -388,7 +388,7 @@ export function AppLayout({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-6 lg:p-7">{children}</main>
+        <main className="flex-1 p-4 lg:p-7">{children}</main>
       </div>
 
       {/* Modal nouvelle org */}

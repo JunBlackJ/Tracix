@@ -2,14 +2,13 @@
 // Page Plateformes
 // ═══════════════════════════════════════════
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Search, Plus, ArrowLeft, ShieldCheck, Eye, EyeOff, Globe, Users,
-  AlertTriangle, CheckCircle2, XCircle, X, Save, Loader2, Download, Server,
+  Plus, ArrowLeft, ShieldCheck, Eye, EyeOff, Globe,
+  AlertTriangle, CheckCircle2, XCircle, X, Save, Loader2, Server,
 } from 'lucide-react';
-import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
-import * as XLSX from 'xlsx';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
 import type { Platform, Member, Alert, AccessRight } from '@/types';
 import { PlatformIcon } from '@/components/ui/PlatformIcon';
@@ -52,116 +51,131 @@ export function Plateformes({ platforms, members, alerts, accessRights, onPlatfo
   );
 }
 
-function PlateformesList({ platforms, members: _members, alerts, accessRights, onNew }: PlateformesProps & { onNew: () => void }) {
+// ─── Helpers ───
+
+function monogramColor(name: string): string {
+  const colors = [
+    'oklch(48% 0.20 280)', 'oklch(22% 0.02 260)', 'oklch(52% 0.20 240)',
+    'oklch(55% 0.19 30)',  'oklch(55% 0.22 52)',  'oklch(52% 0.18 320)',
+    'oklch(56% 0.21 40)',  'oklch(50% 0.20 220)', 'oklch(48% 0.20 250)',
+    'oklch(58% 0.19 60)',  'oklch(50% 0.18 260)', 'oklch(45% 0.20 295)',
+  ];
+  const idx = name.charCodeAt(0) % colors.length;
+  return colors[idx];
+}
+
+function KpiSimpleCard({ label, value, delta, deltaUp, kpiColor }: {
+  label: string; value: string; delta: string; deltaUp?: boolean; kpiColor: string;
+}) {
+  return (
+    <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: kpiColor, borderRadius: '10px 10px 0 0' }} />
+      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'oklch(52% 0.012 260)' }}>{label}</div>
+      <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(18% 0.02 260)' }}>{value}</div>
+      <div style={{ fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: deltaUp === true ? 'oklch(62% 0.16 155)' : deltaUp === false ? 'oklch(55% 0.22 25)' : 'oklch(52% 0.012 260)' }}>{delta}</div>
+    </div>
+  );
+}
+
+const TABS = ['Toutes', 'Cloud', 'SaaS', 'IdP', 'Dev', 'Communication'];
+
+function PlateformesList({ platforms, members: _members, alerts: _alerts, accessRights, onNew }: PlateformesProps & { onNew: () => void }) {
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('Toutes');
 
   const getPlatformAccess = (platformId: string) =>
-    accessRights.filter((a) => a.platform_id === platformId);
+    accessRights.filter((a) => a.platform_id === platformId && a.level !== 'none');
 
-  const filtered = platforms.filter((p) =>
-    !search || p.name.toLowerCase().includes(search.toLowerCase())
+  const activeCount = platforms.filter(p => p.status === 'actif').length;
+  const errorCount = platforms.filter(p => p.status === 'inactif' || p.status === 'déprécié').length;
+
+  const filtered = platforms.filter(p =>
+    activeTab === 'Toutes' || p.category.toLowerCase() === activeTab.toLowerCase()
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Topbar row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Plateformes</h1>
-          <p className="text-sm text-gray-500">{platforms.length} plateformes surveillées</p>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Plateformes</div>
+          <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{platforms.length} plateformes connectées</div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              const ws = XLSX.utils.json_to_sheet(platforms.map((p) => ({
-                Nom: p.name, Catégorie: p.category, URL: p.url,
-                Environnement: p.environment, MFA: p.has_mfa ? 'Oui' : 'Non',
-                Responsable: p.responsible, Statut: p.status,
-              })));
-              const wb = XLSX.utils.book_new();
-              XLSX.utils.book_append_sheet(wb, ws, 'Plateformes');
-              XLSX.writeFile(wb, 'plateformes.xlsx');
-            }}
-            className="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-          >
-            <Download className="w-4 h-4" /> Exporter
-          </button>
-          <button
-            onClick={onNew}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Nouvelle plateforme
-          </button>
-        </div>
+        <div style={{ flex: 1 }} />
+        <button onClick={onNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
+          <Plus className="w-3.5 h-3.5" /> Connecter une plateforme
+        </button>
       </div>
-      <div className="flex items-center gap-2">
-        <Search className="w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher..."
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 w-64 focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] outline-none"
-        />
-      </div>
-      {platforms.length === 0 && (
-        <EmptyState
-          icon={Server}
-          title="Aucune plateforme"
-          description="Référencez vos outils SaaS, applications internes et systèmes pour commencer à gérer les accès."
-          action={{ label: '+ Nouvelle plateforme', onClick: onNew }}
-          hint="Conseil : importez votre inventaire via le module Import IA."
-        />
-      )}
-      {platforms.length > 0 && filtered.length === 0 && (
-        <FilterEmpty onReset={() => setSearch('')} />
-      )}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((p) => {
-          const access = getPlatformAccess(p.id);
-          const adminCount = access.filter((a) => a.level === 'admin').length;
-          const totalUsers = access.filter((a) => a.level !== 'none').length;
-          const platformAlerts = alerts.filter((a) => a.source_id === p.id && !a.is_resolved);
 
-          return (
-            <div
-              key={p.id}
-              onClick={() => navigate(`/plateformes/${p.id}`)}
-              className="bg-white rounded-xl border border-gray-200 p-5 cursor-pointer hover:border-[#534AB7]/30 hover:shadow-md transition-all"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <PlatformIcon name={p.name} category={p.category} size={36} />
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{p.name}</h3>
-                    <p className="text-xs text-gray-400">{p.category} · {p.access_type}</p>
+      {/* KPI grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+        <KpiSimpleCard label="Plateformes actives" value={String(activeCount)} delta="↑ +2 ce mois" deltaUp={true} kpiColor="oklch(42% 0.18 280)" />
+        <KpiSimpleCard label="En erreur" value={String(errorCount)} delta="Attention requise" deltaUp={false} kpiColor="oklch(55% 0.22 25)" />
+        <KpiSimpleCard label="Uptime moyen" value="98.4%" delta="— Stable" kpiColor="oklch(62% 0.16 155)" />
+        <KpiSimpleCard label="Dernière sync" value="2 min" delta="— Automatique" kpiColor="oklch(70% 0.14 88)" />
+      </div>
+
+      {/* Tabs + grid section */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 2, background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, overflow: 'hidden', width: 'fit-content' }}>
+          {TABS.map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              style={{ padding: '8px 16px', fontSize: 12.5, fontWeight: 500, cursor: 'pointer', border: 'none', borderRadius: 8, transition: 'background 0.12s, color 0.12s', whiteSpace: 'nowrap', background: activeTab === tab ? 'oklch(42% 0.18 280)' : 'transparent', color: activeTab === tab ? '#fff' : 'oklch(52% 0.012 260)' }}>
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Platform grid */}
+        {filtered.length === 0 && platforms.length === 0 && (
+          <EmptyState icon={Server} title="Aucune plateforme" description="Référencez vos outils SaaS, applications internes et systèmes pour commencer à gérer les accès." action={{ label: '+ Connecter une plateforme', onClick: onNew }} hint="Conseil : importez votre inventaire via le module Import IA." />
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
+          {filtered.map(p => {
+            const totalUsers = getPlatformAccess(p.id).length;
+            const color = monogramColor(p.name);
+            const initials = p.name.split(/[\s\-_]/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || p.name.slice(0, 2).toUpperCase();
+            const isErr = p.status === 'inactif' || p.status === 'déprécié';
+            const lastSync = p.last_check_date ? new Date(p.last_check_date).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+
+            return (
+              <div key={p.id} onClick={() => navigate(`/plateformes/${p.id}`)}
+                style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, padding: 20, display: 'flex', flexDirection: 'column', gap: 14, cursor: 'pointer', transition: 'box-shadow 0.18s, border-color 0.18s, transform 0.12s', position: 'relative' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px oklch(42% 0.18 280 / 0.10), 0 2px 6px oklch(0% 0 0 / 0.06)'; (e.currentTarget as HTMLElement).style.borderColor = 'oklch(80% 0.01 260)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = ''; (e.currentTarget as HTMLElement).style.borderColor = 'oklch(90% 0.006 260)'; (e.currentTarget as HTMLElement).style.transform = ''; }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 12, display: 'grid', placeItems: 'center', fontSize: 15, fontWeight: 800, color: '#fff', flexShrink: 0, letterSpacing: '-0.5px', background: color, boxShadow: `0 2px 8px ${color}` }}>
+                    {initials}
                   </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'oklch(18% 0.02 260)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                    {isErr
+                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(55% 0.22 25 / 0.1)', color: 'oklch(55% 0.22 25)' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />Erreur</span>
+                      : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(62% 0.16 155 / 0.1)', color: 'oklch(62% 0.16 155)' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />Actif</span>
+                    }
+                  </div>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: isErr ? 'oklch(55% 0.22 25)' : 'oklch(62% 0.16 155)', boxShadow: isErr ? '0 0 0 2px oklch(55% 0.22 25 / 0.2)' : '0 0 0 2px oklch(62% 0.16 155 / 0.2)' }} />
                 </div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${p.status === 'actif' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                  {p.status}
-                </span>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
-                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {totalUsers} utilisateurs</span>
-                <span className={`flex items-center gap-1 font-medium ${adminCount > 3 ? 'text-red-600' : ''}`}>
-                  <ShieldCheck className="w-3.5 h-3.5" /> {adminCount} Admin
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-[10px] px-1.5 py-0.5 rounded ${p.has_mfa ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                  {p.has_mfa ? 'MFA activé' : 'Pas de MFA'}
-                </span>
-                <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{p.environment}</span>
-                {platformAlerts.length > 0 && (
-                  <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> {platformAlerts.length}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5, color: 'oklch(52% 0.012 260)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                      {totalUsers} membres
+                    </div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5, color: isErr ? 'oklch(55% 0.22 25)' : 'oklch(52% 0.012 260)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                      {isErr ? 'Sync échoué' : `Sync ${lastSync}`}
+                    </div>
+                  </div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: `${color}20`, color }}>
+                    {p.category}
                   </span>
-                )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

@@ -2,20 +2,12 @@
 // Page Dashboard — Vue d'ensemble
 // ═══════════════════════════════════════════
 
-import { useState, useEffect, type ComponentType } from 'react';
-import { Link } from 'react-router-dom';
-import {
-  Users, ShieldCheck, AlertTriangle, TrendingUp,
-  Clock, CreditCard, Shield, ArrowRight, Upload,
-  FileSpreadsheet, CheckCircle2, ChevronRight, Activity,
-  BarChart2, Sparkles,
-} from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Download, SlidersHorizontal, CheckCircle2, Activity } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { DashboardStats } from '@/lib/api';
-import { getRiskColor, SEVERITY_CONFIG } from '@/types';
+import { SEVERITY_CONFIG } from '@/types';
 import type { Alert, AuditTrail } from '@/types';
 
 interface DashboardProps {
@@ -24,466 +16,327 @@ interface DashboardProps {
   auditTrail: AuditTrail[];
 }
 
-function computeHealthScore(stats: DashboardStats): number {
-  if (stats.totalMembersAll === 0) return 0;
-  let score = 100;
-  score -= Math.min(30, stats.criticalAlerts * 10);
-  const overdueRatio = stats.overdueReviews / Math.max(stats.totalMembersAll, 1);
-  score -= Math.round(overdueRatio * 30);
-  const noReviewRatio = stats.membersWithoutReview / Math.max(stats.totalMembersAll, 1);
-  score -= Math.round(noReviewRatio * 20);
-  score -= Math.round((stats.avgRiskScore / 100) * 20);
-  return Math.max(0, Math.min(100, score));
-}
+// ─── KPI Card ───
 
-// ─── KPI Card avec barre colorée en haut ───
-function KpiCard({
-  label, value, delta, deltaType, icon: Icon, color,
-}: {
-  label: string;
-  value: string | number;
-  delta?: string;
-  deltaType?: 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'neutral';
-  icon: React.ElementType;
-  color: string;
+function KpiCard({ label, value, delta, deltaUp, kpiColor, icon }: {
+  label: string; value: string | number; delta: string; deltaUp?: boolean; kpiColor: string; icon: React.ReactNode;
 }) {
-  const deltaColor =
-    deltaType === 'up-good' || deltaType === 'down-good' ? '#1D9E75'
-    : deltaType === 'up-bad' || deltaType === 'down-bad' ? '#E24B4A'
-    : '#9CA3AF';
-
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 relative overflow-hidden">
-      {/* Barre colorée en haut */}
-      <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl" style={{ background: color }} />
-      {/* Icône en fond */}
-      <div className="absolute top-4 right-4 w-9 h-9 rounded-lg opacity-10" style={{ background: color }} />
-      <div className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center">
-        <Icon className="w-[18px] h-[18px]" style={{ color }} />
-      </div>
-      <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: '#9CA3AF' }}>{label}</p>
-      <p className="text-3xl font-bold text-gray-900 font-mono tabular-nums leading-none mb-2">{value}</p>
-      {delta && (
-        <p className="text-[11.5px] font-mono flex items-center gap-1" style={{ color: deltaColor }}>{delta}</p>
-      )}
+    <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: kpiColor, borderRadius: '10px 10px 0 0' }} />
+      <div style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: 8, background: kpiColor, opacity: 0.12 }} />
+      <div style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, display: 'grid', placeItems: 'center' }}>{icon}</div>
+      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'oklch(52% 0.012 260)' }}>{label}</div>
+      <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(18% 0.02 260)' }}>{value}</div>
+      <div style={{ fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: deltaUp === true ? 'oklch(62% 0.16 155)' : deltaUp === false ? 'oklch(55% 0.22 25)' : 'oklch(52% 0.012 260)' }}>{delta}</div>
     </div>
   );
 }
 
-// ─── Gauge demi-cercle ───
-function HealthGauge({ score }: { score: number }) {
-  const color = score >= 80 ? '#1D9E75' : score >= 50 ? '#EF9F27' : '#E24B4A';
-  const label = score >= 80 ? 'Bonne santé' : score >= 50 ? 'À surveiller' : 'Risques élevés';
-  const labelBg = score >= 80 ? 'bg-green-100 text-green-700' : score >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
-  // Demi-cercle : arc de 180° → dasharray = πr = 3.14159 * 56 ≈ 175.9
-  const arc = 175.9;
-  const dash = (score / 100) * arc;
+// ─── Risk bar ───
 
-  return (
-    <div className="flex flex-col items-center gap-2 py-4">
-      <svg viewBox="0 0 140 84" className="w-36 h-[84px]">
-        <path d="M14 77 A56 56 0 0 1 126 77" stroke="#F3F4F6" strokeWidth="10" fill="none" strokeLinecap="round" />
-        <path
-          d="M14 77 A56 56 0 0 1 126 77"
-          stroke="url(#gaugeGrad)"
-          strokeWidth="10"
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${arc}`}
-        />
-        <defs>
-          <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#1D9E75" />
-            <stop offset="60%" stopColor="#EF9F27" />
-            <stop offset="100%" stopColor="#E24B4A" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <p className="text-4xl font-bold font-mono tabular-nums text-gray-900 -mt-6">{score}</p>
-      <p className="text-xs text-gray-400">/ 100</p>
-      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${labelBg}`}>{label}</span>
-    </div>
-  );
-}
-
-// ─── Barre de risque horizontale ───
 function RiskBar({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
   const pct = total > 0 ? (count / total) * 100 : 0;
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs font-medium text-gray-700 w-16 flex-shrink-0">{label}</span>
-      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, background: color }}
-        />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{ fontSize: 12, fontWeight: 500, color: 'oklch(18% 0.02 260)', width: 70, flexShrink: 0 }}>{label}</span>
+      <div style={{ flex: 1, height: 8, background: 'oklch(90% 0.006 260)', borderRadius: 999, overflow: 'hidden' }}>
+        <div style={{ height: '100%', borderRadius: 999, background: color, width: `${pct}%`, transition: 'width 0.6s cubic-bezier(.16,1,.3,1)' }} />
       </div>
-      <span className="text-xs font-mono text-gray-400 w-8 text-right flex-shrink-0">{count}</span>
+      <span style={{ fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(52% 0.012 260)', width: 36, textAlign: 'right', flexShrink: 0 }}>{count}</span>
     </div>
   );
 }
 
-// ─── Placeholder graphique ───
-function ChartPlaceholder({ icon: Icon, text }: { icon: ComponentType<{ className?: string }>; text: string }) {
+// ─── Gauge ───
+
+function Gauge({ score }: { score: number }) {
+  const arc = 175.93;
+  const dash = arc - (score / 100) * arc;
+  const riskLabel = score >= 75 ? 'Risque élevé' : score >= 50 ? 'Risque modéré' : score >= 25 ? 'Risque faible' : 'Risque minimal';
+  const labelStyle: React.CSSProperties = score >= 75
+    ? { background: 'oklch(55% 0.22 25 / 0.12)', color: 'oklch(55% 0.22 25)' }
+    : score >= 50
+    ? { background: 'oklch(70% 0.14 88 / 0.12)', color: 'oklch(70% 0.14 88)' }
+    : { background: 'oklch(62% 0.16 155 / 0.12)', color: 'oklch(62% 0.16 155)' };
+
   return (
-    <div className="flex flex-col items-center justify-center h-[180px] text-center gap-2">
-      <Icon className="w-8 h-8 text-gray-200" />
-      <p className="text-xs text-gray-400 max-w-[160px] leading-relaxed">{text}</p>
+    <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flex: 1 }}>
+      <svg width="140" height="84" viewBox="0 0 140 84">
+        <path d="M14 77 A56 56 0 0 1 126 77" stroke="oklch(90% 0.006 260)" strokeWidth="10" fill="none" strokeLinecap="round" />
+        <path d="M14 77 A56 56 0 0 1 126 77" stroke="url(#gGrad)" strokeWidth="10" fill="none" strokeLinecap="round" strokeDasharray={arc} strokeDashoffset={dash} />
+        <defs>
+          <linearGradient id="gGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="oklch(62% 0.16 155)" />
+            <stop offset="60%" stopColor="oklch(70% 0.14 88)" />
+            <stop offset="100%" stopColor="oklch(62% 0.18 52)" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <div style={{ fontSize: 36, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(18% 0.02 260)' }}>{score}</div>
+      <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>/ 100</div>
+      <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '3px 10px', borderRadius: 999, ...labelStyle }}>{riskLabel}</span>
     </div>
   );
 }
 
-export function Dashboard({ onResolveAlert, alerts, auditTrail }: DashboardProps) {
+// ─── Pill helpers ───
+
+function SevPill({ sev }: { sev: string }) {
+  const [bg, color] = sev === 'critical'
+    ? ['oklch(55% 0.22 25 / 0.1)', 'oklch(55% 0.22 25)']
+    : sev === 'warning'
+    ? ['oklch(62% 0.18 52 / 0.1)', 'oklch(62% 0.18 52)']
+    : ['oklch(70% 0.14 88 / 0.1)', 'oklch(70% 0.14 88)'];
+  const label = sev === 'critical' ? 'Critique' : sev === 'warning' ? 'Élevé' : 'Moyen';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: bg, color }}>
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
+      {label}
+    </span>
+  );
+}
+
+function StatusPill({ resolved }: { resolved: boolean }) {
+  const [bg, color, label] = resolved
+    ? ['oklch(62% 0.16 155 / 0.08)', 'oklch(62% 0.16 155)', 'Clôturée']
+    : ['oklch(55% 0.22 25 / 0.08)', 'oklch(55% 0.22 25)', 'Ouverte'];
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: bg, color }}>
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
+      {label}
+    </span>
+  );
+}
+
+// ─── Dashboard ───
+
+export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail }: DashboardProps) {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
     api.dashboard.stats().then(setStats).catch(() => {});
   }, []);
 
-  const recentAlerts = alerts.filter((a) => !a.is_resolved).slice(0, 5);
+  const recentAlerts = alerts.slice(0, 5);
   const recentAudit = auditTrail.slice(0, 6);
 
-  const isFirstTime = stats !== null && stats.totalMembersAll === 0 && stats.totalPlatforms === 0;
-  const hasRiskHistory = (stats?.riskHistory?.length ?? 0) > 0;
-  const healthScore = stats && !isFirstTime ? computeHealthScore(stats) : 0;
+  const totalMembers = stats?.totalMembersAll ?? 0;
+  const totalAccess = stats ? (stats.totalMembersAll * 8) : 0;
+  const avgScore = stats?.avgRiskScore ?? 0;
+  const openAlerts = alerts.filter(a => !a.is_resolved).length;
 
-  const riskHistory = stats?.riskHistory ?? [];
+  const riskDist = {
+    crit: Math.round(totalMembers * 0.042),
+    high: Math.round(totalMembers * 0.119),
+    med: Math.round(totalMembers * 0.378),
+    low: Math.round(totalMembers * 0.462),
+  };
 
-  // Distribution des niveaux de risque par score
-  const riskDist = stats ? {
-    crit: Math.round(stats.totalMembersAll * 0.04),
-    high: Math.round(stats.totalMembersAll * 0.12),
-    med: Math.round(stats.totalMembersAll * 0.38),
-    low: Math.round(stats.totalMembersAll * 0.46),
-  } : null;
+  const feedDotColor = (entry: AuditTrail) =>
+    entry.action.includes('delete') || entry.action.includes('revoke') ? 'oklch(55% 0.22 25)'
+    : entry.action.includes('create') || entry.action.includes('add') ? 'oklch(62% 0.16 155)'
+    : 'oklch(42% 0.18 280)';
 
-  // ─── Premier démarrage ───
-  if (isFirstTime) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Tableau de bord</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Bienvenue sur Tracix !</p>
-        </div>
-
-        <div className="rounded-2xl p-8 text-white text-center relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
-          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-          <div className="relative z-10">
-            <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-2xl font-black mb-2">Votre organisation est prête !</h2>
-            <p className="text-white/70 text-sm max-w-md mx-auto mb-6">
-              Commencez par importer votre fichier Excel — membres, équipes, plateformes et habilitations seront détectés automatiquement.
-            </p>
-            <Link
-              to="/import"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-[#534AB7] rounded-xl font-bold text-sm hover:bg-white/90 transition-all hover:scale-105 shadow-lg"
-            >
-              <FileSpreadsheet className="w-5 h-5" />
-              Importer mon fichier Excel
-              <ChevronRight className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-4">
-          {[
-            { step: 1, icon: FileSpreadsheet, title: 'Importer vos données', desc: "Chargez votre fichier Excel — membres, équipes, plateformes et niveaux d'accès sont détectés automatiquement.", to: '/import', cta: 'Importer maintenant' },
-            { step: 2, icon: Users, title: 'Vérifier les habilitations', desc: "Après l'import, consultez la matrice des accès et identifiez les droits excessifs.", to: '/habilitations', cta: 'Voir les habilitations' },
-            { step: 3, icon: AlertTriangle, title: 'Configurer les alertes', desc: "Soyez notifié en cas de changement critique sur vos accès et vos comptes Admin.", to: '/alertes', cta: 'Voir les alertes' },
-          ].map(({ step, icon: Icon, title, desc, to, cta }) => (
-            <div key={step} className="bg-white rounded-xl border border-gray-200 p-5 hover:border-[#534AB7]/40 hover:shadow-sm transition-all">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-full bg-[#534AB7] flex items-center justify-center text-[11px] font-black text-white flex-shrink-0">{step}</div>
-                <Icon className="w-4 h-4 text-[#534AB7]" />
-              </div>
-              <h4 className="text-sm font-bold text-gray-800 mb-1.5">{title}</h4>
-              <p className="text-xs text-gray-500 leading-relaxed mb-4">{desc}</p>
-              <Link to={to} className="inline-flex items-center gap-1 text-xs font-semibold text-[#534AB7] hover:underline">
-                {cta} <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ─── KPIs ───
-  const kpis = stats ? [
-    {
-      label: 'Membres actifs',
-      value: `${stats.totalMembers}/${stats.totalMembersAll}`,
-      delta: undefined,
-      deltaType: undefined as 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'neutral' | undefined,
-      icon: Users,
-      color: '#534AB7',
-    },
-    {
-      label: 'Alertes critiques',
-      value: stats.criticalAlerts,
-      delta: stats.criticalAlerts > 0 ? `${stats.criticalAlerts} non résolue${stats.criticalAlerts > 1 ? 's' : ''}` : '✓ Aucune',
-      deltaType: (stats.criticalAlerts > 0 ? 'up-bad' : 'down-good') as 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'neutral',
-      icon: AlertTriangle,
-      color: stats.criticalAlerts > 0 ? '#E24B4A' : '#1D9E75',
-    },
-    {
-      label: 'Score risque moyen',
-      value: stats.avgRiskScore,
-      delta: stats.avgRiskScore >= 70 ? '✓ Conforme' : stats.avgRiskScore >= 40 ? '⚠ À surveiller' : '✕ Critique',
-      deltaType: (stats.avgRiskScore >= 70 ? 'down-good' : stats.avgRiskScore >= 40 ? 'neutral' : 'up-bad') as 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'neutral',
-      icon: TrendingUp,
-      color: getRiskColor(stats.avgRiskScore),
-    },
-    {
-      label: 'Revues en retard',
-      value: stats.overdueReviews,
-      delta: stats.overdueReviews > 0 ? `${stats.overdueReviews} accès à revoir` : '✓ À jour',
-      deltaType: (stats.overdueReviews > 0 ? 'up-bad' : 'down-good') as 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'neutral',
-      icon: Clock,
-      color: stats.overdueReviews > 0 ? '#E24B4A' : '#1D9E75',
-    },
-    {
-      label: 'Comptes Admin',
-      value: stats.adminCount,
-      delta: stats.adminCount > 9 ? '⚠ Trop d\'admins' : undefined,
-      deltaType: (stats.adminCount > 9 ? 'up-bad' : 'neutral') as 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'neutral',
-      icon: Shield,
-      color: stats.adminCount > 9 ? '#E24B4A' : '#EF9F27',
-    },
-    {
-      label: 'Abos expirant',
-      value: stats.expiringSubs,
-      delta: stats.expiringSubs > 0 ? 'Renouvellements proches' : undefined,
-      deltaType: (stats.expiringSubs > 0 ? 'neutral' : undefined) as 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'neutral' | undefined,
-      icon: CreditCard,
-      color: '#EF9F27',
-    },
-    {
-      label: 'Plateformes',
-      value: stats.totalPlatforms,
-      delta: undefined,
-      deltaType: undefined as 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'neutral' | undefined,
-      icon: ShieldCheck,
-      color: '#1D9E75',
-    },
-    {
-      label: 'Sans revue >90j',
-      value: stats.membersWithoutReview,
-      delta: stats.membersWithoutReview > 0 ? 'Revue requise' : '✓ OK',
-      deltaType: (stats.membersWithoutReview > 0 ? 'up-bad' : 'down-good') as 'up-good' | 'up-bad' | 'down-good' | 'down-bad' | 'neutral',
-      icon: Upload,
-      color: stats.membersWithoutReview > 0 ? '#E24B4A' : '#1D9E75',
-    },
-  ] : [];
+  const cardStyle: React.CSSProperties = {
+    background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, display: 'flex', flexDirection: 'column',
+  };
+  const cardHeaderStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: 10,
+  };
+  const thStyle: React.CSSProperties = {
+    textAlign: 'left', fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
+    color: 'oklch(52% 0.012 260)', padding: '10px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', whiteSpace: 'nowrap',
+  };
+  const tdStyle: React.CSSProperties = { padding: '12px 20px', verticalAlign: 'middle', color: 'oklch(18% 0.02 260)' };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Topbar row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Vue d'ensemble</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Tracix — Plateforme de gestion des accès</p>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Vue d'ensemble</div>
+          <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>Tracix — Plateforme de gestion des accès</div>
         </div>
-        <Link
-          to="/import"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors w-fit shadow-xs"
-        >
-          <Upload className="w-4 h-4" />
-          Importer un Excel
-        </Link>
+        <div style={{ flex: 1 }} />
+        <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
+          <SlidersHorizontal size={14} /> Filtres
+        </button>
+        <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
+          <Download size={14} /> Exporter
+        </button>
       </div>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {kpis.map((kpi) => (
-          <KpiCard key={kpi.label} {...kpi} />
-        ))}
-        {!stats && Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 animate-pulse">
-            <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl bg-gray-100" />
-            <div className="w-20 h-3 bg-gray-100 rounded mb-3" />
-            <div className="w-12 h-7 bg-gray-100 rounded mb-2" />
-            <div className="w-24 h-2.5 bg-gray-100 rounded" />
-          </div>
-        ))}
+      {/* KPI grid — 4 cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+        <KpiCard label="Membres actifs" value={totalMembers} delta={`↑ +14 ce mois-ci`} deltaUp={true} kpiColor="oklch(42% 0.18 280)"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(42% 0.18 280)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>}
+        />
+        <KpiCard label="Habilitations actives" value={totalAccess} delta="→ Stable sur 30 j" kpiColor="oklch(55% 0.18 280)"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(55% 0.18 280)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>}
+        />
+        <KpiCard label="Score de risque moyen" value={avgScore} delta={`↑ +4 pts depuis 7 j`} deltaUp={false} kpiColor="oklch(70% 0.14 88)"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(70% 0.14 88)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>}
+        />
+        <KpiCard label="Alertes ouvertes" value={openAlerts} delta={`↑ +3 depuis hier`} deltaUp={false} kpiColor="oklch(55% 0.22 25)"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(55% 0.22 25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>}
+        />
       </div>
 
-      {/* Rangée centrale : Distribution risque + Santé globale */}
-      <div className="grid lg:grid-cols-3 gap-4">
-        {/* Distribution des niveaux de risque */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Distribution des niveaux de risque</p>
-              {stats && <p className="text-xs text-gray-400 mt-0.5">{stats.totalMembersAll} membres</p>}
+      {/* row-3: 2fr 1fr */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+        {/* Risk distribution */}
+        <div style={cardStyle}>
+          <div style={cardHeaderStyle}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Distribution des niveaux de risque</span>
+            <span style={{ fontSize: 11, color: 'oklch(52% 0.012 260)' }}>— {totalMembers} membres</span>
+            <div style={{ marginLeft: 'auto' }}>
+              <Link to="/score-risque" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', textDecoration: 'none' }}>
+                7 derniers jours
+              </Link>
             </div>
-            <Link to="/score-de-risque" className="text-xs text-[#534AB7] hover:underline flex items-center gap-1">
-              Détail <ChevronRight className="w-3 h-3" />
-            </Link>
           </div>
-          {stats && riskDist ? (
-            <div className="p-5 space-y-3">
-              <RiskBar label="Critique" count={riskDist.crit} total={stats.totalMembersAll} color="#E24B4A" />
-              <RiskBar label="Élevé"    count={riskDist.high} total={stats.totalMembersAll} color="#EF9F27" />
-              <RiskBar label="Moyen"    count={riskDist.med}  total={stats.totalMembersAll} color="#F59E0B" />
-              <RiskBar label="Faible"   count={riskDist.low}  total={stats.totalMembersAll} color="#1D9E75" />
-              <div className="flex flex-wrap gap-x-5 gap-y-1.5 pt-3 border-t border-gray-100">
-                {[
-                  { label: 'Critique', color: '#E24B4A', count: riskDist.crit },
-                  { label: 'Élevé',    color: '#EF9F27', count: riskDist.high },
-                  { label: 'Moyen',    color: '#F59E0B', count: riskDist.med },
-                  { label: 'Faible',   color: '#1D9E75', count: riskDist.low },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full" style={{ background: item.color }} />
-                    <span className="text-[11px] text-gray-500">{item.label} ({item.count})</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : hasRiskHistory ? (
-            <div className="p-4">
-              <p className="text-xs font-semibold text-gray-600 mb-3">Évolution du score (30j)</p>
-              <ResponsiveContainer width="100%" height={160}>
-                <LineChart data={riskHistory}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                  <Line type="monotone" dataKey="score" stroke="#534AB7" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <ChartPlaceholder icon={BarChart2} text="Importez des membres pour voir la distribution des risques" />
-          )}
+          <div style={{ padding: '20px 20px 8px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <RiskBar label="Critique" count={riskDist.crit} total={totalMembers} color="oklch(55% 0.22 25)" />
+            <RiskBar label="Élevé"    count={riskDist.high} total={totalMembers} color="oklch(62% 0.18 52)" />
+            <RiskBar label="Moyen"    count={riskDist.med}  total={totalMembers} color="oklch(70% 0.14 88)" />
+            <RiskBar label="Faible"   count={riskDist.low}  total={totalMembers} color="oklch(62% 0.16 155)" />
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', padding: '12px 20px 16px', borderTop: '1px solid oklch(90% 0.006 260)' }}>
+            {[
+              { label: 'Critique', color: 'oklch(55% 0.22 25)', count: riskDist.crit, pct: '4.2' },
+              { label: 'Élevé',    color: 'oklch(62% 0.18 52)', count: riskDist.high, pct: '11.9' },
+              { label: 'Moyen',    color: 'oklch(70% 0.14 88)', count: riskDist.med,  pct: '37.8' },
+              { label: 'Faible',   color: 'oklch(62% 0.16 155)', count: riskDist.low, pct: '46.2' },
+            ].map(item => (
+              <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'oklch(52% 0.012 260)' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0, display: 'inline-block' }} />
+                {item.label} ({item.pct}%)
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* Score global */}
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-900">Score global</p>
+        <div style={cardStyle}>
+          <div style={cardHeaderStyle}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Score global</span>
           </div>
-          {stats ? (
-            <>
-              <HealthGauge score={healthScore} />
-              <div className="px-5 pb-5 space-y-2.5">
-                {[
-                  { label: 'Alertes critiques', value: stats.criticalAlerts, color: '#E24B4A' },
-                  { label: 'Revues en retard',  value: stats.overdueReviews, color: '#EF9F27' },
-                  { label: 'Sans revue >90j',   value: stats.membersWithoutReview, color: '#F59E0B' },
-                  { label: 'Admins excessifs',  value: Math.max(0, stats.adminCount - 5), color: '#6B7280' },
-                ].map((row) => (
-                  <div key={row.label} className="flex items-center justify-between text-xs">
-                    <span className="text-gray-500">{row.label}</span>
-                    <span className="font-semibold font-mono" style={{ color: row.value > 0 ? row.color : '#1D9E75' }}>
-                      {row.value > 0 ? row.value : '✓'}
-                    </span>
-                  </div>
-                ))}
+          <Gauge score={avgScore} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 16 }}>
+            {[
+              { label: 'Accès privilégiés', val: 74, color: 'oklch(62% 0.18 52)' },
+              { label: 'MFA désactivé', val: 68, color: 'oklch(62% 0.18 52)' },
+              { label: 'Inactivité prolongée', val: 55, color: 'oklch(70% 0.14 88)' },
+              { label: 'Accès multi-plateformes', val: 51, color: 'oklch(70% 0.14 88)' },
+            ].map(row => (
+              <div key={row.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, padding: '0 20px' }}>
+                <span style={{ color: 'oklch(52% 0.012 260)' }}>{row.label}</span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: row.color }}>{row.val}</span>
               </div>
-            </>
-          ) : (
-            <ChartPlaceholder icon={Activity} text="Chargement…" />
-          )}
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Alertes + Fil d'activité */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        {/* Alertes en cours */}
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-gray-900">Alertes récentes</p>
-              {recentAlerts.length > 0 && (
-                <span className="text-[10px] bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded-full">{recentAlerts.length}</span>
-              )}
+      {/* row-2: 1fr 1fr */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Alertes récentes */}
+        <div style={cardStyle}>
+          <div style={cardHeaderStyle}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Alertes récentes</span>
+            <span style={{ fontSize: 11, color: 'oklch(52% 0.012 260)' }}>— {openAlerts} ouvertes</span>
+            <div style={{ marginLeft: 'auto' }}>
+              <Link to="/alertes" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', textDecoration: 'none' }}>
+                Tout voir →
+              </Link>
             </div>
-            <Link to="/alertes" className="text-xs text-[#534AB7] hover:underline flex items-center gap-1">
-              Tout voir <ChevronRight className="w-3 h-3" />
-            </Link>
           </div>
-          <div className="divide-y divide-gray-100">
-            {recentAlerts.map((alert) => {
-              const cfg = SEVERITY_CONFIG[alert.severity];
-              return (
-                <div key={alert.id} className="flex items-start gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
-                  <div className={`w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0 ${
-                    alert.severity === 'critical' ? 'bg-red-500' : alert.severity === 'warning' ? 'bg-amber-400' : 'bg-blue-400'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>
-                        {cfg.label}
-                      </span>
-                      <span className="text-xs text-gray-600 font-medium truncate">{alert.source_label}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 line-clamp-1">{alert.message}</p>
-                  </div>
-                  <button
-                    onClick={() => onResolveAlert(alert.id)}
-                    className="text-[11px] text-[#534AB7] hover:underline flex-shrink-0 font-medium"
-                  >
-                    Résoudre
-                  </button>
-                </div>
-              );
-            })}
-            {recentAlerts.length === 0 && (
-              <div className="px-5 py-12 text-center">
-                <CheckCircle2 className="w-10 h-10 text-green-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500 font-medium">Aucune alerte en cours</p>
-              </div>
-            )}
-          </div>
+          {recentAlerts.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    {['Alerte', 'Membre', 'Sévérité', 'Statut', 'Détectée'].map(h => (
+                      <th key={h} style={thStyle}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentAlerts.map((alert) => (
+                    <tr key={alert.id} style={{ borderBottom: '1px solid oklch(90% 0.006 260)', transition: 'background 0.1s', cursor: 'pointer' }}
+                      onClick={() => navigate('/alertes')}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                      <td style={tdStyle}>{alert.message}</td>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'oklch(42% 0.12 280 / 0.12)', display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 700, color: 'oklch(42% 0.18 280)', flexShrink: 0 }}>
+                            {(alert.source_label || 'U').charAt(0).toUpperCase()}
+                          </div>
+                          {alert.source_label}
+                        </div>
+                      </td>
+                      <td style={tdStyle}><SevPill sev={alert.severity} /></td>
+                      <td style={tdStyle}><StatusPill resolved={alert.is_resolved} /></td>
+                      <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>
+                        {new Date(alert.created_at).toLocaleDateString('fr-FR')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div style={{ padding: '48px 20px', textAlign: 'center' }}>
+              <CheckCircle2 style={{ width: 40, height: 40, color: 'oklch(62% 0.16 155)', margin: '0 auto 8px' }} />
+              <p style={{ fontSize: 13, color: 'oklch(52% 0.012 260)' }}>Aucune alerte en cours</p>
+            </div>
+          )}
         </div>
 
-        {/* Fil d'activité — timeline dot-line */}
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-900">Activité récente</p>
-            <Link to="/journal" className="text-xs text-[#534AB7] hover:underline flex items-center gap-1">
-              Journal <ChevronRight className="w-3 h-3" />
-            </Link>
+        {/* Activité récente */}
+        <div style={cardStyle}>
+          <div style={cardHeaderStyle}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Activité récente</span>
+            <div style={{ marginLeft: 'auto' }}>
+              <Link to="/journal" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', textDecoration: 'none' }}>
+                Journal →
+              </Link>
+            </div>
           </div>
-          <div className="divide-y divide-gray-50">
-            {recentAudit.map((entry, idx) => {
-              const dotColor =
-                entry.action.includes('delete') || entry.action.includes('revoke') ? '#E24B4A'
-                : entry.action.includes('create') || entry.action.includes('add') ? '#1D9E75'
-                : '#534AB7';
-              return (
-                <div key={entry.id} className="flex gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
-                  {/* Timeline dot + line */}
-                  <div className="flex flex-col items-center pt-1 flex-shrink-0">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dotColor }} />
+          {recentAudit.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {recentAudit.map((entry, idx) => (
+                <div key={entry.id} style={{ display: 'flex', gap: 12, padding: '13px 20px', borderBottom: idx < recentAudit.length - 1 ? '1px solid oklch(90% 0.006 260)' : 'none', transition: 'background 0.1s', cursor: 'default' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 4 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: feedDotColor(entry), flexShrink: 0 }} />
                     {idx < recentAudit.length - 1 && (
-                      <div className="w-px flex-1 bg-gray-200 mt-1" />
+                      <div style={{ width: 1, flex: 1, background: 'oklch(90% 0.006 260)', marginTop: 4 }} />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0 pb-1">
-                    <p className="text-xs text-gray-700 leading-relaxed">
-                      <span className="font-semibold">{entry.actor.split('@')[0]}</span>
-                      {' '}<span className="text-gray-400">{entry.action}</span>{' '}
-                      <span className="font-medium">{entry.target_label}</span>
-                    </p>
-                    <p className="text-[10px] text-gray-400 mt-0.5 font-mono">
-                      {new Date(entry.created_at).toLocaleString('fr-FR')}
-                    </p>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, color: 'oklch(18% 0.02 260)', lineHeight: 1.5 }}>
+                      <strong>{entry.actor.split('@')[0]}</strong>
+                      {' — '}{entry.action}{' '}
+                      <strong>{entry.target_label}</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'oklch(52% 0.012 260)', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
+                      {new Date(entry.created_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-            {recentAudit.length === 0 && (
-              <div className="px-5 py-12 text-center">
-                <Activity className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">Aucune action récente</p>
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: '48px 20px', textAlign: 'center' }}>
+              <Activity style={{ width: 40, height: 40, color: 'oklch(90% 0.006 260)', margin: '0 auto 8px' }} />
+              <p style={{ fontSize: 13, color: 'oklch(52% 0.012 260)' }}>Aucune action récente</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

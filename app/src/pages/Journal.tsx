@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Search, Download, Lock, ShieldCheck, Clock, User, Server, FileText, Activity, Users, Calendar } from 'lucide-react';
+// ═══════════════════════════════════════════
+// Page Journal d'audit
+// ═══════════════════════════════════════════
+
+import React, { useState, useEffect } from 'react';
+import { Download, FileText, Search } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { AuditTrail } from '@/types';
 
@@ -7,42 +11,43 @@ interface JournalProps {
   auditTrail: AuditTrail[];
 }
 
-function StatCard({
-  label,
-  value,
-  sub,
-  bg,
-  icon: Icon,
-  iconColor,
-}: {
-  label: string;
-  value: number | string;
-  sub?: string;
-  bg: string;
-  icon: React.ElementType;
-  iconColor: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
-      <div className={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
-        <Icon className={`w-5 h-5 ${iconColor}`} />
-      </div>
-      <div>
-        <p className="text-2xl font-bold text-gray-900 leading-tight">{value}</p>
-        <p className="text-xs text-gray-500 font-medium">{label}</p>
-        {sub && <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  );
+const PAGE_SIZE = 20;
+
+function catPill(action: string): React.ReactNode {
+  const a = action.toLowerCase();
+  if (a.includes('auth') || a.includes('login') || a.includes('mfa') || a.includes('connexion') || a.includes('password')) {
+    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(70% 0.14 88 / 0.1)', color: 'oklch(70% 0.14 88)' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />Authentification</span>;
+  }
+  if (a.includes('security') || a.includes('sécurité') || a.includes('détect') || a.includes('alerte') || a.includes('scan') || a.includes('revoc')) {
+    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(62% 0.18 52 / 0.1)', color: 'oklch(62% 0.18 52)' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />Sécurité</span>;
+  }
+  if (a.includes('admin') || a.includes('creat') || a.includes('suppres') || a.includes('modif') || a.includes('policy') || a.includes('role')) {
+    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(42% 0.12 280 / 0.12)', color: 'oklch(42% 0.18 280)' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />Administration</span>;
+  }
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(42% 0.12 280 / 0.12)', color: 'oklch(42% 0.18 280)' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />Accès</span>;
+}
+
+function resultPill(result?: string): React.ReactNode {
+  if (!result || result === 'success' || result === 'ok') {
+    return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(62% 0.16 155 / 0.1)', color: 'oklch(62% 0.16 155)' }}>Succès</span>;
+  }
+  if (result === 'fail' || result === 'error') {
+    return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(55% 0.22 25 / 0.1)', color: 'oklch(55% 0.22 25)' }}>Échec</span>;
+  }
+  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(62% 0.18 52 / 0.1)', color: 'oklch(62% 0.18 52)' }}>Refusé</span>;
 }
 
 export function Journal({ auditTrail: initialTrail }: JournalProps) {
   const [search, setSearch] = useState('');
-  const [actorFilter, setActorFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [catFilter, setCatFilter] = useState('');
+  const [resultFilter, setResultFilter] = useState('');
   const [entries, setEntries] = useState<AuditTrail[]>(initialTrail);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    api.auditTrail.list({ page: 1, limit: 100 }).then((res) => {
+    api.auditTrail.list({ page: 1, limit: 200 }).then((res) => {
       setEntries(res.data);
     }).catch(() => {
       setEntries(initialTrail);
@@ -52,228 +57,169 @@ export function Journal({ auditTrail: initialTrail }: JournalProps) {
 
   const today = new Date().toDateString();
   const todayCount = entries.filter((e) => new Date(e.created_at).toDateString() === today).length;
-  const uniqueActors = new Set(entries.map((e) => e.actor)).size;
-  const uniqueActions = new Set(entries.map((e) => e.action.split('.')[0])).size;
+  const failCount = entries.filter((e) => e.action.toLowerCase().includes('fail') || e.action.toLowerCase().includes('échec')).length;
+  const adminCount = entries.filter((e) => e.target_type?.toLowerCase().includes('admin') || e.action.toLowerCase().includes('admin')).length;
 
-  const filtered = entries.filter((entry) => {
-    if (
-      search &&
-      !entry.action.toLowerCase().includes(search.toLowerCase()) &&
-      !entry.target_label.toLowerCase().includes(search.toLowerCase())
-    )
-      return false;
-    if (actorFilter && !entry.actor.toLowerCase().includes(actorFilter.toLowerCase())) return false;
+  const filtered = entries.filter((e) => {
+    if (search && !e.actor.toLowerCase().includes(search.toLowerCase()) && !e.action.toLowerCase().includes(search.toLowerCase())) return false;
+    if (dateFrom && new Date(e.created_at) < new Date(dateFrom)) return false;
+    if (dateTo && new Date(e.created_at) > new Date(dateTo + 'T23:59:59')) return false;
     return true;
   });
 
-  const actionIcon = (action: string) => {
-    if (action.includes('access.')) return <ShieldCheck className="w-4 h-4 text-[#534AB7]" />;
-    if (action.includes('member.')) return <User className="w-4 h-4 text-green-600" />;
-    if (action.includes('system.')) return <Server className="w-4 h-4 text-blue-600" />;
-    return <FileText className="w-4 h-4 text-gray-400" />;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const exportCsv = () => {
+    const rows = filtered.map(e => [
+      new Date(e.created_at).toLocaleString('fr-FR'),
+      e.actor,
+      e.action,
+      e.target_label,
+      e.ip_address || '—',
+      'Succès',
+    ]);
+    const csv = [['Horodatage', 'Acteur', 'Action', 'Ressource cible', 'IP source', 'Résultat'], ...rows]
+      .map(r => r.join(';')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'journal-audit.csv';
+    a.click();
   };
 
-  const getActionBadgeColor = (action: string) => {
-    if (action.includes('delete') || action.includes('revoke')) return 'bg-red-50 text-red-700';
-    if (action.includes('create') || action.includes('add')) return 'bg-green-50 text-green-700';
-    if (action.includes('update') || action.includes('edit')) return 'bg-blue-50 text-blue-700';
-    return 'bg-gray-100 text-gray-600';
+  const inputStyle: React.CSSProperties = {
+    background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 7, padding: '7px 10px',
+    fontFamily: 'inherit', fontSize: 12.5, color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer',
   };
+  const thStyle: React.CSSProperties = {
+    textAlign: 'left', fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
+    color: 'oklch(52% 0.012 260)', padding: '10px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', whiteSpace: 'nowrap',
+  };
+  const tdStyle: React.CSSProperties = { padding: '12px 20px', verticalAlign: 'middle' };
 
   return (
-    <div className="space-y-5">
-      {/* En-tête */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Journal d'audit</h1>
-        <p className="text-sm text-gray-500">Journal immuable — toutes les actions sont tracées et certifiées</p>
-      </div>
-
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          label="Entrées totales"
-          value={entries.length.toLocaleString('fr-FR')}
-          sub="Dans la base"
-          bg="bg-[#534AB7]/10"
-          icon={Activity}
-          iconColor="text-[#534AB7]"
-        />
-        <StatCard
-          label="Aujourd'hui"
-          value={todayCount}
-          sub="Actions du jour"
-          bg="bg-blue-50"
-          icon={Calendar}
-          iconColor="text-blue-500"
-        />
-        <StatCard
-          label="Acteurs uniques"
-          value={uniqueActors}
-          sub="Utilisateurs actifs"
-          bg="bg-green-50"
-          icon={Users}
-          iconColor="text-green-500"
-        />
-        <StatCard
-          label="Types d'actions"
-          value={uniqueActions}
-          sub="Catégories distinctes"
-          bg="bg-amber-50"
-          icon={FileText}
-          iconColor="text-amber-500"
-        />
-      </div>
-
-      {/* Bannière intégrité */}
-      <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
-        <Lock className="w-5 h-5 text-green-600 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-green-800">Journal certifié en lecture seule</p>
-          <p className="text-xs text-green-600">Aucune modification n'est possible. Intégrité vérifiée automatiquement.</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Topbar row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Journal d'audit</div>
+          <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>Traçabilité de toutes les actions</div>
         </div>
-        <ShieldCheck className="w-5 h-5 text-green-600 flex-shrink-0" />
-      </div>
-
-      {/* Filtres et export */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex items-center">
-          <Search className="absolute left-3 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher une action ou une cible..."
-            className="text-sm border border-gray-200 rounded-lg pl-9 pr-3 py-1.5 w-64 outline-none focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7]"
-          />
-        </div>
-        <div className="relative flex items-center">
-          <User className="absolute left-3 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            value={actorFilter}
-            onChange={(e) => setActorFilter(e.target.value)}
-            placeholder="Filtrer par acteur..."
-            className="text-sm border border-gray-200 rounded-lg pl-9 pr-3 py-1.5 w-48 outline-none focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7]"
-          />
-        </div>
-        <button
-          onClick={() => exportCSV(filtered)}
-          className="ml-auto inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-        >
-          <Download className="w-4 h-4" />
-          Export CSV
-          {filtered.length < entries.length && (
-            <span className="text-[11px] bg-[#534AB7] text-white rounded-full px-1.5 py-0.5">
-              {filtered.length}
-            </span>
-          )}
+        <div style={{ flex: 1 }} />
+        <button onClick={exportCsv} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
+          <Download size={13} /> Exporter CSV
+        </button>
+        <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
+          <FileText size={13} /> Exporter PDF
         </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      {/* Filter bar */}
+      <div style={{ background: 'oklch(97% 0.005 260 / 0.96)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 220, display: 'flex', alignItems: 'center', gap: 8, background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 7, padding: '7px 12px' }}>
+          <Search size={14} style={{ color: 'oklch(52% 0.012 260)', flexShrink: 0 }} />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un acteur, une action..." style={{ border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 12.5, color: 'oklch(18% 0.02 260)', width: '100%' }} />
+        </div>
+        <span style={{ fontSize: 11, color: 'oklch(52% 0.012 260)', whiteSpace: 'nowrap' }}>Depuis</span>
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputStyle} />
+        <span style={{ fontSize: 11, color: 'oklch(52% 0.012 260)', whiteSpace: 'nowrap' }}>Jusqu'au</span>
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle} />
+        <select value={catFilter} onChange={e => setCatFilter(e.target.value)} style={inputStyle}>
+          <option value="">Catégorie : Toutes</option>
+          <option value="auth">Authentification</option>
+          <option value="access">Accès</option>
+          <option value="admin">Administration</option>
+          <option value="security">Sécurité</option>
+        </select>
+        <select value={resultFilter} onChange={e => setResultFilter(e.target.value)} style={inputStyle}>
+          <option value="">Résultat : Tous</option>
+          <option value="success">Succès</option>
+          <option value="fail">Échec</option>
+          <option value="deny">Refusé</option>
+        </select>
+        <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
+          Appliquer
+        </button>
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: 'flex', gap: 16 }}>
+        {[
+          { label: "Entrées aujourd'hui", value: todayCount, color: 'oklch(42% 0.18 280)' },
+          { label: "Échecs d'authentification", value: failCount, color: 'oklch(55% 0.22 25)' },
+          { label: 'Actions admin', value: adminCount, color: 'oklch(18% 0.02 260)' },
+        ].map(s => (
+          <div key={s.label} style={{ flex: 1, background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, padding: '18px 20px' }}>
+            <div style={{ fontSize: 11, color: 'oklch(52% 0.012 260)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{s.label}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '-0.02em', color: s.color }}>{s.value.toLocaleString('fr-FR')}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Audit log table */}
+      <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Entrées du journal</span>
+          <span style={{ fontSize: 11, color: 'oklch(52% 0.012 260)' }}>— {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Horodatage</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Acteur</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Action</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Cible</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">IP</th>
+              <tr>
+                {['Horodatage', 'Acteur', 'Catégorie', 'Action', 'Ressource cible', 'IP source', 'Résultat'].map(h => (
+                  <th key={h} style={thStyle}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((entry) => (
-                <tr
-                  key={entry.id}
-                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="text-xs">{new Date(entry.created_at).toLocaleString('fr-FR')}</span>
+              {pageItems.map((entry) => (
+                <tr key={entry.id} style={{ borderBottom: '1px solid oklch(90% 0.006 260)', transition: 'background 0.1s' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                  <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>
+                    {new Date(entry.created_at).toLocaleString('fr-FR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 500 }}>{entry.actor}</span>
+                      <span style={{ fontSize: 10.5, color: 'oklch(52% 0.012 260)' }}>{entry.target_type || 'Utilisateur'}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-[#534AB7]/10 flex items-center justify-center flex-shrink-0">
-                        <User className="w-3 h-3 text-[#534AB7]" />
-                      </div>
-                      <span className="text-xs font-mono text-gray-700">{entry.actor}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {actionIcon(entry.action)}
-                      <span
-                        className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${getActionBadgeColor(entry.action)}`}
-                      >
-                        {entry.action}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {entry.target_type && (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium capitalize">
-                        {entry.target_type}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-800 font-medium text-sm">{entry.target_label}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-400">{entry.ip_address}</td>
+                  <td style={tdStyle}>{catPill(entry.action)}</td>
+                  <td style={{ ...tdStyle, color: 'oklch(18% 0.02 260)' }}>{entry.action}</td>
+                  <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{entry.target_label}</td>
+                  <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{entry.ip_address || '—'}</td>
+                  <td style={tdStyle}>{resultPill('success')}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center">
-                    <Lock className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-                    <p className="text-gray-500 font-medium">Aucune entrée dans le journal</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {search || actorFilter ? 'Modifiez les filtres pour voir plus de résultats' : 'Les actions seront enregistrées ici automatiquement'}
-                    </p>
+                  <td colSpan={7} style={{ padding: '48px 20px', textAlign: 'center', color: 'oklch(52% 0.012 260)', fontSize: 13 }}>
+                    Aucune entrée trouvée
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        {filtered.length > 0 && (
-          <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-            <p className="text-xs text-gray-500">
-              {filtered.length} entrée{filtered.length > 1 ? 's' : ''}
-              {filtered.length < entries.length ? ` (sur ${entries.length} total)` : ''}
-            </p>
-            <div className="flex items-center gap-1.5 text-xs text-green-600">
-              <Lock className="w-3 h-3" />
-              Journal certifié
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid oklch(90% 0.006 260)' }}>
+          <span style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>
+            Affichage de {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} / {filtered.length.toLocaleString('fr-FR')} entrées
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+            <button disabled={safePage === 1} onClick={() => setPage(p => p - 1)}
+              style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid oklch(90% 0.006 260)', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', cursor: safePage === 1 ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 12, opacity: safePage === 1 ? 0.4 : 1 }}>
+              &lt; Précédent
+            </button>
+            <span style={{ fontSize: 12, color: 'oklch(52% 0.012 260)', padding: '0 4px' }}>Page {safePage} sur {totalPages}</span>
+            <button disabled={safePage === totalPages} onClick={() => setPage(p => p + 1)}
+              style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid oklch(90% 0.006 260)', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', cursor: safePage === totalPages ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 12, opacity: safePage === totalPages ? 0.4 : 1 }}>
+              Suivant &gt;
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
-}
-
-function exportCSV(entries: AuditTrail[]) {
-  const headers = ['Horodatage', 'Acteur', 'Action', 'Type cible', 'Cible', 'IP'];
-  const rows = entries.map((e) => [
-    new Date(e.created_at).toLocaleString('fr-FR'),
-    e.actor,
-    e.action,
-    e.target_type,
-    e.target_label,
-    e.ip_address,
-  ]);
-  const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
-    .join('\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `journal-audit-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
 }

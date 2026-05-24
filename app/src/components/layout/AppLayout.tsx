@@ -131,9 +131,9 @@ function SidebarContent({
     <div className="flex flex-col h-full" style={{ background: 'hsl(246 20% 14%)' }}>
       {/* Logo */}
       <div className="flex items-center justify-between gap-2.5 px-5 py-[18px] border-b" style={{ borderColor: 'hsl(246 10% 22%)' }}>
-        <div className="flex items-center gap-2.5">
+        <Link to="/dashboard" className="flex items-center gap-2.5">
           <img src="/logo.png" alt="Tracix" className="h-8 w-auto object-contain flex-shrink-0" />
-        </div>
+        </Link>
         {onClose && (
           <button onClick={onClose} className="p-1 rounded hover:bg-white/10">
             <X className="w-4 h-4 text-white/50" />

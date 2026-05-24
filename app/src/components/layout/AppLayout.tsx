@@ -132,13 +132,7 @@ function SidebarContent({
       {/* Logo */}
       <div className="flex items-center justify-between gap-2.5 px-5 py-[18px] border-b" style={{ borderColor: 'hsl(246 10% 22%)' }}>
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#534AB7' }}>
-            <Shield className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <p className="text-white font-semibold text-[15px] leading-tight tracking-tight">Tracix</p>
-            <p className="text-[10px] leading-none mt-0.5" style={{ color: 'hsl(246 8% 50%)' }}>Gouvernance IT</p>
-          </div>
+          <img src="/logo.png" alt="Tracix" className="h-8 w-auto object-contain flex-shrink-0" />
         </div>
         {onClose && (
           <button onClick={onClose} className="p-1 rounded hover:bg-white/10">

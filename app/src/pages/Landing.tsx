@@ -135,11 +135,7 @@ export function Landing({ onLogin, onRegister }: LandingProps) {
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#07070F]/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <a href="#" className="flex items-center gap-2.5 group">
-            <img src="/favicon.png" alt="Tracix" className="w-8 h-8 object-contain" />
-            <div>
-              <span className="font-bold text-white text-base leading-none block">Tracix</span>
-              <span className="text-[9px] text-white/30 block">by Agbaya Group</span>
-            </div>
+            <img src="/logo.png" alt="Tracix" className="h-8 w-auto object-contain" />
           </a>
 
           <div className="hidden md:flex items-center gap-8">
@@ -269,7 +265,7 @@ export function Landing({ onLogin, onRegister }: LandingProps) {
                 {/* Sidebar */}
                 <div className="w-44 border-r border-white/5 p-3 space-y-0.5 hidden sm:block flex-shrink-0" style={{ background: 'rgba(255,255,255,0.02)' }}>
                   <div className="flex items-center gap-2 p-2 mb-4">
-                    <img src="/favicon.png" className="w-6 h-6 object-contain" alt="" />
+                    <img src="/logo.png" className="w-6 h-6 object-contain" alt="" />
                     <span className="text-xs font-bold text-white">Tracix</span>
                   </div>
                   {[
@@ -524,7 +520,7 @@ export function Landing({ onLogin, onRegister }: LandingProps) {
       {/* ── About ── */}
       <section id="about" className="py-24 px-4 sm:px-6 border-t border-white/5">
         <div className="max-w-4xl mx-auto text-center">
-          <img src="/favicon.png" alt="Tracix" className="w-16 h-16 object-contain mx-auto mb-6" />
+          <img src="/logo.png" alt="Tracix" className="w-16 h-16 object-contain mx-auto mb-6" />
           <h2 className="text-4xl sm:text-5xl font-black text-white mb-6 leading-tight">
             Conçu pour l'Afrique,
             <br />
@@ -568,7 +564,7 @@ export function Landing({ onLogin, onRegister }: LandingProps) {
       <footer className="py-10 px-4 sm:px-6 border-t border-white/5 bg-black/30">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-5">
           <div className="flex items-center gap-2.5">
-            <img src="/favicon.png" alt="Tracix" className="w-7 h-7 object-contain" />
+            <img src="/logo.png" alt="Tracix" className="w-7 h-7 object-contain" />
             <span className="text-white font-bold">Tracix</span>
             <span className="text-white/20 text-xs">by Agbaya Group</span>
           </div>
@@ -712,7 +708,7 @@ function AuthModal({ defaultTab, onLogin, onRegister, onClose, onOpenSso }: Auth
 
         {/* Header */}
         <div className="px-8 pt-8 pb-0 text-center">
-          <img src="/favicon.png" alt="Tracix" className="w-10 h-10 object-contain mx-auto mb-3" />
+          <img src="/logo.png" alt="Tracix" className="w-10 h-10 object-contain mx-auto mb-3" />
           <h2 className="text-xl font-black text-white">
             {tab === 'login' ? 'Connexion à Tracix' : 'Créer un compte'}
           </h2>

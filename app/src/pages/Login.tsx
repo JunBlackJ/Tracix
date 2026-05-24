@@ -52,10 +52,7 @@ export function Login({ onLogin }: LoginProps) {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-xl bg-[#534AB7] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[#534AB7]/20">
-            <Shield className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Tracix</h1>
+          <img src="/logo.png" alt="Tracix" className="h-16 w-auto object-contain mx-auto mb-4" />
           <p className="text-sm text-gray-500 mt-1">Visibilité totale. Zéro angle mort.</p>
         </div>
 

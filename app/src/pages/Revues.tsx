@@ -431,6 +431,9 @@ export function Revues({ members, platforms }: RevuesProps) {
     );
   }
 
+  const activeCampaigns = campaigns.filter((c) => c.status === 'active');
+  const totalPending = campaigns.reduce((s, c) => s + c.pendingItems, 0);
+  const completedCampaigns = campaigns.filter((c) => c.status === 'completed');
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -443,6 +446,28 @@ export function Revues({ members, platforms }: RevuesProps) {
           <Plus className="w-4 h-4" /> Nouvelle campagne
         </button>
       </div>
+
+      {/* KPI cards */}
+      {campaigns.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Campagnes total', value: campaigns.length, color: '#534AB7', icon: ClipboardCheck },
+            { label: 'Campagnes actives', value: activeCampaigns.length, color: '#1D9E75', icon: Clock },
+            { label: 'Droits en attente', value: totalPending, color: '#EF9F27', icon: AlertTriangle },
+            { label: 'Campagnes terminées', value: completedCampaigns.length, color: '#9CA3AF', icon: CheckCircle2 },
+          ].map(({ label, value, color, icon: Icon }) => (
+            <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl" style={{ background: color }} />
+              <div className="absolute top-3.5 right-3.5 w-8 h-8 rounded-lg opacity-10" style={{ background: color }} />
+              <div className="absolute top-3.5 right-3.5 w-8 h-8 flex items-center justify-center">
+                <Icon className="w-4 h-4" style={{ color }} />
+              </div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{label}</p>
+              <p className="text-2xl font-bold text-gray-900 font-mono tabular-nums">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#534AB7]" /></div>
@@ -463,33 +488,54 @@ export function Revues({ members, platforms }: RevuesProps) {
           {campaigns.map((c) => {
             const progress = c.totalItems > 0 ? Math.round((c.completedItems / c.totalItems) * 100) : 0;
             const isOverdue = c.due_date && c.status === 'active' && new Date(c.due_date) < new Date();
+            const accentColor = c.status === 'completed' ? '#1D9E75' : c.status === 'cancelled' ? '#9CA3AF' : '#534AB7';
             return (
               <div key={c.id} onClick={() => setSelectedCampaign(c)}
-                className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:border-[#534AB7]/30 hover:shadow-sm transition-all">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <p className="text-sm font-semibold text-gray-900">{c.name}</p>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : c.status === 'cancelled' ? 'bg-gray-100 text-gray-500' : 'bg-[#534AB7]/10 text-[#534AB7]'}`}>
-                        {c.status === 'completed' ? 'Terminée' : c.status === 'cancelled' ? 'Annulée' : 'En cours'}
-                      </span>
-                      {isOverdue && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700"><AlertTriangle className="w-2.5 h-2.5" />En retard</span>}
-                    </div>
-                    {c.description && <p className="text-xs text-gray-400 mb-2 truncate">{c.description}</p>}
-                    <div className="flex items-center gap-3 text-xs text-gray-500">
-                      <span>{c.totalItems} droits</span>
-                      <span className="text-amber-600 font-medium">{c.pendingItems} en attente</span>
-                      {c.due_date && <span>Échéance : {new Date(c.due_date).toLocaleDateString('fr-FR')}</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <div className="text-right">
-                      <p className="text-lg font-black text-gray-900">{progress}%</p>
-                      <div className="w-20 h-1.5 bg-gray-100 rounded-full mt-1">
-                        <div className="h-full bg-[#534AB7] rounded-full" style={{ width: `${progress}%` }} />
+                className="bg-white rounded-xl border border-gray-200 cursor-pointer hover:border-[#534AB7]/30 hover:shadow-sm transition-all overflow-hidden">
+                {/* Colored left accent */}
+                <div className="flex">
+                  <div className="w-1 flex-shrink-0 rounded-l-xl" style={{ background: accentColor }} />
+                  <div className="flex-1 p-4">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <p className="text-sm font-semibold text-gray-900">{c.name}</p>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : c.status === 'cancelled' ? 'bg-gray-100 text-gray-500' : 'bg-[#534AB7]/10 text-[#534AB7]'}`}>
+                            {c.status === 'completed' ? 'Terminée' : c.status === 'cancelled' ? 'Annulée' : 'En cours'}
+                          </span>
+                          {isOverdue && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700"><AlertTriangle className="w-2.5 h-2.5" />En retard</span>}
+                        </div>
+                        {c.description && <p className="text-xs text-gray-400 truncate">{c.description}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <p className="text-xl font-black tabular-nums" style={{ color: accentColor }}>{progress}%</p>
+                        <ChevronRight className="w-4 h-4 text-gray-300" />
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-300" />
+
+                    {/* Stats row */}
+                    <div className="flex items-center gap-4 text-xs mb-3">
+                      <span className="text-gray-500 font-medium">{c.totalItems} droits</span>
+                      <span className="flex items-center gap-1 text-amber-600 font-semibold">
+                        <Clock className="w-3 h-3" />{c.pendingItems} en attente
+                      </span>
+                      <span className="flex items-center gap-1 text-emerald-600 font-semibold">
+                        <CheckCircle2 className="w-3 h-3" />{c.completedItems} traités
+                      </span>
+                      {c.due_date && (
+                        <span className={`ml-auto font-medium ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
+                          Échéance : {new Date(c.due_date).toLocaleDateString('fr-FR')}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Full-width progress bar */}
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${progress}%`, background: accentColor }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

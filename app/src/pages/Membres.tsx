@@ -78,16 +78,17 @@ export function Membres({ onRevokeAccess, onUpdateAccess, members, platforms, al
 
 // ─── Helpers ───
 
+// risk_score est un score de conformité : bas = dangereux, haut = bon
 function scoreColor(s: number) {
-  if (s >= 75) return 'oklch(55% 0.22 25)';
-  if (s >= 50) return 'oklch(62% 0.18 52)';
-  if (s >= 25) return 'oklch(70% 0.14 88)';
+  if (s <= 39) return 'oklch(55% 0.22 25)';
+  if (s <= 59) return 'oklch(62% 0.18 52)';
+  if (s <= 79) return 'oklch(70% 0.14 88)';
   return 'oklch(62% 0.16 155)';
 }
 function scoreBg(s: number) {
-  if (s >= 75) return 'oklch(55% 0.22 25 / 0.12)';
-  if (s >= 50) return 'oklch(62% 0.18 52 / 0.12)';
-  if (s >= 25) return 'oklch(70% 0.14 88 / 0.12)';
+  if (s <= 39) return 'oklch(55% 0.22 25 / 0.12)';
+  if (s <= 59) return 'oklch(62% 0.18 52 / 0.12)';
+  if (s <= 79) return 'oklch(70% 0.14 88 / 0.12)';
   return 'oklch(62% 0.16 155 / 0.12)';
 }
 function statusStyle(s: MemberStatus): React.CSSProperties {
@@ -125,27 +126,35 @@ function MembresList({ members, accessRights = [], onNew }: { members: Member[];
   const [roleFilter, setRoleFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [riskSort, setRiskSort] = useState<'none' | 'asc' | 'desc'>('none');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const hasMfaIssue = (m: Member) => m.risk_factors.some(f => f.label.toLowerCase().includes('mfa'));
 
-  const riskLabel = (s: number) => s >= 75 ? 'Critique' : s >= 50 ? 'Élevé' : s >= 25 ? 'Moyen' : 'Faible';
+  // risk_score : bas = dangereux, haut = conforme
+  const riskLabel = (s: number) => s <= 39 ? 'Critique' : s <= 59 ? 'Élevé' : s <= 79 ? 'Moyen' : 'Faible';
 
-  const filtered = members.filter((m) => {
-    if (search && !m.full_name.toLowerCase().includes(search.toLowerCase())
-      && !m.email.toLowerCase().includes(search.toLowerCase())
-      && !m.team.toLowerCase().includes(search.toLowerCase())) return false;
-    if (roleFilter && ROLE_LABEL[m.account_type] !== roleFilter) return false;
-    if (riskFilter && riskLabel(m.risk_score) !== riskFilter) return false;
-    if (statusFilter) {
-      const sl = statusFilter.toLowerCase();
-      if (sl === 'actif' && m.status !== 'actif') return false;
-      if (sl === 'inactif' && m.status !== 'inactif') return false;
-      if (sl === 'suspendu' && m.status !== 'suspendu') return false;
-    }
-    return true;
-  });
+  const filtered = members
+    .filter((m) => {
+      if (search && !m.full_name.toLowerCase().includes(search.toLowerCase())
+        && !m.email.toLowerCase().includes(search.toLowerCase())
+        && !m.team.toLowerCase().includes(search.toLowerCase())) return false;
+      if (roleFilter && ROLE_LABEL[m.account_type] !== roleFilter) return false;
+      if (riskFilter && riskLabel(m.risk_score) !== riskFilter) return false;
+      if (statusFilter) {
+        const sl = statusFilter.toLowerCase();
+        if (sl === 'actif' && m.status !== 'actif') return false;
+        if (sl === 'inactif' && m.status !== 'inactif') return false;
+        if (sl === 'suspendu' && m.status !== 'suspendu') return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (riskSort === 'asc') return a.risk_score - b.risk_score;   // plus risqué en premier (score bas)
+      if (riskSort === 'desc') return b.risk_score - a.risk_score;  // moins risqué en premier (score haut)
+      return 0;
+    });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -211,7 +220,7 @@ function MembresList({ members, accessRights = [], onNew }: { members: Member[];
 
       {/* KPI grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
-        <KpiCard label="Membres totaux" value={String(members.length)} delta={`↑ +${Math.max(0, members.length - activeCount)} ce mois-ci`} deltaUp={true} kpiColor="oklch(42% 0.18 280)"
+        <KpiCard label="Membres totaux" value={String(members.length)} delta={`${activeCount} actifs · ${members.length - activeCount} inactifs/suspendus`} kpiColor="oklch(42% 0.18 280)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(42% 0.18 280)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>}
         />
         <KpiCard label="Comptes actifs" value={String(activeCount)} delta={`→ ${members.length > 0 ? Math.round(activeCount / members.length * 1000) / 10 : 0}% du total`} kpiColor="oklch(62% 0.16 155)"
@@ -260,10 +269,12 @@ function MembresList({ members, accessRights = [], onNew }: { members: Member[];
             <option>Actif</option><option>Inactif</option><option>Suspendu</option>
           </select>
           <div style={{ flex: 1 }} />
-          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-            Filtres avancés
-          </button>
+          <select value={riskSort} onChange={(e) => { setRiskSort(e.target.value as 'none' | 'asc' | 'desc'); setPage(1); }}
+            style={{ padding: '7px 12px', border: `1px solid ${riskSort !== 'none' ? 'oklch(42% 0.18 280)' : 'oklch(90% 0.006 260)'}`, borderRadius: 7, fontSize: 12.5, background: riskSort !== 'none' ? 'oklch(42% 0.18 280 / 0.06)' : 'oklch(100% 0 0)', color: riskSort !== 'none' ? 'oklch(42% 0.18 280)' : 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <option value="none">Tri par risque</option>
+            <option value="asc">↑ Plus risqué en premier</option>
+            <option value="desc">↓ Moins risqué en premier</option>
+          </select>
         </div>
 
         {/* Table */}
@@ -351,7 +362,7 @@ function MembresList({ members, accessRights = [], onNew }: { members: Member[];
               )}
               {members.length > 0 && filtered.length === 0 && (
                 <tr><td colSpan={10}>
-                  <FilterEmpty onReset={() => { setSearch(''); setRoleFilter(''); setRiskFilter(''); setStatusFilter(''); setPage(1); }} />
+                  <FilterEmpty onReset={() => { setSearch(''); setRoleFilter(''); setRiskFilter(''); setStatusFilter(''); setRiskSort('none'); setPage(1); }} />
                 </td></tr>
               )}
             </tbody>

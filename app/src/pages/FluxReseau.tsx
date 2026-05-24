@@ -109,6 +109,64 @@ export function FluxReseau({ networkFlows, onFlowCreated }: FluxReseauProps) {
   const [showForm, setShowForm] = useState(false);
   const [clock, setClock] = useState('');
 
+  // ─ Derive protocol distribution from real data ─
+  const protoColors: Record<string, string> = {
+    HTTPS: BRAND, HTTP: BRAND,
+    SSH: BRAND_LIGHT,
+    DNS: RISK_LOW,
+    RDP: RISK_HIGH,
+    SMB: RISK_CRIT,
+    FTP: RISK_HIGH,
+    SMTP: RISK_MED,
+  };
+  const protoFlags: Record<string, { label: string; type: string }> = {
+    RDP: { label: 'Attention', type: 'warn' },
+    SMB: { label: 'Anomalie', type: 'crit' },
+    FTP: { label: 'Attention', type: 'warn' },
+  };
+
+  const protocols: typeof PROTOCOLS = (() => {
+    if (networkFlows.length === 0) return PROTOCOLS;
+    const counts: Record<string, number> = {};
+    for (const f of networkFlows) {
+      const p = (f.protocol || 'Autres').toUpperCase();
+      counts[p] = (counts[p] ?? 0) + 1;
+    }
+    const total = networkFlows.length;
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const top5 = entries.slice(0, 5);
+    const otherCount = entries.slice(5).reduce((s, [, n]) => s + n, 0);
+    const result = top5.map(([name, count]) => ({
+      name, pct: parseFloat(((count / total) * 100).toFixed(1)),
+      color: protoColors[name] ?? MUTED,
+      flag: protoFlags[name] ?? null,
+    }));
+    if (otherCount > 0) result.push({ name: 'Autres', pct: parseFloat(((otherCount / total) * 100).toFixed(1)), color: MUTED, flag: null });
+    return result;
+  })();
+
+  // ─ Derive source IPs table from real data ─
+  const sourceIps: typeof SOURCE_IPS = (() => {
+    if (networkFlows.length === 0) return SOURCE_IPS;
+    const seen = new Set<string>();
+    return networkFlows
+      .filter(f => { const k = f.source_host; if (seen.has(k)) return false; seen.add(k); return true; })
+      .slice(0, 10)
+      .map(f => ({
+        ip: f.source_host,
+        country: f.source_zone || '—',
+        proto: (f.protocol || '—').toUpperCase(),
+        debit: '—',
+        sev: f.status === 'bloqué' ? 'crit' : f.status === 'conditionnel' ? 'high' : 'low',
+        label: f.status === 'bloqué' ? 'Bloqué' : f.status === 'conditionnel' ? 'Conditionnel' : 'Autorisé',
+      }));
+  })();
+
+  const totalFlows = networkFlows.length;
+  const blockedFlows = networkFlows.filter(f => f.status === 'bloqué').length;
+  const inboundFlows = networkFlows.filter(f => f.direction === 'entrant').length;
+  const outboundFlows = networkFlows.filter(f => f.direction === 'sortant').length;
+
   useEffect(() => {
     const months = ['jan','fév','mar','avr','mai','juin','juil','août','sept','oct','nov','déc'];
     const tick = () => {
@@ -171,10 +229,10 @@ export function FluxReseau({ networkFlows, onFlowCreated }: FluxReseauProps) {
 
         {/* KPI grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
-          <KpiCard label="Débit entrant"      value="2.4 GB/s" delta="↑ +12% vs hier"  deltaType="up"      color={BRAND}       />
-          <KpiCard label="Débit sortant"      value="1.1 GB/s" delta="— Stable"         deltaType="neutral" color={BRAND_LIGHT}  />
-          <KpiCard label="Anomalies détectées" value="14"       delta="↑ 3 nouvelles"   deltaType="down"    color={RISK_HIGH}    />
-          <KpiCard label="Connexions actives" value="8 342"    delta="— Normal"          deltaType="neutral" color={RISK_LOW}     />
+          <KpiCard label="Flux documentés"    value={String(totalFlows)}                delta={totalFlows > 0 ? `${inboundFlows} entrant${inboundFlows !== 1 ? 's' : ''}` : '—'}  deltaType="neutral" color={BRAND}       />
+          <KpiCard label="Flux sortants"      value={String(outboundFlows)}             delta={totalFlows > 0 ? `${Math.round((outboundFlows / Math.max(1, totalFlows)) * 100)}% du total` : '—'} deltaType="neutral" color={BRAND_LIGHT}  />
+          <KpiCard label="Flux bloqués"       value={String(blockedFlows)}              delta={blockedFlows > 0 ? `${Math.round((blockedFlows / Math.max(1, totalFlows)) * 100)}% des flux` : '→ Aucun'} deltaType={blockedFlows > 0 ? 'down' : 'neutral'} color={RISK_HIGH}    />
+          <KpiCard label="Protocoles détectés" value={String(protocols.length)}         delta={protocols.length > 0 ? protocols[0]?.name + ' majoritaire' : '—'}                  deltaType="neutral" color={RISK_LOW}     />
         </div>
 
         {/* two-col: 2fr 1fr */}
@@ -240,7 +298,7 @@ export function FluxReseau({ networkFlows, onFlowCreated }: FluxReseauProps) {
               <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Répartition par protocole</span>
             </div>
             <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {PROTOCOLS.map((p) => (
+              {protocols.map((p) => (
                 <div key={p.name} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 12.5, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, color: FG }}>
@@ -277,16 +335,21 @@ export function FluxReseau({ networkFlows, onFlowCreated }: FluxReseauProps) {
               <span style={{ fontSize: 11, color: MUTED, marginLeft: 4 }}>— 10 premières IPs</span>
             </div>
             <div style={{ overflowX: 'auto' }}>
+              {sourceIps.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: MUTED, fontSize: 13 }}>
+                  Aucun flux documenté — ajoutez des flux via le bouton +.
+                </div>
+              ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr>
-                    {['IP Source','Pays','Protocole','Débit','Statut'].map((h) => (
+                    {['IP Source','Zone','Protocole','Débit','Statut'].map((h) => (
                       <th key={h} style={thStyle}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {SOURCE_IPS.map((row) => (
+                  {sourceIps.map((row) => (
                     <tr key={row.ip} style={{ borderBottom: `1px solid ${BORDER}` }}>
                       <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 12, color: MUTED }}>{row.ip}</span></td>
                       <td style={tdStyle}><span style={{ fontSize: 13, color: FG }}>{row.country}</span></td>
@@ -297,6 +360,7 @@ export function FluxReseau({ networkFlows, onFlowCreated }: FluxReseauProps) {
                   ))}
                 </tbody>
               </table>
+              )}
             </div>
           </div>
 
@@ -306,7 +370,7 @@ export function FluxReseau({ networkFlows, onFlowCreated }: FluxReseauProps) {
               <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Anomalies récentes</span>
               <span style={{ fontSize: 11, color: MUTED, marginLeft: 4 }}>— dernières 2h</span>
               <div style={{ marginLeft: 'auto' }}>
-                <Pill sev="crit" label="2 critiques" />
+                <Pill sev="crit" label={`${ANOMALIES.filter(a => a.sev === 'crit').length} critiques`} />
               </div>
             </div>
             <div>

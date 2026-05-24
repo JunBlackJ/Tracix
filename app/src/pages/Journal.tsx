@@ -190,7 +190,13 @@ export function Journal({ auditTrail: initialTrail }: JournalProps) {
                   <td style={{ ...tdStyle, color: 'oklch(18% 0.02 260)' }}>{entry.action}</td>
                   <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{entry.target_label}</td>
                   <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{entry.ip_address || '—'}</td>
-                  <td style={tdStyle}>{resultPill('success')}</td>
+                  <td style={tdStyle}>{resultPill(
+                    entry.action.toLowerCase().includes('fail') || entry.action.toLowerCase().includes('échec') || entry.action.toLowerCase().includes('error')
+                      ? 'fail'
+                      : entry.action.toLowerCase().includes('deny') || entry.action.toLowerCase().includes('refus') || entry.action.toLowerCase().includes('reject')
+                      ? 'deny'
+                      : 'success'
+                  )}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (

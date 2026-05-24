@@ -125,7 +125,6 @@ function Gauge({ score, color }: { score: number; color: string }) {
       <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '3px 10px', borderRadius: '999px', background: `${color}1e`, color }}>
         {score >= 80 ? 'Risque critique' : score >= 60 ? 'Risque modéré' : score >= 40 ? 'Risque moyen' : 'Risque faible'}
       </span>
-      <div style={{ fontSize: '12px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", color: 'oklch(55% 0.22 25)', marginTop: '4px' }}>↑ +4 pts cette semaine</div>
     </div>
   );
 }
@@ -159,12 +158,11 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
   }).length;
 
   const factors = [
-    { name: 'Accès privilégiés non révisés', desc: `${adminCount} comptes avec droits admin — révision > 90 j`, score: Math.min(99, Math.round(adminCount * 0.35)), color: 'oklch(62% 0.18 52)', delta: '+3', deltaColor: 'oklch(55% 0.22 25)' },
-    { name: 'MFA non activé', desc: `${noMfaAdmins} plateformes actives sans authentification forte`, score: Math.min(99, Math.round(noMfaAdmins * 8)), color: 'oklch(62% 0.18 52)', delta: '+2', deltaColor: 'oklch(55% 0.22 25)' },
-    { name: 'Comptes inactifs (> 60 j)', desc: `${inactiveMembers} comptes sans connexion récente, accès encore actifs`, score: Math.min(99, Math.round(inactiveMembers * 1.3)), color: 'oklch(70% 0.14 88)', delta: '→ 0', deltaColor: 'oklch(52% 0.012 260)' },
-    { name: 'Accès multi-plateformes', desc: `${multiPlatform} membres avec accès sur ≥ 5 services simultanément`, score: Math.min(99, Math.round(multiPlatform * 0.6)), color: 'oklch(70% 0.14 88)', delta: '+1', deltaColor: 'oklch(55% 0.22 25)' },
-    { name: 'Habilitations expirées actives', desc: `${expiredRights} habilitations dont la date d'échéance est dépassée`, score: Math.min(99, Math.round(expiredRights * 1.7)), color: 'oklch(70% 0.14 88)', delta: '↓ −2', deltaColor: 'oklch(62% 0.16 155)' },
-    { name: 'Connexions hors plage horaire', desc: '12 connexions nocturnes ou week-end détectées', score: 38, color: 'oklch(70% 0.14 88)', delta: '→ 0', deltaColor: 'oklch(52% 0.012 260)' },
+    { name: 'Accès privilégiés non révisés', desc: `${adminCount} compte${adminCount !== 1 ? 's' : ''} avec droits admin`, score: Math.min(99, Math.round(adminCount * 0.35)), color: 'oklch(62% 0.18 52)' },
+    { name: 'MFA non activé', desc: `${noMfaAdmins} plateforme${noMfaAdmins !== 1 ? 's' : ''} sans authentification forte`, score: Math.min(99, Math.round(noMfaAdmins * 8)), color: 'oklch(62% 0.18 52)' },
+    { name: 'Comptes inactifs', desc: `${inactiveMembers} compte${inactiveMembers !== 1 ? 's' : ''} inactif${inactiveMembers !== 1 ? 's' : ''} avec accès encore actifs`, score: Math.min(99, Math.round(inactiveMembers * 1.3)), color: 'oklch(70% 0.14 88)' },
+    { name: 'Accès multi-plateformes', desc: `${multiPlatform} membre${multiPlatform !== 1 ? 's' : ''} avec accès sur ≥ 5 services simultanément`, score: Math.min(99, Math.round(multiPlatform * 0.6)), color: 'oklch(70% 0.14 88)' },
+    { name: 'Habilitations expirées actives', desc: `${expiredRights} habilitation${expiredRights !== 1 ? 's' : ''} dont la date d'échéance est dépassée`, score: Math.min(99, Math.round(expiredRights * 1.7)), color: 'oklch(70% 0.14 88)' },
   ];
 
   const PERIODS: { id: '7j' | '30j' | '90j'; label: string }[] = [
@@ -199,10 +197,10 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
 
       {/* KPI grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
-        <KpiCard label="Score moyen global" value={avgScore} delta={`↑ +4 pts sur ${period}`} deltaDir="down" color="oklch(70% 0.14 88)" svgPath="M22 12h-4l-3 9-6-18-3 9H2" />
-        <KpiCard label="Membres critiques (≥ 80)" value={critiques} delta="↑ +6 cette semaine" deltaDir="down" color="oklch(55% 0.22 25)" svgPath="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01" />
-        <KpiCard label="Membres à risque élevé (60–79)" value={elevated} delta="→ Stable sur 7 j" deltaDir="neutral" color="oklch(62% 0.18 52)" svgPath="M12 2a10 10 0 100 20A10 10 0 0012 2z M12 8v4 M12 16h.01" />
-        <KpiCard label="Score médian (P50)" value={median} delta="↓ −2 pts sur 30 j" deltaDir="up" color="oklch(62% 0.16 155)" svgPath="M5 12h14 M12 5l7 7-7 7" />
+        <KpiCard label="Score moyen global" value={avgScore} delta={members.length > 0 ? `${members.length} membres évalués` : '—'} deltaDir="neutral" color="oklch(70% 0.14 88)" svgPath="M22 12h-4l-3 9-6-18-3 9H2" />
+        <KpiCard label="Membres critiques (≥ 80)" value={critiques} delta={critiques > 0 ? `${((critiques / members.length) * 100).toFixed(1)}% des membres` : '→ Aucun'} deltaDir={critiques > 0 ? 'down' : 'neutral'} color="oklch(55% 0.22 25)" svgPath="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01" />
+        <KpiCard label="Membres à risque élevé (60–79)" value={elevated} delta={elevated > 0 ? `${((elevated / members.length) * 100).toFixed(1)}% des membres` : '→ Aucun'} deltaDir={elevated > 0 ? 'down' : 'neutral'} color="oklch(62% 0.18 52)" svgPath="M12 2a10 10 0 100 20A10 10 0 0012 2z M12 8v4 M12 16h.01" />
+        <KpiCard label="Score médian (P50)" value={median} delta={sorted.length > 0 ? `sur ${sorted.length} membres actifs` : '—'} deltaDir="neutral" color="oklch(62% 0.16 155)" svgPath="M5 12h14 M12 5l7 7-7 7" />
       </div>
 
       {/* Row 2/3 + 1/3 */}
@@ -249,7 +247,6 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
                     <div style={{ height: '100%', borderRadius: '999px', background: f.color, width: `${f.score}%`, transition: 'width 0.3s' }} />
                   </div>
                   <span style={{ fontSize: '14px', fontWeight: 700, fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", width: '28px', textAlign: 'right', color: f.color }}>{f.score}</span>
-                  <span style={{ fontSize: '11px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", width: '40px', textAlign: 'right', color: f.deltaColor }}>{f.delta}</span>
                 </div>
               </div>
             ))}

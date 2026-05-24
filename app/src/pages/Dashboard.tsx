@@ -123,16 +123,11 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
   const recentAudit = auditTrail.slice(0, 6);
 
   const totalMembers = stats?.totalMembersAll ?? 0;
-  const totalAccess = stats ? (stats.totalMembersAll * 8) : 0;
+  const totalAccess = stats?.totalAccessRights ?? 0;
   const avgScore = stats?.avgRiskScore ?? 0;
   const openAlerts = alerts.filter(a => !a.is_resolved).length;
 
-  const riskDist = {
-    crit: Math.round(totalMembers * 0.042),
-    high: Math.round(totalMembers * 0.119),
-    med: Math.round(totalMembers * 0.378),
-    low: Math.round(totalMembers * 0.462),
-  };
+  const riskDist = stats?.riskDistribution ?? { crit: 0, high: 0, med: 0, low: 0 };
 
   const feedDotColor = (entry: AuditTrail) =>
     entry.action.includes('delete') || entry.action.includes('revoke') ? 'oklch(55% 0.22 25)'
@@ -170,16 +165,16 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
 
       {/* KPI grid — 4 cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
-        <KpiCard label="Membres actifs" value={totalMembers} delta={`↑ +14 ce mois-ci`} deltaUp={true} kpiColor="oklch(42% 0.18 280)"
+        <KpiCard label="Membres actifs" value={totalMembers} delta={stats ? `${totalMembers} au total` : '—'} kpiColor="oklch(42% 0.18 280)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(42% 0.18 280)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>}
         />
-        <KpiCard label="Habilitations actives" value={totalAccess} delta="→ Stable sur 30 j" kpiColor="oklch(55% 0.18 280)"
+        <KpiCard label="Habilitations actives" value={totalAccess} delta={stats ? `${stats.adminCount} droits admin` : '—'} kpiColor="oklch(55% 0.18 280)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(55% 0.18 280)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>}
         />
-        <KpiCard label="Score de risque moyen" value={avgScore} delta={`↑ +4 pts depuis 7 j`} deltaUp={false} kpiColor="oklch(70% 0.14 88)"
+        <KpiCard label="Score de risque moyen" value={avgScore} delta={stats ? `${stats.membersWithoutReview} revues en retard` : '—'} deltaUp={stats ? (stats.membersWithoutReview > 0 ? false : undefined) : undefined} kpiColor="oklch(70% 0.14 88)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(70% 0.14 88)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>}
         />
-        <KpiCard label="Alertes ouvertes" value={openAlerts} delta={`↑ +3 depuis hier`} deltaUp={false} kpiColor="oklch(55% 0.22 25)"
+        <KpiCard label="Alertes ouvertes" value={openAlerts} delta={stats ? `${stats.criticalAlerts} critique${stats.criticalAlerts !== 1 ? 's' : ''}` : '—'} deltaUp={openAlerts > 0 ? false : undefined} kpiColor="oklch(55% 0.22 25)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(55% 0.22 25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>}
         />
       </div>
@@ -205,16 +200,19 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', padding: '12px 20px 16px', borderTop: '1px solid oklch(90% 0.006 260)' }}>
             {[
-              { label: 'Critique', color: 'oklch(55% 0.22 25)', count: riskDist.crit, pct: '4.2' },
-              { label: 'Élevé',    color: 'oklch(62% 0.18 52)', count: riskDist.high, pct: '11.9' },
-              { label: 'Moyen',    color: 'oklch(70% 0.14 88)', count: riskDist.med,  pct: '37.8' },
-              { label: 'Faible',   color: 'oklch(62% 0.16 155)', count: riskDist.low, pct: '46.2' },
-            ].map(item => (
-              <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'oklch(52% 0.012 260)' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0, display: 'inline-block' }} />
-                {item.label} ({item.pct}%)
-              </span>
-            ))}
+              { label: 'Critique', color: 'oklch(55% 0.22 25)', count: riskDist.crit },
+              { label: 'Élevé',    color: 'oklch(62% 0.18 52)', count: riskDist.high },
+              { label: 'Moyen',    color: 'oklch(70% 0.14 88)', count: riskDist.med  },
+              { label: 'Faible',   color: 'oklch(62% 0.16 155)', count: riskDist.low },
+            ].map(item => {
+              const pct = totalMembers > 0 ? ((item.count / totalMembers) * 100).toFixed(1) : '0.0';
+              return (
+                <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'oklch(52% 0.012 260)' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, flexShrink: 0, display: 'inline-block' }} />
+                  {item.label} ({pct}%)
+                </span>
+              );
+            })}
           </div>
         </div>
 

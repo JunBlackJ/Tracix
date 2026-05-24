@@ -73,6 +73,16 @@ router.get('/stats', async (req: Request, res: Response): Promise<void> => {
 
   const criticalAlerts = unresolvedAlerts.filter((a) => a.severity === 'critical').length;
 
+  // Risk distribution by level
+  const riskDistribution = {
+    crit: allMembers.filter((m) => m.risk_score >= 80).length,
+    high: allMembers.filter((m) => m.risk_score >= 60 && m.risk_score < 80).length,
+    med:  allMembers.filter((m) => m.risk_score >= 40 && m.risk_score < 60).length,
+    low:  allMembers.filter((m) => m.risk_score < 40).length,
+  };
+
+  const totalAccessRights = allAccessRights.filter((a) => a.level !== 'none').length;
+
   // Risk by team
   const teamMap = new Map<string, { scores: number[]; count: number }>();
   for (const m of allMembers) {
@@ -129,6 +139,8 @@ router.get('/stats', async (req: Request, res: Response): Promise<void> => {
     expiringSubs,
     criticalAlerts,
     totalAlerts: unresolvedAlerts.length,
+    totalAccessRights,
+    riskDistribution,
     riskByTeam,
     accessLevelDistribution,
     riskHistory,

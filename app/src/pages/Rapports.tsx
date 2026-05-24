@@ -138,23 +138,9 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
     },
   ];
 
-  // ─ static demo data for recent reports & schedule ─
-  const RECENT_REPORTS = [
-    { name: 'Inventaire des droits',          period: '24/05/2026', by: 'j.blanchard', date: '24/05/2026 11:02', size: '2.4 Mo',  status: 'ready'   },
-    { name: 'Rapport SOC 2 Type II',          period: '01/05/2026', by: 'j.blanchard', date: '01/05/2026 08:00', size: '8.7 Mo',  status: 'ready'   },
-    { name: "Rapport d'anomalies mensuel",    period: '01/05/2026', by: 'système',     date: '01/05/2026 00:03', size: '1.1 Mo',  status: 'ready'   },
-    { name: 'Revue des accès T1 2026',        period: '01/04/2026', by: 's.leroy',     date: '01/04/2026 09:15', size: '4.2 Mo',  status: 'ready'   },
-    { name: 'NIS2 — Évaluation préliminaire', period: '24/05/2026', by: 'j.blanchard', date: '24/05/2026 14:30', size: '—',       status: 'running' },
-    { name: 'ISO 27001 — Audit annuel',       period: '15/03/2026', by: 'b.morel',     date: '15/03/2026 07:45', size: '12.3 Mo', status: 'ready'   },
-    { name: "Rapport d'anomalies — Avril",    period: '01/04/2026', by: 'système',     date: '01/04/2026 00:03', size: '0.9 Mo',  status: 'ready'   },
-    { name: 'Inventaire des droits — Urgence',period: '10/02/2026', by: 'j.blanchard', date: '10/02/2026 16:22', size: '—',       status: 'failed'  },
-  ];
-
-  const SCHEDULE = [
-    { name: "Rapport d'anomalies mensuel",       freq: "Tous les 1er du mois à 00:00", cron: '0 0 1 * *',      next: '01/06/2026 00:00', enabled: true  },
-    { name: 'Revue des accès trimestrielle',     freq: "Tous les trimestres le 1er à 08:00", cron: '0 8 1 1,4,7,10 *', next: '01/07/2026 08:00', enabled: true  },
-    { name: 'Inventaire des droits hebdomadaire',freq: 'Tous les lundis à 06:00',        cron: '0 6 * * 1',      next: 'Désactivé',      enabled: false },
-  ];
+  // No report history API exists — empty state
+  const RECENT_REPORTS: never[] = [];
+  const SCHEDULE: never[] = [];
 
   const statusPillStyle = (s: string): React.CSSProperties => {
     if (s === 'ready')   return { background: 'oklch(62% 0.16 155 / 0.1)', color: 'oklch(62% 0.16 155)' };
@@ -180,11 +166,18 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
     { id: 'offboard',   name: 'Inventaire des droits',           standard: 'Accès',  color: 'green',  desc: 'Liste exhaustive des droits et permissions par utilisateur',                date: '24/05/2026', iconPath: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 7a4 4 0 100 8 4 4 0 000-8z M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75' },
   ];
 
+  const nextExpiringSub = subscriptions
+    .filter(s => s.status === 'actif' && s.renewal_date && new Date(s.renewal_date) > now)
+    .sort((a, b) => new Date(a.renewal_date).getTime() - new Date(b.renewal_date).getTime())[0];
+  const nextSubDays = nextExpiringSub
+    ? Math.floor((new Date(nextExpiringSub.renewal_date).getTime() - now.getTime()) / 86400000)
+    : null;
+
   const KPI_CELLS = [
-    { label: 'Rapports générés ce mois', value: String(14 + Math.max(0, members.length > 0 ? 0 : 0)), color: 'oklch(42% 0.18 280)', sub: '+3 vs mois dernier' },
-    { label: 'En attente',               value: String(alerts.filter(a => !a.is_resolved && a.severity === 'critical').length || 2), color: 'oklch(62% 0.18 52)', sub: 'NIS2 + Inventaire' },
-    { label: 'Conformité globale',        value: `${score}%`,  color: 'oklch(70% 0.14 88)', sub: '+1.4 pts vs T1' },
-    { label: 'Prochaine échéance',        value: 'SOC 2',      color: 'oklch(42% 0.18 280)', sub: 'dans 37 jours' },
+    { label: 'Conformité globale',   value: `${score}%`,  color: 'oklch(70% 0.14 88)', sub: score >= 80 ? 'Bonne conformité' : score >= 50 ? 'À améliorer' : 'Action requise' },
+    { label: 'Alertes critiques',    value: String(criticalAlerts), color: 'oklch(55% 0.22 25)', sub: criticalAlerts > 0 ? 'Action requise' : 'Aucune alerte critique' },
+    { label: 'Revues en retard',     value: String(overdueCount),   color: 'oklch(62% 0.18 52)', sub: overdueCount > 0 ? 'À traiter' : 'Revues à jour' },
+    { label: 'Prochain renouvellement', value: nextExpiringSub ? nextExpiringSub.name.split(' ')[0] : '—', color: 'oklch(42% 0.18 280)', sub: nextSubDays !== null ? `dans ${nextSubDays} jour${nextSubDays !== 1 ? 's' : ''}` : 'Aucun abonnement' },
   ];
 
   const BORDER  = 'oklch(90% 0.006 260)';
@@ -279,56 +272,38 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
                 <button style={{ padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED }}>Tout afficher</button>
               </div>
             </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    {['Nom','Période','Généré par','Date','Taille','Statut','Actions'].map((h) => (
-                      <th key={h} style={thStyle}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {RECENT_REPORTS.map((r, i) => (
-                    <tr key={i} style={{ borderBottom: i < RECENT_REPORTS.length - 1 ? `1px solid ${BORDER}` : 'none', transition: 'background 0.1s' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
-                      <td style={{ ...tdStyle, fontWeight: 500, fontSize: 12.5, color: FG }}>{r.name}</td>
-                      <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12, color: MUTED }}>{r.period}</span></td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: MUTED }}>{r.by}</td>
-                      <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12, color: MUTED }}>{r.date}</span></td>
-                      <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12, color: MUTED }}>{r.size}</span></td>
-                      <td style={tdStyle}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...statusPillStyle(r.status) }}>
-                          {statusLabel(r.status)}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <button
-                          title={r.status === 'failed' ? 'Réessayer' : 'Télécharger'}
-                          disabled={r.status === 'running'}
-                          style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, cursor: r.status === 'running' ? 'default' : 'pointer', display: 'inline-grid', placeItems: 'center', opacity: r.status === 'running' ? 0.4 : 1, transition: 'all 0.1s' }}
-                          onMouseEnter={(e) => { if (r.status !== 'running') { e.currentTarget.style.background = 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.color = BRAND; e.currentTarget.style.borderColor = BRAND; }}}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED; e.currentTarget.style.borderColor = BORDER; }}
-                        >
-                          {r.status === 'failed'
-                            ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-                            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                          }
-                        </button>
-                      </td>
+            {RECENT_REPORTS.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {['Nom','Période','Généré par','Date','Taille','Statut','Actions'].map((h) => (
+                        <th key={h} style={thStyle}>{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {RECENT_REPORTS.map((r, i) => (
+                      <tr key={i} style={{ borderBottom: `1px solid ${BORDER}`, transition: 'background 0.1s' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = '')} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: MUTED, fontSize: 13 }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 36, height: 36, margin: '0 auto 10px', opacity: 0.35, display: 'block' }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                Aucun rapport généré — utilisez les modèles ci-contre pour en créer un.
+              </div>
+            )}
           </div>
 
           {/* Scheduling */}
           <div style={card}>
             <div style={cardHeader}>
               <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Planification</span>
-              <span style={{ fontSize: 11, color: MUTED, marginLeft: 4 }}>— 3 rapports programmés</span>
+              <span style={{ fontSize: 11, color: MUTED, marginLeft: 4 }}>— {SCHEDULE.length} rapport{SCHEDULE.length !== 1 ? 's' : ''} programmé{SCHEDULE.length !== 1 ? 's' : ''}</span>
               <div style={{ marginLeft: 'auto' }}>
                 <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -336,40 +311,14 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
                 </button>
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {SCHEDULE.map((s, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: i < SCHEDULE.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
-                  {/* Toggle */}
-                  <label style={{ position: 'relative', width: 36, height: 20, flexShrink: 0, cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked={s.enabled} style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }} />
-                    <span style={{ position: 'absolute', inset: 0, background: s.enabled ? BRAND : BORDER, borderRadius: 999, transition: 'background 0.18s', cursor: 'pointer' }}>
-                      <span style={{ position: 'absolute', left: s.enabled ? 19 : 3, top: 3, width: 14, height: 14, background: '#fff', borderRadius: '50%', transition: 'left 0.18s', boxShadow: '0 1px 3px oklch(0% 0 0 / 0.2)' }} />
-                    </span>
-                  </label>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: FG, marginBottom: 2 }}>{s.name}</div>
-                    <div style={{ fontSize: 11, color: MUTED }}>
-                      {s.freq} — <span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 10.5 }}>{s.cron}</span>
-                    </div>
-                    <div style={{ fontSize: 10.5, color: s.enabled ? MUTED : 'oklch(62% 0.18 52)', marginTop: 2, fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>
-                      {s.enabled ? `Prochain : ${s.next}` : 'Désactivé'}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    {[
-                      <svg key="edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-                      <svg key="del"  viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13, color: 'oklch(55% 0.22 25)' }}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>,
-                    ].map((icon, j) => (
-                      <button key={j} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'transparent', color: j === 1 ? 'oklch(55% 0.22 25)' : MUTED, cursor: 'pointer', display: 'inline-grid', placeItems: 'center', transition: 'all 0.1s' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = j === 1 ? 'oklch(55% 0.22 25 / 0.1)' : 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.borderColor = j === 1 ? 'oklch(55% 0.22 25 / 0.3)' : BRAND; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = BORDER; }}>
-                        {icon}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            {SCHEDULE.length === 0 ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: MUTED, fontSize: 13 }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 36, height: 36, margin: '0 auto 10px', opacity: 0.35, display: 'block' }}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Aucun rapport planifié — cliquez sur « Planifier » pour en configurer un.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }} />
+            )}
           </div>
 
           {/* KPI grid 2×2 */}

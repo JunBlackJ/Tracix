@@ -37,6 +37,8 @@ export interface DashboardStats {
   expiringSubs: number;
   criticalAlerts: number;
   totalAlerts: number;
+  totalAccessRights: number;
+  riskDistribution: { crit: number; high: number; med: number; low: number };
   riskByTeam: { team: string; score: number; count: number }[];
   accessLevelDistribution: { name: string; value: number; color: string }[];
   riskHistory: { date: string; score: number }[];

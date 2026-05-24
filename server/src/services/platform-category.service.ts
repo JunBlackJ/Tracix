@@ -5,22 +5,47 @@ import prisma from '../prisma/client';
 const MIN_PLATFORMS_PER_CATEGORY = 2;
 
 const CATEGORY_COLORS: Record<string, string> = {
-  'Cloud':          '#3B82F6',
-  'DevOps':         '#8B5CF6',
-  'Communication':  '#10B981',
-  'Productivité':   '#F59E0B',
-  'Sécurité':       '#EF4444',
-  'Monitoring':     '#06B6D4',
-  'Finance':        '#84CC16',
-  'RH':             '#EC4899',
-  'CRM':            '#F97316',
-  'Développement':  '#6366F1',
-  'Infrastructure': '#64748B',
-  'Identité':       '#A855F7',
-  'Collaboration':  '#0EA5E9',
-  'Données':        '#14B8A6',
-  'Support':        '#FB923C',
-  'Autres':         '#6B7280',
+  // Technologique / développeurs
+  'Cloud':              '#3B82F6',
+  'DevOps':             '#8B5CF6',
+  'Développement':      '#6366F1',
+  'Infrastructure':     '#64748B',
+  'Identité':           '#A855F7',
+  'OS':                 '#0EA5E9',
+  'App Store':          '#06B6D4',
+  // SaaS / productivité
+  'Productivité':       '#F59E0B',
+  'Collaboration':      '#0284C7',
+  'CRM':                '#F97316',
+  'Design':             '#EC4899',
+  'Support':            '#FB923C',
+  'RH':                 '#D946EF',
+  // Sécurité / IT
+  'Sécurité':           '#EF4444',
+  'Monitoring':         '#14B8A6',
+  'Données':            '#10B981',
+  // Commerce
+  'E-commerce':         '#84CC16',
+  'Marketplace':        '#65A30D',
+  'Livraison':          '#A3E635',
+  // Mise en relation
+  'Transport':          '#FBBF24',
+  'Hébergement':        '#F59E0B',
+  'Freelance':          '#EAB308',
+  // Contenu / médias
+  'Réseaux sociaux':    '#E879F9',
+  'Streaming':          '#C026D3',
+  'Médias':             '#A21CAF',
+  // Paiement / fintech
+  'Finance':            '#34D399',
+  'Paiement':           '#10B981',
+  'Crypto':             '#6EE7B7',
+  // Apprentissage
+  'Formation':          '#818CF8',
+  'Éducation':          '#6366F1',
+  // Fallback
+  'Communication':      '#2DD4BF',
+  'Autres':             '#6B7280',
 };
 
 function categoryColor(label: string): string {
@@ -87,15 +112,62 @@ export async function classifyAndCategorizePlatforms(orgId: string): Promise<voi
   });
 
   const nameList = platforms.map((p) => `- ${p.name}`).join('\n');
-  const prompt = `Tu es un expert IT. Classe chacun des outils/plateformes suivants dans une catégorie fonctionnelle en français.
+  const prompt = `Tu es un expert en classification de plateformes numériques. Classe chacun des outils/plateformes suivants dans la catégorie la plus appropriée.
 
 Outils à classifier :
 ${nameList}
 
+Catégories disponibles (choisis celle qui correspond le mieux à la FONCTION PRINCIPALE) :
+
+Technologique / développeurs :
+- "Cloud" : AWS, GCP, Azure, hébergement cloud
+- "DevOps" : CI/CD, Git, Docker, déploiement, monitoring infra
+- "Développement" : IDE, SDK, outils de code, API dev, GitHub, GitLab
+- "Infrastructure" : serveurs, réseau, virtualisation, datacenter
+- "Identité" : SSO, IAM, annuaires, Okta, Active Directory
+- "OS" : systèmes d'exploitation, Windows, Linux, Android, iOS
+- "App Store" : Google Play Store, Apple App Store, distribution d'apps
+
+SaaS / productivité :
+- "Productivité" : Notion, Google Workspace, Office 365, Trello, Asana
+- "Collaboration" : Slack, Teams, Discord, wikis internes
+- "CRM" : Salesforce, HubSpot, Pipedrive, gestion client
+- "Design" : Figma, Canva, Adobe, outils créatifs
+- "Support" : Zendesk, Intercom, helpdesk, ticketing
+- "RH" : recrutement, paie, gestion RH, BambooHR, Workday
+- "Monitoring" : Datadog, Splunk, New Relic, alertes, logs
+- "Données" : BI, analytics, data warehouse, Tableau, Snowflake
+- "Sécurité" : SIEM, antivirus, firewall, gestion des accès, VPN
+- "Communication" : messagerie, email, Twilio, SendGrid
+
+Commerce :
+- "E-commerce" : Shopify, WooCommerce, boutiques en ligne
+- "Marketplace" : Amazon, eBay, Etsy, places de marché
+- "Livraison" : Uber Eats, Glovo, livraison à domicile
+
+Mise en relation :
+- "Transport" : Uber, Bolt, mobilité, VTC
+- "Hébergement" : Airbnb, Booking, location courte durée
+- "Freelance" : Upwork, Fiverr, malt, travail indépendant
+
+Contenu / médias :
+- "Réseaux sociaux" : Instagram, TikTok, Facebook, X/Twitter, LinkedIn
+- "Streaming" : Netflix, Spotify, YouTube, médias à la demande
+- "Médias" : presse en ligne, blogs, newsletters, podcasts
+
+Paiement / fintech :
+- "Paiement" : PayPal, Stripe, Wave, terminaux de paiement
+- "Crypto" : Binance, Coinbase, wallets crypto, DeFi
+- "Finance" : banques, comptabilité, facturation, ERP financier
+
+Apprentissage :
+- "Formation" : Udemy, Coursera, LinkedIn Learning, MOOCs
+- "Éducation" : Google Classroom, Moodle, outils scolaires/universitaires
+
 Règles :
-- Utilise UNIQUEMENT ces catégories : Cloud, DevOps, Communication, Productivité, Sécurité, Monitoring, Finance, RH, CRM, Développement, Infrastructure, Identité, Collaboration, Données, Support
 - Une seule catégorie par outil, basée sur sa fonction principale
-- Si l'outil est inconnu ou ambigu, assigne "Autres"
+- Si l'outil est inconnu ou vraiment ambigu après réflexion, assigne "Autres"
+- Priorise toujours la fonction métier réelle sur la technologie sous-jacente
 
 Réponds UNIQUEMENT avec un objet JSON valide, sans markdown :
 { "NomOutil": "Catégorie", ... }`;

@@ -586,18 +586,15 @@ function SubscriptionFormModal({ subscription, categories, onClose, onSaved }: S
             <p className="text-[10px] text-gray-400">★ Champ de référence pour le cycle sélectionné · 1 mois = 4,333 semaines · 1 an = 12 mois</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Date de renouvellement *</label>
-              <input
-                type="date"
-                value={form.renewal_date}
-                onChange={(e) => setForm((f) => ({ ...f, renewal_date: e.target.value }))}
-                className={inputClass('renewal_date')}
-              />
-              {errors.renewal_date && <p className="text-[11px] text-red-500 mt-0.5">{errors.renewal_date}</p>}
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Date de renouvellement *</label>
+            <input
+              type="date"
+              value={form.renewal_date}
+              onChange={(e) => setForm((f) => ({ ...f, renewal_date: e.target.value }))}
+              className={inputClass('renewal_date')}
+            />
+            {errors.renewal_date && <p className="text-[11px] text-red-500 mt-0.5">{errors.renewal_date}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

@@ -1,295 +1,334 @@
-import { useState } from 'react';
-import {
-  Search, Plus, CheckCircle2, XCircle, AlertCircle, Clock,
-  X, Save, Loader2, Network, ArrowDownLeft, ArrowUpRight, ArrowLeftRight,
-  Shield, Activity,
-} from 'lucide-react';
-import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
+import React, { useState, useEffect } from 'react';
+import { Save, Loader2, Network, X, Plus } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { NetworkFlow, FlowDirection, FlowStatus } from '@/types';
+
+const BRAND       = 'oklch(42% 0.18 280)';
+const BRAND_LIGHT = 'oklch(55% 0.18 280)';
+const RISK_CRIT   = 'oklch(55% 0.22 25)';
+const RISK_HIGH   = 'oklch(62% 0.18 52)';
+const RISK_MED    = 'oklch(70% 0.14 88)';
+const RISK_LOW    = 'oklch(62% 0.16 155)';
+const MUTED       = 'oklch(52% 0.012 260)';
+const BORDER      = 'oklch(90% 0.006 260)';
+const SURFACE     = 'oklch(100% 0 0)';
+const FG          = 'oklch(18% 0.02 260)';
+
+const IN_DATA  = [5,4,3,4,6,8,14,22,68,85,92,88,72,64,88,95,90,78,62,50,38,28,18,10];
+const OUT_DATA = [3,3,2,3,4,6,10,16,42,56,64,60,50,44,60,68,62,54,42,34,24,18,12,7];
+
+const PROTOCOLS = [
+  { name: 'HTTPS', pct: 64.2, color: BRAND, flag: null },
+  { name: 'SSH',   pct: 12.8, color: BRAND_LIGHT, flag: null },
+  { name: 'DNS',   pct: 8.4,  color: RISK_LOW, flag: null },
+  { name: 'RDP',   pct: 5.1,  color: RISK_HIGH, flag: { label: 'Attention', type: 'warn' } as { label: string; type: string } },
+  { name: 'SMB',   pct: 3.7,  color: RISK_CRIT, flag: { label: 'Anomalie', type: 'crit' } as { label: string; type: string } },
+  { name: 'Autres',pct: 5.8,  color: MUTED, flag: null },
+];
+
+const SOURCE_IPS = [
+  { ip: '10.0.1.42',       country: '🇫🇷 France',        proto: 'HTTPS', debit: '214 MB/s', sev: 'low',  label: 'Autorisé' },
+  { ip: '192.168.12.7',    country: '🇫🇷 France',        proto: 'SSH',   debit: '88 MB/s',  sev: 'low',  label: 'Autorisé' },
+  { ip: '185.234.219.44',  country: '🇳🇱 Pays-Bas',      proto: 'RDP',   debit: '56 MB/s',  sev: 'crit', label: 'Bloqué'   },
+  { ip: '203.0.113.77',    country: '🇨🇳 Chine',         proto: 'SMB',   debit: '42 MB/s',  sev: 'high', label: 'Suspect'  },
+  { ip: '52.86.144.200',   country: '🇺🇸 États-Unis',    proto: 'HTTPS', debit: '39 MB/s',  sev: 'low',  label: 'Autorisé' },
+  { ip: '176.9.52.31',     country: '🇩🇪 Allemagne',     proto: 'DNS',   debit: '31 MB/s',  sev: 'low',  label: 'Autorisé' },
+  { ip: '91.108.4.10',     country: '🇳🇱 Pays-Bas',      proto: 'HTTPS', debit: '27 MB/s',  sev: 'high', label: 'Suspect'  },
+  { ip: '217.138.220.5',   country: '🇬🇧 Royaume-Uni',   proto: 'SSH',   debit: '19 MB/s',  sev: 'low',  label: 'Autorisé' },
+  { ip: '198.51.100.88',   country: '🇺🇸 États-Unis',    proto: 'RDP',   debit: '14 MB/s',  sev: 'crit', label: 'Bloqué'   },
+  { ip: '10.0.5.114',      country: '🇫🇷 France',        proto: 'HTTPS', debit: '11 MB/s',  sev: 'low',  label: 'Autorisé' },
+];
+
+const ANOMALIES = [
+  { sev: 'crit', desc: 'Scan de ports depuis 185.234.x.x',          meta: '14:21:03 · Critique · 443 ports sondés'  },
+  { sev: 'crit', desc: 'Tentative de connexion RDP — 14 essais',     meta: '14:18:47 · Critique · 198.51.100.88'     },
+  { sev: 'high', desc: 'Volume sortant inhabituel — srv-db-02',      meta: '14:10:22 · Élevé · 4.2 GB en 8 min'     },
+  { sev: 'high', desc: 'Protocole non autorisé SMB détecté',         meta: '13:58:11 · Élevé · 203.0.113.77'        },
+  { sev: 'med',  desc: 'Latence élevée API gateway',                 meta: '13:45:30 · Moyen · p99 = 2 340 ms'      },
+  { sev: 'med',  desc: 'Pic de requêtes DNS depuis wks-adupont',     meta: '13:32:08 · Moyen · 1 240 req/min'       },
+  { sev: 'low',  desc: 'Connexion VPN — nouveau pays (DE)',          meta: '13:12:55 · Info · utilisateur: m.petit' },
+  { sev: 'low',  desc: 'Certificat expirant — 7j restants',          meta: '12:58:40 · Info · api.tracix-internal.fr'},
+];
+
+function pillStyle(sev: string): React.CSSProperties {
+  switch (sev) {
+    case 'crit': return { background: 'oklch(55% 0.22 25 / 0.1)',  color: RISK_CRIT };
+    case 'high': return { background: 'oklch(62% 0.18 52 / 0.1)',  color: RISK_HIGH };
+    case 'med':  return { background: 'oklch(70% 0.14 88 / 0.1)',  color: RISK_MED  };
+    case 'low':  return { background: 'oklch(62% 0.16 155 / 0.1)', color: RISK_LOW  };
+    default: return {};
+  }
+}
+
+function dotStyle(sev: string): React.CSSProperties {
+  switch (sev) {
+    case 'crit': return { background: RISK_CRIT, boxShadow: `0 0 0 2px oklch(55% 0.22 25 / 0.2)` };
+    case 'high': return { background: RISK_HIGH, boxShadow: `0 0 0 2px oklch(62% 0.18 52 / 0.2)` };
+    case 'med':  return { background: RISK_MED,  boxShadow: `0 0 0 2px oklch(70% 0.14 88 / 0.2)` };
+    case 'low':  return { background: RISK_LOW,  boxShadow: `0 0 0 2px oklch(62% 0.16 155 / 0.2)` };
+    default: return {};
+  }
+}
+
+function Pill({ sev, label }: { sev: string; label: string }) {
+  return (
+    <span style={{
+      ...pillStyle(sev),
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+    }}>
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
+      {label}
+    </span>
+  );
+}
+
+function KpiCard({ label, value, delta, deltaType, color }: {
+  label: string; value: string; delta: string;
+  deltaType: 'up' | 'down' | 'neutral'; color: string;
+}) {
+  const deltaColor = deltaType === 'up' ? RISK_LOW : deltaType === 'down' ? RISK_CRIT : MUTED;
+  return (
+    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: color, borderRadius: '10px 10px 0 0' }} />
+      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: MUTED }}>{label}</div>
+      <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: FG }}>{value}</div>
+      <div style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: deltaColor }}>{delta}</div>
+    </div>
+  );
+}
 
 interface FluxReseauProps {
   networkFlows: NetworkFlow[];
   onFlowCreated?: (f: NetworkFlow) => void;
 }
 
-function StatCard({
-  label,
-  value,
-  sub,
-  bg,
-  icon: Icon,
-  iconColor,
-}: {
-  label: string;
-  value: number | string;
-  sub?: string;
-  bg: string;
-  icon: React.ElementType;
-  iconColor: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
-      <div className={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
-        <Icon className={`w-5 h-5 ${iconColor}`} />
-      </div>
-      <div>
-        <p className="text-2xl font-bold text-gray-900 leading-tight">{value}</p>
-        <p className="text-xs text-gray-500 font-medium">{label}</p>
-        {sub && <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  );
-}
-
 export function FluxReseau({ networkFlows, onFlowCreated }: FluxReseauProps) {
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [directionFilter, setDirectionFilter] = useState('all');
+  const [trafficMode, setTrafficMode] = useState<'in' | 'out'>('in');
   const [showForm, setShowForm] = useState(false);
+  const [clock, setClock] = useState('');
 
-  const autorises = networkFlows.filter((f) => f.status === 'autorisé').length;
-  const bloques = networkFlows.filter((f) => f.status === 'bloqué').length;
-  const conditionnels = networkFlows.filter((f) => f.status === 'conditionnel').length;
-  const revueOld = networkFlows.filter((f) => {
-    return Math.floor((new Date().getTime() - new Date(f.last_review_date).getTime()) / 86400000) > 180;
-  }).length;
+  useEffect(() => {
+    const months = ['jan','fév','mar','avr','mai','juin','juil','août','sept','oct','nov','déc'];
+    const tick = () => {
+      const now = new Date();
+      const d = now.getDate();
+      const m = months[now.getMonth()];
+      const y = now.getFullYear();
+      const h = String(now.getHours()).padStart(2,'0');
+      const min = String(now.getMinutes()).padStart(2,'0');
+      const s = String(now.getSeconds()).padStart(2,'0');
+      setClock(`${d} ${m} ${y} — ${h}:${min}:${s}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
-  const filtered = networkFlows.filter((f) => {
-    if (search && !f.flow_id.toLowerCase().includes(search.toLowerCase()) && !f.source_host.includes(search) && !f.destination_host.includes(search)) return false;
-    if (statusFilter !== 'all' && f.status !== statusFilter) return false;
-    if (directionFilter !== 'all' && f.direction !== directionFilter) return false;
-    return true;
-  });
+  const barData = trafficMode === 'in' ? IN_DATA : OUT_DATA;
+  const barMax = Math.max(...barData);
+  const barColor = trafficMode === 'in' ? BRAND : BRAND_LIGHT;
 
-  const statusIcon = (status: string) => {
-    switch (status) {
-      case 'autorisé': return <CheckCircle2 className="w-4 h-4 text-green-500" />;
-      case 'bloqué': return <XCircle className="w-4 h-4 text-red-500" />;
-      case 'conditionnel': return <AlertCircle className="w-4 h-4 text-amber-500" />;
-      default: return null;
-    }
-  };
-
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case 'autorisé': return 'bg-green-100 text-green-700';
-      case 'bloqué': return 'bg-red-100 text-red-700';
-      case 'conditionnel': return 'bg-amber-100 text-amber-700';
-      default: return 'bg-gray-100 text-gray-600';
-    }
-  };
-
-  const directionIcon = (direction: string) => {
-    switch (direction) {
-      case 'entrant': return <ArrowDownLeft className="w-3.5 h-3.5 text-blue-500" />;
-      case 'sortant': return <ArrowUpRight className="w-3.5 h-3.5 text-violet-500" />;
-      case 'bidirectionnel': return <ArrowLeftRight className="w-3.5 h-3.5 text-gray-500" />;
-      default: return null;
-    }
-  };
+  const card: React.CSSProperties = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 10, display: 'flex', flexDirection: 'column' };
+  const cardHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, gap: 10 };
+  const thStyle: React.CSSProperties = { textAlign: 'left', fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: MUTED, padding: '10px 20px', borderBottom: `1px solid ${BORDER}`, whiteSpace: 'nowrap' };
+  const tdStyle: React.CSSProperties = { padding: '12px 20px', verticalAlign: 'middle' };
 
   return (
     <>
-      <div className="space-y-5">
-        {/* En-tête */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+        {/* Topbar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Flux réseau</h1>
-            <p className="text-sm text-gray-500">{networkFlows.length} flux enregistrés — matrice de flux réseau</p>
+            <div style={{ fontSize: 15, fontWeight: 600, color: FG }}>Flux réseau</div>
+            <div style={{ fontSize: 12, color: MUTED }}>Surveillance du trafic en temps réel</div>
           </div>
+          <div style={{ flex: 1 }} />
+          {/* live clock */}
+          <div style={{ fontSize: 12, color: MUTED, fontFamily: "'JetBrains Mono', ui-monospace, monospace", display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: RISK_LOW, animation: 'pulse 2s ease-in-out infinite', flexShrink: 0 }} />
+            {clock}
+          </div>
+          {/* Exporter PCAP */}
+          <button
+            onClick={() => toast.info('Export PCAP non disponible en démo')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, transition: 'all 0.12s' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Exporter PCAP
+          </button>
+          {/* secondary: add flow */}
           <button
             onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors w-fit shadow-sm shadow-[#534AB7]/20"
+            title="Nouveau flux"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 7, border: `1px solid ${BORDER}`, background: 'transparent', cursor: 'pointer', color: MUTED }}
           >
-            <Plus className="w-4 h-4" />
-            Nouveau flux
+            <Plus style={{ width: 14, height: 14 }} />
           </button>
         </div>
 
-        {/* Stats cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard
-            label="Flux autorisés"
-            value={autorises}
-            sub={`sur ${networkFlows.length} total`}
-            bg="bg-green-50"
-            icon={CheckCircle2}
-            iconColor="text-green-500"
-          />
-          <StatCard
-            label="Flux bloqués"
-            value={bloques}
-            sub="Refus explicite"
-            bg={bloques > 0 ? 'bg-red-50' : 'bg-gray-50'}
-            icon={XCircle}
-            iconColor={bloques > 0 ? 'text-red-500' : 'text-gray-400'}
-          />
-          <StatCard
-            label="Conditionnels"
-            value={conditionnels}
-            sub="Sous conditions"
-            bg={conditionnels > 0 ? 'bg-amber-50' : 'bg-gray-50'}
-            icon={AlertCircle}
-            iconColor={conditionnels > 0 ? 'text-amber-500' : 'text-gray-400'}
-          />
-          <StatCard
-            label="Revues en retard"
-            value={revueOld}
-            sub="> 180 jours"
-            bg={revueOld > 0 ? 'bg-orange-50' : 'bg-gray-50'}
-            icon={Clock}
-            iconColor={revueOld > 0 ? 'text-orange-500' : 'text-gray-400'}
-          />
+        {/* KPI grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+          <KpiCard label="Débit entrant"      value="2.4 GB/s" delta="↑ +12% vs hier"  deltaType="up"      color={BRAND}       />
+          <KpiCard label="Débit sortant"      value="1.1 GB/s" delta="— Stable"         deltaType="neutral" color={BRAND_LIGHT}  />
+          <KpiCard label="Anomalies détectées" value="14"       delta="↑ 3 nouvelles"   deltaType="down"    color={RISK_HIGH}    />
+          <KpiCard label="Connexions actives" value="8 342"    delta="— Normal"          deltaType="neutral" color={RISK_LOW}     />
         </div>
 
-        {/* Alerte revues */}
-        {revueOld > 0 && (
-          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3.5 flex items-center gap-3">
-            <Clock className="w-5 h-5 text-orange-500 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-orange-800">
-                {revueOld} flux n'ont pas été revus depuis plus de 180 jours
-              </p>
-              <p className="text-xs text-orange-600">Planifiez une revue pour maintenir la conformité.</p>
+        {/* two-col: 2fr 1fr */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+
+          {/* Trafic sur 24h */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Trafic sur 24h</span>
+              <span style={{ fontSize: 11, color: MUTED, marginLeft: 4 }}>— par heure</span>
             </div>
-          </div>
-        )}
-
-        {/* Filtres */}
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="relative flex items-center">
-            <Search className="absolute left-3 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="ID, source ou destination..."
-              className="text-sm border border-gray-200 rounded-lg pl-9 pr-3 py-1.5 w-60 focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] outline-none"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none bg-white focus:ring-2 focus:ring-[#534AB7]/20"
-          >
-            <option value="all">Tous les statuts</option>
-            <option value="autorisé">Autorisé</option>
-            <option value="bloqué">Bloqué</option>
-            <option value="conditionnel">Conditionnel</option>
-          </select>
-          <select
-            value={directionFilter}
-            onChange={(e) => setDirectionFilter(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none bg-white focus:ring-2 focus:ring-[#534AB7]/20"
-          >
-            <option value="all">Toutes directions</option>
-            <option value="entrant">Entrant</option>
-            <option value="sortant">Sortant</option>
-            <option value="bidirectionnel">Bidirectionnel</option>
-          </select>
-          {(search || statusFilter !== 'all' || directionFilter !== 'all') && (
-            <button
-              onClick={() => { setSearch(''); setStatusFilter('all'); setDirectionFilter('all'); }}
-              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="w-3.5 h-3.5" />
-              Réinitialiser
-            </button>
-          )}
-        </div>
-
-        {/* Tableau */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">ID</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Source → Destination</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700">Port / Proto</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Service</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700">Direction</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700">Statut</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Règle FW</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Responsable</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Dernière revue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {networkFlows.length === 0 && (
-                  <tr>
-                    <td colSpan={9}>
-                      <EmptyState
-                        icon={Network}
-                        title="Aucun flux réseau"
-                        description="Documentez les flux autorisés entre vos systèmes pour faciliter les audits et revues de sécurité."
-                        action={{ label: '+ Nouveau flux', onClick: () => setShowForm(true) }}
-                        hint="Importez votre matrice de flux existante via le module Import IA."
-                      />
-                    </td>
-                  </tr>
-                )}
-                {networkFlows.length > 0 && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={9}>
-                      <FilterEmpty onReset={() => { setSearch(''); setStatusFilter('all'); setDirectionFilter('all'); }} />
-                    </td>
-                  </tr>
-                )}
-                {filtered.map((f) => {
-                  const reviewDays = Math.floor(
-                    (new Date().getTime() - new Date(f.last_review_date).getTime()) / 86400000
-                  );
-                  const isOld = reviewDays > 180;
-
+            <div style={{ padding: '20px 20px 0' }}>
+              {/* toggle */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 16, justifyContent: 'flex-end' }}>
+                {(['in', 'out'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setTrafficMode(m)}
+                    style={{
+                      padding: '5px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
+                      border: `1px solid ${trafficMode === m ? BRAND : BORDER}`,
+                      background: trafficMode === m ? BRAND : 'transparent',
+                      color: trafficMode === m ? '#fff' : MUTED,
+                      transition: 'all 0.12s',
+                    }}
+                  >
+                    {m === 'in' ? 'Entrant' : 'Sortant'}
+                  </button>
+                ))}
+              </div>
+              {/* bars */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 120 }}>
+                {barData.map((v, i) => {
+                  const pct = Math.round((v / barMax) * 100);
                   return (
-                    <tr
-                      key={f.id}
-                      className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                        isOld ? 'bg-orange-50/20' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600 whitespace-nowrap">{f.flow_id}</td>
-                      <td className="px-4 py-3">
-                        <div className="space-y-0.5">
-                          <p className="text-xs font-mono text-gray-700">{f.source_host}</p>
-                          <p className="text-[10px] text-gray-400">→ {f.destination_host}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <p className="font-mono text-xs text-gray-700 font-semibold">{f.port}</p>
-                        <p className="text-[10px] text-gray-400">{f.protocol}</p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">{f.service}</td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          {directionIcon(f.direction)}
-                          <span className="text-[11px] text-gray-500 capitalize">{f.direction}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium ${statusBadge(f.status)}`}>
-                          {statusIcon(f.status)}
-                          {f.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">{f.firewall_rule}</td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">{f.responsible}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs flex items-center gap-1 ${isOld ? 'text-orange-600 font-semibold' : 'text-gray-500'}`}>
-                          {isOld && <Clock className="w-3 h-3" />}
-                          {new Date(f.last_review_date).toLocaleDateString('fr-FR')}
-                          {isOld && <span className="text-[10px]">({reviewDays}j)</span>}
-                        </span>
-                      </td>
-                    </tr>
+                    <div
+                      key={i}
+                      title={`${i}h — ${v} MB/s`}
+                      style={{
+                        flex: 1, borderRadius: '3px 3px 0 0', minHeight: 4,
+                        background: barColor,
+                        opacity: 0.55 + pct / 200,
+                        height: `${pct}%`,
+                        cursor: 'pointer',
+                        transition: 'opacity 0.15s',
+                      }}
+                    />
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+              {/* x-axis */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 16px' }}>
+                {['0h','4h','8h','12h','16h','20h','24h'].map((l) => (
+                  <span key={l} style={{ fontSize: 10, color: MUTED, fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{l}</span>
+                ))}
+              </div>
+            </div>
           </div>
+
+          {/* Répartition par protocole */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Répartition par protocole</span>
+            </div>
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {PROTOCOLS.map((p) => (
+                <div key={p.name} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, color: FG }}>
+                      {p.name}
+                      {p.flag && (
+                        <span style={{
+                          fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 600,
+                          background: p.flag.type === 'crit' ? 'oklch(55% 0.22 25 / 0.12)' : 'oklch(62% 0.18 52 / 0.12)',
+                          color: p.flag.type === 'crit' ? RISK_CRIT : RISK_HIGH,
+                        }}>
+                          {p.flag.label}
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: MUTED }}>{p.pct}%</span>
+                  </div>
+                  <div style={{ height: 6, background: BORDER, borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${p.pct}%`, background: p.color, borderRadius: 99 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+
+        {/* two-col-equal: 1fr 1fr */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+          {/* Top connexions sources */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Top connexions sources</span>
+              <span style={{ fontSize: 11, color: MUTED, marginLeft: 4 }}>— 10 premières IPs</span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    {['IP Source','Pays','Protocole','Débit','Statut'].map((h) => (
+                      <th key={h} style={thStyle}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {SOURCE_IPS.map((row) => (
+                    <tr key={row.ip} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                      <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 12, color: MUTED }}>{row.ip}</span></td>
+                      <td style={tdStyle}><span style={{ fontSize: 13, color: FG }}>{row.country}</span></td>
+                      <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 12, color: MUTED }}>{row.proto}</span></td>
+                      <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 12, color: MUTED }}>{row.debit}</span></td>
+                      <td style={tdStyle}><Pill sev={row.sev} label={row.label} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Anomalies récentes */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Anomalies récentes</span>
+              <span style={{ fontSize: 11, color: MUTED, marginLeft: 4 }}>— dernières 2h</span>
+              <div style={{ marginLeft: 'auto' }}>
+                <Pill sev="crit" label="2 critiques" />
+              </div>
+            </div>
+            <div>
+              {ANOMALIES.map((a, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 12,
+                    padding: '11px 20px',
+                    borderBottom: i < ANOMALIES.length - 1 ? `1px solid ${BORDER}` : 'none',
+                  }}
+                >
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, marginTop: 4, ...dotStyle(a.sev) }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, color: FG }}>{a.desc}</div>
+                    <div style={{ fontSize: 11, color: MUTED, marginTop: 2, fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{a.meta}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
 

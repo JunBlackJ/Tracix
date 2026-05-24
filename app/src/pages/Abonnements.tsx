@@ -53,12 +53,18 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
 
   // Total converti dans la devise choisie
   const totalMonthly = filtered.reduce((sum, s) => {
-    const monthly = s.billing_cycle === 'mensuel' ? s.cost_monthly : s.cost_annual / 12;
+    const monthly =
+      s.billing_cycle === 'mensuel'      ? (s.cost_monthly ?? 0) :
+      s.billing_cycle === 'hebdomadaire' ? (s.cost_weekly ?? 0) * 4.333 :
+      (s.cost_annual ?? 0) / 12;
     return sum + convertAmount(monthly, s.currency, displayCurrency);
   }, 0);
 
   const totalAnnual = filtered.reduce((sum, s) => {
-    const annual = s.billing_cycle === 'annuel' ? s.cost_annual : s.cost_monthly * 12;
+    const annual =
+      s.billing_cycle === 'annuel'       ? (s.cost_annual ?? 0) :
+      s.billing_cycle === 'hebdomadaire' ? (s.cost_weekly ?? 0) * 52 :
+      (s.cost_monthly ?? 0) * 12;
     return sum + convertAmount(annual, s.currency, displayCurrency);
   }, 0);
 
@@ -119,7 +125,10 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
   }).length;
 
   const totalAnnualAll = subscriptions.reduce((sum, s) => {
-    const annual = s.billing_cycle === 'annuel' ? s.cost_annual : s.cost_monthly * 12;
+    const annual =
+      s.billing_cycle === 'annuel'       ? (s.cost_annual ?? 0) :
+      s.billing_cycle === 'hebdomadaire' ? (s.cost_weekly ?? 0) * 52 :
+      (s.cost_monthly ?? 0) * 12;
     return sum + convertAmount(annual, s.currency, 'EUR');
   }, 0);
 
@@ -260,8 +269,16 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
                   <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{s.name}</td>
                   <td className="px-4 py-3 text-gray-600">{s.category}</td>
                   <td className="px-4 py-3 text-gray-600">{s.vendor}</td>
-                  <td className="px-4 py-3 text-right font-mono text-gray-700 whitespace-nowrap">{(s.cost_monthly ?? 0).toFixed(2)} {s.currency}</td>
-                  <td className="px-4 py-3 text-right font-mono text-gray-700 whitespace-nowrap">{(s.cost_annual ?? 0).toFixed(2)} {s.currency}</td>
+                  <td className="px-4 py-3 text-right font-mono text-gray-700 whitespace-nowrap">
+                    {s.billing_cycle === 'hebdomadaire'
+                      ? <span title={`${(s.cost_weekly ?? 0).toFixed(2)} ${s.currency}/sem`}>{((s.cost_weekly ?? 0) * 4.333).toFixed(2)} {s.currency}</span>
+                      : <>{(s.cost_monthly ?? 0).toFixed(2)} {s.currency}</>}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-gray-700 whitespace-nowrap">
+                    {s.billing_cycle === 'hebdomadaire'
+                      ? <>{((s.cost_weekly ?? 0) * 52).toFixed(2)} {s.currency}</>
+                      : <>{(s.cost_annual ?? 0).toFixed(2)} {s.currency}</>}
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{s.billing_cycle}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs flex items-center gap-1 whitespace-nowrap ${isExpired ? 'text-red-600 font-bold' : isExpiringSoon ? 'text-amber-600 font-medium' : 'text-gray-500'}`}>
@@ -357,10 +374,11 @@ function SubscriptionFormModal({ subscription, categories, onClose, onSaved }: S
     name: subscription?.name ?? '',
     category: subscription?.category ?? '',
     vendor: subscription?.vendor ?? '',
+    cost_weekly: subscription?.cost_weekly ?? 0,
     cost_monthly: subscription?.cost_monthly ?? 0,
     cost_annual: subscription?.cost_annual ?? 0,
     currency: subscription?.currency ?? 'EUR',
-    billing_cycle: (subscription?.billing_cycle ?? 'annuel') as BillingCycle,
+    billing_cycle: (subscription?.billing_cycle ?? 'mensuel') as BillingCycle,
     renewal_date: subscription?.renewal_date ? subscription.renewal_date.slice(0, 10) : '',
     auto_renew: subscription?.auto_renew ?? false,
     responsible: subscription?.responsible ?? '',
@@ -370,6 +388,28 @@ function SubscriptionFormModal({ subscription, categories, onClose, onSaved }: S
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
+
+  // Recalcule les autres montants depuis le champ de référence du cycle sélectionné
+  function onCostChange(field: 'cost_weekly' | 'cost_monthly' | 'cost_annual', raw: string) {
+    const val = parseFloat(raw) || 0;
+    let weekly = form.cost_weekly;
+    let monthly = form.cost_monthly;
+    let annual = form.cost_annual;
+    if (field === 'cost_weekly') {
+      weekly = val;
+      monthly = parseFloat((val * 4.333).toFixed(2));
+      annual  = parseFloat((val * 52).toFixed(2));
+    } else if (field === 'cost_monthly') {
+      monthly = val;
+      weekly  = parseFloat((val / 4.333).toFixed(2));
+      annual  = parseFloat((val * 12).toFixed(2));
+    } else {
+      annual  = val;
+      monthly = parseFloat((val / 12).toFixed(2));
+      weekly  = parseFloat((val / 52).toFixed(2));
+    }
+    setForm((f) => ({ ...f, cost_weekly: weekly, cost_monthly: monthly, cost_annual: annual }));
+  }
 
   const validate = () => {
     const e: Partial<Record<keyof typeof form, string>> = {};
@@ -386,6 +426,7 @@ function SubscriptionFormModal({ subscription, categories, onClose, onSaved }: S
     try {
       const payload = {
         ...form,
+        cost_weekly: Number(form.cost_weekly),
         cost_monthly: Number(form.cost_monthly),
         cost_annual: Number(form.cost_annual),
       };
@@ -469,24 +510,20 @@ function SubscriptionFormModal({ subscription, categories, onClose, onSaved }: S
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          {/* Cycle + devise */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Coût mensuel</label>
-              <input
-                type="number" min="0" step="0.01"
-                value={form.cost_monthly}
-                onChange={(e) => setForm((f) => ({ ...f, cost_monthly: parseFloat(e.target.value) || 0 }))}
-                className={inputClass('cost_monthly')}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Coût annuel</label>
-              <input
-                type="number" min="0" step="0.01"
-                value={form.cost_annual}
-                onChange={(e) => setForm((f) => ({ ...f, cost_annual: parseFloat(e.target.value) || 0 }))}
-                className={inputClass('cost_annual')}
-              />
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Cycle de facturation</label>
+              <select
+                value={form.billing_cycle}
+                onChange={(e) => setForm((f) => ({ ...f, billing_cycle: e.target.value as BillingCycle }))}
+                className={inputClass('billing_cycle')}
+              >
+                <option value="mensuel">Mensuel</option>
+                <option value="annuel">Annuel</option>
+                <option value="hebdomadaire">Hebdomadaire</option>
+                <option value="usage">À l'usage</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Devise</label>
@@ -503,19 +540,54 @@ function SubscriptionFormModal({ subscription, categories, onClose, onSaved }: S
             </div>
           </div>
 
+          {/* Coûts — calculés automatiquement entre eux */}
+          <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Coûts — saisissez un montant, les autres se calculent automatiquement</p>
+
+            {form.billing_cycle === 'hebdomadaire' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Coût hebdomadaire <span className="text-[#534AB7] font-bold">★</span></label>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={form.cost_weekly}
+                  onChange={(e) => onCostChange('cost_weekly', e.target.value)}
+                  className={inputClass('cost_weekly')}
+                  placeholder="0.00"
+                />
+              </div>
+            )}
+
+            <div className={`grid gap-3 ${form.billing_cycle === 'hebdomadaire' ? 'grid-cols-2' : 'grid-cols-2'}`}>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Coût mensuel {form.billing_cycle === 'mensuel' && <span className="text-[#534AB7] font-bold">★</span>}
+                </label>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={form.cost_monthly}
+                  onChange={(e) => onCostChange('cost_monthly', e.target.value)}
+                  className={inputClass('cost_monthly')}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Coût annuel {form.billing_cycle === 'annuel' && <span className="text-[#534AB7] font-bold">★</span>}
+                </label>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={form.cost_annual}
+                  onChange={(e) => onCostChange('cost_annual', e.target.value)}
+                  className={inputClass('cost_annual')}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-gray-400">★ Champ de référence pour le cycle sélectionné · 1 mois = 4,333 semaines · 1 an = 12 mois</p>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Cycle de facturation</label>
-              <select
-                value={form.billing_cycle}
-                onChange={(e) => setForm((f) => ({ ...f, billing_cycle: e.target.value as BillingCycle }))}
-                className={inputClass('billing_cycle')}
-              >
-                <option value="mensuel">Mensuel</option>
-                <option value="annuel">Annuel</option>
-                <option value="usage">À l'usage</option>
-              </select>
-            </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Date de renouvellement *</label>
               <input

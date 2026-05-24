@@ -223,7 +223,7 @@ export interface NetworkFlow {
 }
 
 // ─── Abonnements ───
-export type BillingCycle = 'mensuel' | 'annuel' | 'usage';
+export type BillingCycle = 'mensuel' | 'annuel' | 'usage' | 'hebdomadaire';
 export type SubscriptionStatus = 'actif' | 'à_résilier' | 'expiré' | 'en_négociation';
 
 export interface Subscription {
@@ -234,6 +234,7 @@ export interface Subscription {
   vendor: string;
   cost_monthly: number;
   cost_annual: number;
+  cost_weekly: number;
   currency: string;
   billing_cycle: BillingCycle;
   renewal_date: string;

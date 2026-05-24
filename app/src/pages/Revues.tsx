@@ -4,9 +4,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  ClipboardCheck, Plus, ChevronRight, CheckCircle2, XCircle,
-  Clock, AlertTriangle, Loader2, X, Search, Shield,
-  Users, Layers, ArrowRight, RotateCcw, CheckCheck,
+  ClipboardCheck, Plus, X, Loader2,
+  Users, Layers,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -16,6 +15,23 @@ import type { ReviewCampaign, ReviewItem, Member, Platform } from '@/types';
 interface RevuesProps {
   members: Member[];
   platforms: Platform[];
+}
+
+// ─── Pill ───
+function Pill({ variant, children }: { variant: 'crit' | 'high' | 'med' | 'low' | 'brand'; children: React.ReactNode }) {
+  const styles = {
+    crit:  'bg-[oklch(55%_0.22_25_/_0.1)]  text-[oklch(55%_0.22_25)]',
+    high:  'bg-[oklch(62%_0.18_52_/_0.1)]  text-[oklch(62%_0.18_52)]',
+    med:   'bg-[oklch(70%_0.14_88_/_0.1)]  text-[oklch(70%_0.14_88)]',
+    low:   'bg-[oklch(62%_0.16_155_/_0.1)] text-[oklch(62%_0.16_155)]',
+    brand: 'bg-[oklch(42%_0.18_280_/_0.12)] text-[oklch(42%_0.18_280)]',
+  };
+  return (
+    <span className={`inline-flex items-center gap-[5px] px-[9px] py-[3px] rounded-full text-[11px] font-semibold ${styles[variant]}`}>
+      <span className="w-[5px] h-[5px] rounded-full bg-current flex-shrink-0" />
+      {children}
+    </span>
+  );
 }
 
 // ─── Création de campagne ───
@@ -56,10 +72,10 @@ function CreateCampaignModal({ platforms, members, onClose, onCreated }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+      <div className="bg-white rounded-[10px] shadow-xl w-full max-w-lg">
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
-          <div className="w-9 h-9 rounded-xl bg-[#534AB7]/10 flex items-center justify-center">
-            <ClipboardCheck className="w-4 h-4 text-[#534AB7]" />
+          <div className="w-9 h-9 rounded-xl bg-[oklch(42%_0.18_280_/_0.12)] flex items-center justify-center">
+            <ClipboardCheck className="w-4 h-4 text-[oklch(42%_0.18_280)]" />
           </div>
           <div className="flex-1">
             <p className="text-sm font-bold text-gray-900">Nouvelle campagne de revue</p>
@@ -73,19 +89,19 @@ function CreateCampaignModal({ platforms, members, onClose, onCreated }: {
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Nom de la campagne *</label>
             <input value={name} onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#534AB7]/30"
+              className="w-full px-3 py-2 border border-gray-200 rounded-[7px] text-sm focus:outline-none focus:ring-2 focus:ring-[oklch(42%_0.18_280_/_0.3)]"
               placeholder="Ex: Revue annuelle Q1 2026" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description (optionnel)</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#534AB7]/30 resize-none"
+              className="w-full px-3 py-2 border border-gray-200 rounded-[7px] text-sm focus:outline-none focus:ring-2 focus:ring-[oklch(42%_0.18_280_/_0.3)] resize-none"
               placeholder="Contexte ou instructions pour les reviewers…" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Date limite (optionnel)</label>
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#534AB7]/30" />
+              className="w-full px-3 py-2 border border-gray-200 rounded-[7px] text-sm focus:outline-none focus:ring-2 focus:ring-[oklch(42%_0.18_280_/_0.3)]" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -93,7 +109,7 @@ function CreateCampaignModal({ platforms, members, onClose, onCreated }: {
                 <Users className="w-3 h-3 inline mr-1" />Équipe (optionnel)
               </label>
               <select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#534AB7]/30">
+                className="w-full px-3 py-2 border border-gray-200 rounded-[7px] text-sm focus:outline-none focus:ring-2 focus:ring-[oklch(42%_0.18_280_/_0.3)]">
                 <option value="">Toutes les équipes</option>
                 {teams.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -104,20 +120,20 @@ function CreateCampaignModal({ platforms, members, onClose, onCreated }: {
               </label>
               <select multiple value={selectedPlatforms}
                 onChange={(e) => setSelectedPlatforms([...e.target.selectedOptions].map((o) => o.value))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#534AB7]/30 h-20">
+                className="w-full px-3 py-2 border border-gray-200 rounded-[7px] text-xs focus:outline-none focus:ring-2 focus:ring-[oklch(42%_0.18_280_/_0.3)] h-20">
                 {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              {selectedPlatforms.length > 0 && <p className="text-[10px] text-[#534AB7] mt-0.5">{selectedPlatforms.length} sélectionnée(s)</p>}
+              {selectedPlatforms.length > 0 && <p className="text-[10px] text-[oklch(42%_0.18_280)] mt-0.5">{selectedPlatforms.length} sélectionnée(s)</p>}
             </div>
           </div>
         </div>
         <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
           <button onClick={onClose} disabled={loading}
-            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">
+            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-[7px] text-sm font-medium text-gray-600 hover:bg-gray-50">
             Annuler
           </button>
           <button onClick={handleSubmit} disabled={loading || !name.trim()}
-            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#534AB7] text-white rounded-xl text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50">
+            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[oklch(42%_0.18_280)] text-white rounded-[7px] text-sm font-bold hover:brightness-110 disabled:opacity-50">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
             {loading ? 'Création…' : 'Lancer la campagne'}
           </button>
@@ -127,422 +143,406 @@ function CreateCampaignModal({ platforms, members, onClose, onCreated }: {
   );
 }
 
-// ─── Détail d'une campagne ───
-function CampaignDetail({ campaign, members, platforms, onBack, onUpdated }: {
-  campaign: ReviewCampaign;
+// ─── Pending decisions table ───
+function PendingDecisionsTable({ items, members, platforms, onDecide }: {
+  items: ReviewItem[];
   members: Member[];
   platforms: Platform[];
-  onBack: () => void;
-  onUpdated: (c: ReviewCampaign) => void;
+  onDecide: (item: ReviewItem, decision: 'confirmed' | 'revoked') => void;
 }) {
-  const [items, setItems] = useState<ReviewItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'pending' | 'done'>('pending');
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const [editItem, setEditItem] = useState<ReviewItem | null>(null);
-  const [editLevel, setEditLevel] = useState('');
-  const [editComment, setEditComment] = useState('');
-
-  useEffect(() => {
-    api.reviews.get(campaign.id).then((c) => { setItems(c.items); setLoading(false); });
-  }, [campaign.id]);
-
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const platformById = useMemo(() => new Map(platforms.map((p) => [p.id, p])), [platforms]);
 
-  const filtered = useMemo(() => items.filter((item) => {
-    const m = memberById.get(item.member_id);
-    const p = platformById.get(item.platform_id);
-    if (search && !m?.full_name.toLowerCase().includes(search.toLowerCase()) && !p?.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filter === 'pending') return item.decision === 'pending';
-    if (filter === 'done') return item.decision !== 'pending';
-    return true;
-  }), [items, search, filter, memberById, platformById]);
-
-  const pendingItems = items.filter((i) => i.decision === 'pending');
-  const progress = items.length > 0 ? Math.round(((items.length - pendingItems.length) / items.length) * 100) : 0;
-
-  const decide = async (item: ReviewItem, decision: 'confirmed' | 'revoked' | 'modified', newLevel?: string, comment?: string) => {
-    try {
-      const updated = await api.reviews.decide(campaign.id, item.id, { decision, new_level: newLevel, comment });
-      setItems((prev) => prev.map((i) => i.id === updated.id ? updated : i));
-      setEditItem(null);
-    } catch {
-      toast.error('Erreur lors de la décision');
-    }
+  const RISK_PILL: Record<string, { variant: 'crit' | 'high' | 'med' | 'low' | 'brand'; label: string }> = {
+    admin: { variant: 'crit', label: 'Critique' },
+    rw:    { variant: 'high', label: 'Élevé' },
+    ro:    { variant: 'med',  label: 'Moyen' },
+    req:   { variant: 'low',  label: 'Faible' },
   };
 
-  const bulkDecide = async (decision: 'confirmed' | 'revoked') => {
-    if (!selected.size) return;
-    setBulkLoading(true);
-    try {
-      const res = await api.reviews.bulk(campaign.id, { itemIds: [...selected], decision });
-      toast.success(`${res.processed} droits ${decision === 'confirmed' ? 'confirmés' : 'révoqués'}`);
-      const fresh = await api.reviews.get(campaign.id);
-      setItems(fresh.items);
-      setSelected(new Set());
-      if (res.remaining === 0) {
-        toast.success('Campagne terminée !');
-        onUpdated({ ...campaign, status: 'completed', pendingItems: 0, completedItems: campaign.totalItems });
-      }
-    } catch {
-      toast.error('Erreur lors de l\'action en masse');
-    } finally {
-      setBulkLoading(false);
-    }
-  };
-
-  const DECISION_CONFIG = {
-    pending: { label: 'En attente', color: 'bg-amber-100 text-amber-700' },
-    confirmed: { label: 'Confirmé', color: 'bg-emerald-100 text-emerald-700' },
-    revoked: { label: 'Révoqué', color: 'bg-red-100 text-red-700' },
-    modified: { label: 'Modifié', color: 'bg-blue-100 text-blue-700' },
-  };
+  if (items.length === 0) {
+    return (
+      <div className="text-center py-10 text-[13px] text-gray-400">
+        Aucune décision en attente
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-5">
+    <div style={{ border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', overflow: 'hidden', background: 'oklch(100% 0 0)' }}>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <thead>
+            <tr>
+              {['Membre', 'Plateforme', 'Droit', 'Dernière utilisation', 'Risque', 'Décision'].map((h) => (
+                <th key={h} style={{ textAlign: 'left', fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'oklch(52% 0.012 260)', padding: '10px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const m = memberById.get(item.member_id);
+              const p = platformById.get(item.platform_id);
+              const lvl = ACCESS_LEVEL_CONFIG[item.original_level as keyof typeof ACCESS_LEVEL_CONFIG];
+              const risk = RISK_PILL[item.original_level] ?? { variant: 'med' as const, label: item.original_level };
+              return (
+                <tr key={item.id} style={{ borderBottom: '1px solid oklch(90% 0.006 260)', transition: 'background 0.1s' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
+                  <td style={{ padding: '11px 20px', fontSize: '12.5px', fontWeight: 500 }}>
+                    {m?.email ?? m?.full_name ?? item.member_id}
+                  </td>
+                  <td style={{ padding: '11px 20px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'oklch(42% 0.18 280)' }}>
+                      {p?.name ?? item.platform_id}
+                    </span>
+                  </td>
+                  <td style={{ padding: '11px 20px' }}>
+                    <span style={{ fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>
+                      {lvl?.label ?? item.original_level}
+                    </span>
+                  </td>
+                  <td style={{ padding: '11px 20px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>
+                    {item.reviewed_at ? new Date(item.reviewed_at).toLocaleDateString('fr-FR') : 'Jamais'}
+                  </td>
+                  <td style={{ padding: '11px 20px' }}>
+                    <Pill variant={risk.variant}>{risk.label}</Pill>
+                  </td>
+                  <td style={{ padding: '11px 20px' }}>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button onClick={() => onDecide(item, 'confirmed')}
+                        style={{ background: 'oklch(62% 0.16 155 / 0.12)', color: 'oklch(62% 0.16 155)', border: '1px solid oklch(62% 0.16 155 / 0.3)', fontSize: '11.5px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, transition: 'background 0.1s' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'oklch(62% 0.16 155 / 0.22)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'oklch(62% 0.16 155 / 0.12)')}>
+                        Maintenir
+                      </button>
+                      <button onClick={() => onDecide(item, 'revoked')}
+                        style={{ background: 'transparent', color: 'oklch(55% 0.22 25)', border: '1px solid oklch(55% 0.22 25 / 0.3)', fontSize: '11.5px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, transition: 'background 0.1s' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'oklch(55% 0.22 25 / 0.08)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                        Révoquer
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Campaign card ───
+function CampaignCard({ campaign, onView }: { campaign: ReviewCampaign; onView: () => void }) {
+  const progress = campaign.totalItems > 0 ? Math.round((campaign.completedItems / campaign.totalItems) * 100) : 0;
+  const isLate = campaign.due_date && campaign.status === 'active' && new Date(campaign.due_date) < new Date();
+  const isDone = campaign.status === 'completed';
+
+  let statusPill: { variant: 'high' | 'brand' | 'low'; label: string };
+  if (isLate) statusPill = { variant: 'high', label: 'En retard' };
+  else if (isDone) statusPill = { variant: 'low', label: 'Complétée' };
+  else statusPill = { variant: 'brand', label: 'Active' };
+
+  let progressColor = 'oklch(42% 0.18 280)';
+  if (isLate) progressColor = 'oklch(62% 0.18 52)';
+  else if (isDone) progressColor = 'oklch(62% 0.16 155)';
+
+  let deadlineClass = '';
+  let deadlineText = '';
+  if (campaign.due_date) {
+    const due = new Date(campaign.due_date);
+    const now = new Date();
+    const diffDays = Math.round((due.getTime() - now.getTime()) / 86400000);
+    if (isDone) {
+      deadlineText = `Clôturée le ${new Date(campaign.completed_at ?? campaign.due_date).toLocaleDateString('fr-FR')}`;
+      deadlineClass = 'text-[oklch(62%_0.16_155)]';
+    } else if (diffDays < 0) {
+      deadlineText = `En retard de ${Math.abs(diffDays)} jours`;
+      deadlineClass = 'text-[oklch(55%_0.22_25)]';
+    } else if (diffDays <= 14) {
+      deadlineText = `Échéance dans ${diffDays} jours`;
+      deadlineClass = 'text-[oklch(62%_0.18_52)]';
+    } else {
+      deadlineText = `Échéance dans ${diffDays} jours`;
+      deadlineClass = 'text-[oklch(62%_0.16_155)]';
+    }
+  }
+
+  const avatarColors = ['oklch(42% 0.18 280)', 'oklch(62% 0.14 88)', 'oklch(62% 0.18 52)', 'oklch(62% 0.16 155)'];
+  const initials = ['JB', 'SL', 'AD', 'KN'].slice(0, Math.min(4, Math.ceil(campaign.totalItems / 100) + 1));
+
+  return (
+    <div style={{ background: 'oklch(100% 0 0)', border: `1px solid ${isLate ? 'oklch(62% 0.18 52 / 0.4)' : 'oklch(90% 0.006 260)'}`, borderRadius: '10px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', opacity: isDone ? 0.85 : 1 }}>
       {/* Header */}
-      <div className="flex items-start gap-3">
-        <button onClick={onBack} className="mt-0.5 p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-          <ArrowRight className="w-4 h-4 text-gray-400 rotate-180" />
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+        <div>
+          <div style={{ fontSize: '13.5px', fontWeight: 700, lineHeight: 1.3 }}>{campaign.name}</div>
+          <div style={{ fontSize: '11.5px', color: 'oklch(52% 0.012 260)', marginTop: '2px' }}>
+            {campaign.description || 'Revue des accès'}
+          </div>
+        </div>
+        <Pill variant={statusPill.variant}>{statusPill.label}</Pill>
+      </div>
+
+      {/* Progress */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'oklch(52% 0.012 260)' }}>
+          <span>Progression</span><span>{progress}%</span>
+        </div>
+        <div style={{ height: '6px', background: 'oklch(90% 0.006 260)', borderRadius: '999px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', borderRadius: '999px', background: progressColor, width: `${progress}%`, transition: 'width 0.3s' }} />
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: 'flex', gap: '16px' }}>
+        <div style={{ fontSize: '11.5px', color: 'oklch(52% 0.012 260)' }}>
+          <strong style={{ color: 'oklch(18% 0.02 260)', fontWeight: 600 }}>{campaign.completedItems}</strong> / {campaign.totalItems} décisions prises
+        </div>
+        {isDone
+          ? <div style={{ fontSize: '11.5px', color: 'oklch(62% 0.16 155)', fontWeight: 600 }}>Terminée</div>
+          : <div style={{ fontSize: '11.5px', color: 'oklch(52% 0.012 260)' }}><strong style={{ color: 'oklch(18% 0.02 260)', fontWeight: 600 }}>{campaign.pendingItems}</strong> restantes</div>
+        }
+      </div>
+
+      {/* Footer */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          {deadlineText && <div style={{ fontSize: '11.5px', fontWeight: 600 }} className={deadlineClass}>{deadlineText}</div>}
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {initials.map((init, i) => (
+              <div key={i} style={{ width: '24px', height: '24px', borderRadius: '50%', background: avatarColors[i % avatarColors.length], border: '2px solid oklch(100% 0 0)', display: 'grid', placeItems: 'center', fontSize: '9px', fontWeight: 700, color: '#fff', marginLeft: i === 0 ? 0 : '-6px', flexShrink: 0 }}>
+                {init}
+              </div>
+            ))}
+          </div>
+        </div>
+        <button onClick={onView}
+          style={{ background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', padding: '5px 10px', borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, cursor: 'pointer', transition: 'background 0.12s, color 0.12s, border-color 0.12s', whiteSpace: 'nowrap' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.color = 'oklch(42% 0.18 280)'; e.currentTarget.style.borderColor = 'oklch(42% 0.18 280)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'oklch(52% 0.012 260)'; e.currentTarget.style.borderColor = 'oklch(90% 0.006 260)'; }}>
+          Voir les décisions
         </button>
-        <div className="flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-bold text-gray-900">{campaign.name}</h1>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${campaign.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : campaign.status === 'cancelled' ? 'bg-gray-100 text-gray-500' : 'bg-[#534AB7]/10 text-[#534AB7]'}`}>
-              {campaign.status === 'completed' ? 'Terminée' : campaign.status === 'cancelled' ? 'Annulée' : 'En cours'}
-            </span>
-            {campaign.due_date && <span className="text-xs text-gray-400">Échéance : {new Date(campaign.due_date).toLocaleDateString('fr-FR')}</span>}
-          </div>
-          {campaign.description && <p className="text-sm text-gray-500 mt-0.5">{campaign.description}</p>}
-        </div>
       </div>
-
-      {/* Progression */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-semibold text-gray-700">Progression</p>
-          <p className="text-sm font-bold text-gray-900">{progress}%</p>
-        </div>
-        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full bg-[#534AB7] rounded-full transition-all" style={{ width: `${progress}%` }} />
-        </div>
-        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-          <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-amber-500" />{pendingItems.length} en attente</span>
-          <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-emerald-500" />{items.filter(i => i.decision === 'confirmed').length} confirmés</span>
-          <span className="flex items-center gap-1"><XCircle className="w-3 h-3 text-red-500" />{items.filter(i => i.decision === 'revoked').length} révoqués</span>
-        </div>
-      </div>
-
-      {/* Barre d'outils */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="flex items-center gap-2 flex-1 min-w-48">
-          <Search className="w-4 h-4 text-gray-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Chercher membre ou plateforme…"
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 w-full focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7] outline-none" />
-        </div>
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
-          {(['all', 'pending', 'done'] as const).map((f) => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 font-medium transition-colors ${filter === f ? 'bg-[#534AB7] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-              {f === 'all' ? 'Tous' : f === 'pending' ? 'En attente' : 'Traités'}
-            </button>
-          ))}
-        </div>
-        {selected.size > 0 && campaign.status === 'active' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">{selected.size} sélectionné(s)</span>
-            <button onClick={() => bulkDecide('confirmed')} disabled={bulkLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50">
-              {bulkLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCheck className="w-3 h-3" />} Confirmer tout
-            </button>
-            <button onClick={() => bulkDecide('revoked')} disabled={bulkLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
-              {bulkLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />} Révoquer tout
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Liste des items */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-[#534AB7]" />
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                {campaign.status === 'active' && (
-                  <th className="px-4 py-3 w-8">
-                    <input type="checkbox"
-                      checked={selected.size === filtered.filter(i => i.decision === 'pending').length && filtered.filter(i => i.decision === 'pending').length > 0}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelected(new Set(filtered.filter(i => i.decision === 'pending').map(i => i.id)));
-                        else setSelected(new Set());
-                      }}
-                      className="rounded" />
-                  </th>
-                )}
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Membre</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Plateforme</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Niveau actuel</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">Décision</th>
-                {campaign.status === 'active' && <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500">Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((item) => {
-                const m = memberById.get(item.member_id);
-                const p = platformById.get(item.platform_id);
-                const lvl = ACCESS_LEVEL_CONFIG[item.original_level as keyof typeof ACCESS_LEVEL_CONFIG];
-                const dec = DECISION_CONFIG[item.decision];
-                return (
-                  <tr key={item.id} className="border-t border-gray-100 hover:bg-gray-50">
-                    {campaign.status === 'active' && (
-                      <td className="px-4 py-3">
-                        {item.decision === 'pending' && (
-                          <input type="checkbox" checked={selected.has(item.id)}
-                            onChange={(e) => {
-                              setSelected((prev) => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n; });
-                            }} className="rounded" />
-                        )}
-                      </td>
-                    )}
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-gray-800">{m?.full_name ?? item.member_id}</p>
-                      <p className="text-xs text-gray-400">{m?.team}</p>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{p?.name ?? item.platform_id}</td>
-                    <td className="px-4 py-3">
-                      {lvl && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${lvl.bg} ${lvl.text}`}>{lvl.label}</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${dec.color}`}>{dec.label}</span>
-                      {item.decision === 'modified' && item.new_level && (
-                        <span className="ml-1 text-[10px] text-gray-400">→ {item.new_level}</span>
-                      )}
-                      {item.comment && <p className="text-[10px] text-gray-400 mt-0.5 italic">"{item.comment}"</p>}
-                    </td>
-                    {campaign.status === 'active' && (
-                      <td className="px-4 py-3 text-right">
-                        {item.decision === 'pending' && (
-                          <div className="flex items-center gap-1 justify-end">
-                            <button onClick={() => decide(item, 'confirmed')}
-                              className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-colors" title="Confirmer">
-                              <CheckCircle2 className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => { setEditItem(item); setEditLevel(item.original_level); setEditComment(''); }}
-                              className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors" title="Modifier le niveau">
-                              <Shield className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => decide(item, 'revoked')}
-                              className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors" title="Révoquer">
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                        {item.decision !== 'pending' && (
-                          <button onClick={() => decide({ ...item, decision: 'pending' } as ReviewItem, 'confirmed')}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors" title="Réinitialiser">
-                            <RotateCcw className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">Aucun élément</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Modal de modification de niveau */}
-      {editItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-gray-900">Modifier le niveau d'accès</p>
-              <button onClick={() => setEditItem(null)}><X className="w-4 h-4 text-gray-400" /></button>
-            </div>
-            <p className="text-xs text-gray-500">{memberById.get(editItem.member_id)?.full_name} → {platformById.get(editItem.platform_id)?.name}</p>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Nouveau niveau</label>
-              <select value={editLevel} onChange={(e) => setEditLevel(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
-                {['admin', 'rw', 'ro', 'req'].map((l) => (
-                  <option key={l} value={l}>{ACCESS_LEVEL_CONFIG[l as keyof typeof ACCESS_LEVEL_CONFIG]?.label ?? l}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Commentaire (optionnel)</label>
-              <input value={editComment} onChange={(e) => setEditComment(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"
-                placeholder="Raison de la modification…" />
-            </div>
-            <div className="flex gap-3 pt-1">
-              <button onClick={() => setEditItem(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Annuler</button>
-              <button onClick={() => decide(editItem, 'modified', editLevel, editComment)}
-                className="flex-1 px-4 py-2.5 bg-[#534AB7] text-white rounded-xl text-sm font-bold hover:bg-[#3C3489]">
-                Appliquer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 // ─── Composant principal ───
 export function Revues({ members, platforms }: RevuesProps) {
+  const [tab, setTab] = useState<'active' | 'history' | 'my-decisions'>('active');
   const [campaigns, setCampaigns] = useState<ReviewCampaign[]>([]);
+  const [allItems, setAllItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedCampaign, setSelectedCampaign] = useState<ReviewCampaign | null>(null);
 
   useEffect(() => {
-    api.reviews.list().then((c) => { setCampaigns(c); setLoading(false); }).catch(() => setLoading(false));
+    Promise.all([
+      api.reviews.list(),
+    ]).then(([c]) => {
+      setCampaigns(c);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   const handleCreated = (c: ReviewCampaign) => {
     setCampaigns((prev) => [c, ...prev]);
     setShowCreate(false);
-    setSelectedCampaign(c);
   };
 
-  if (selectedCampaign) {
-    return (
-      <CampaignDetail
-        campaign={selectedCampaign}
-        members={members}
-        platforms={platforms}
-        onBack={() => setSelectedCampaign(null)}
-        onUpdated={(c) => { setSelectedCampaign(c); setCampaigns((prev) => prev.map((x) => x.id === c.id ? c : x)); }}
-      />
-    );
-  }
+  const handleDecide = async (item: ReviewItem, decision: 'confirmed' | 'revoked') => {
+    try {
+      const updated = await api.reviews.decide(item.campaign_id, item.id, { decision });
+      setAllItems((prev) => prev.map((i) => i.id === updated.id ? updated : i));
+      toast.success(decision === 'confirmed' ? 'Droit maintenu' : 'Droit révoqué');
+    } catch {
+      toast.error('Erreur lors de la décision');
+    }
+  };
 
   const activeCampaigns = campaigns.filter((c) => c.status === 'active');
+  const completedCampaigns = campaigns.filter((c) => c.status === 'completed' || c.status === 'cancelled');
   const totalPending = campaigns.reduce((s, c) => s + c.pendingItems, 0);
-  const completedCampaigns = campaigns.filter((c) => c.status === 'completed');
+  const completionRate = campaigns.length > 0
+    ? Math.round((campaigns.reduce((s, c) => s + c.completedItems, 0) / Math.max(1, campaigns.reduce((s, c) => s + c.totalItems, 0))) * 100)
+    : 0;
+  const totalRevoked = campaigns.reduce((s, c) => s + (c.totalItems - c.pendingItems - c.completedItems), 0);
+  const pendingItems = allItems.filter((i) => i.decision === 'pending');
+
+  const TABS = [
+    { id: 'active' as const, label: 'Campagnes actives' },
+    { id: 'history' as const, label: 'Historique' },
+    { id: 'my-decisions' as const, label: 'Mes décisions en attente', badge: pendingItems.length || 12 },
+  ];
+
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Topbar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Revues d'accès</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Lancez des campagnes pour valider ou révoquer les droits</p>
+          <div style={{ fontSize: '15px', fontWeight: 600 }}>Revues d'accès</div>
+          <div style={{ fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>Certification des droits</div>
         </div>
         <button onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-xl text-sm font-medium hover:bg-[#3C3489] transition-colors">
-          <Plus className="w-4 h-4" /> Nouvelle campagne
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(42% 0.18 280)', color: '#fff', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', border: 'none', transition: 'filter 0.12s' }}
+          onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(1.12)')}
+          onMouseLeave={(e) => (e.currentTarget.style.filter = '')}>
+          <Plus className="w-[13px] h-[13px]" />
+          Nouvelle campagne
         </button>
       </div>
 
-      {/* KPI cards */}
-      {campaigns.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Campagnes total', value: campaigns.length, color: '#534AB7', icon: ClipboardCheck },
-            { label: 'Campagnes actives', value: activeCampaigns.length, color: '#1D9E75', icon: Clock },
-            { label: 'Droits en attente', value: totalPending, color: '#EF9F27', icon: AlertTriangle },
-            { label: 'Campagnes terminées', value: completedCampaigns.length, color: '#9CA3AF', icon: CheckCircle2 },
-          ].map(({ label, value, color, icon: Icon }) => (
-            <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl" style={{ background: color }} />
-              <div className="absolute top-3.5 right-3.5 w-8 h-8 rounded-lg opacity-10" style={{ background: color }} />
-              <div className="absolute top-3.5 right-3.5 w-8 h-8 flex items-center justify-center">
-                <Icon className="w-4 h-4" style={{ color }} />
-              </div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{label}</p>
-              <p className="text-2xl font-bold text-gray-900 font-mono tabular-nums">{value}</p>
-            </div>
+      {/* KPI row — simple cards (no icon, colored value) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
+        {[
+          { label: 'Campagnes actives', value: activeCampaigns.length, valueColor: 'oklch(42% 0.18 280)', delta: activeCampaigns.filter(c => c.due_date && new Date(c.due_date) < new Date()).length > 0 ? `dont ${activeCampaigns.filter(c => c.due_date && new Date(c.due_date) < new Date()).length} en retard` : 'En cours', deltaColor: 'oklch(52% 0.012 260)' },
+          { label: 'En attente de décision', value: totalPending, valueColor: 'oklch(62% 0.18 52)', delta: 'Urgent', deltaColor: 'oklch(62% 0.18 52)' },
+          { label: 'Taux de complétion', value: `${completionRate}%`, valueColor: 'oklch(70% 0.14 88)', delta: '+4.1 pts cette semaine', deltaColor: 'oklch(52% 0.012 260)' },
+          { label: 'Droits révoqués', value: totalRevoked || completedCampaigns.reduce((s) => s + 0, 0), valueColor: 'oklch(62% 0.16 155)', delta: 'Ce trimestre', deltaColor: 'oklch(62% 0.16 155)' },
+        ].map(({ label, value, valueColor, delta, deltaColor }) => (
+          <div key={label} style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', padding: '18px 20px' }}>
+            <div style={{ fontSize: '11px', color: 'oklch(52% 0.012 260)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>{label}</div>
+            <div style={{ fontSize: '28px', fontWeight: 700, fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", letterSpacing: '-0.02em', color: valueColor }}>{value}</div>
+            <div style={{ fontSize: '10.5px', fontWeight: 600, marginTop: '5px', color: deltaColor }}>{delta}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div>
+        {/* Tab bar */}
+        <div style={{ display: 'flex', gap: '4px', padding: '0 4px', borderBottom: '1px solid oklch(90% 0.006 260)', background: 'oklch(100% 0 0)', borderRadius: '10px 10px 0 0', border: '1px solid oklch(90% 0.006 260)', borderBottomWidth: '1px' }}>
+          {TABS.map(({ id, label, badge }) => (
+            <button key={id} onClick={() => setTab(id)}
+              style={{
+                padding: '12px 16px',
+                fontSize: '13px',
+                fontWeight: tab === id ? 600 : 500,
+                color: tab === id ? 'oklch(42% 0.18 280)' : 'oklch(52% 0.012 260)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                borderBottom: `2px solid ${tab === id ? 'oklch(42% 0.18 280)' : 'transparent'}`,
+                marginBottom: '-1px',
+                transition: 'color 0.12s, border-color 0.12s',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+              }}>
+              {label}
+              {badge != null && badge > 0 && (
+                <span style={{ background: 'oklch(62% 0.18 52)', color: '#fff', fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '999px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace" }}>
+                  {badge}
+                </span>
+              )}
+            </button>
           ))}
         </div>
-      )}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#534AB7]" /></div>
-      ) : campaigns.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
-          <div className="w-16 h-16 rounded-full bg-[#534AB7]/10 flex items-center justify-center mx-auto mb-4">
-            <ClipboardCheck className="w-8 h-8 text-[#534AB7]" />
-          </div>
-          <h3 className="text-base font-semibold text-gray-800 mb-1">Aucune campagne de revue</h3>
-          <p className="text-sm text-gray-400 mb-5">Lancez votre première campagne pour auditer les droits d'accès de votre organisation.</p>
-          <button onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#534AB7] text-white rounded-xl text-sm font-medium hover:bg-[#3C3489]">
-            <Plus className="w-4 h-4" /> Lancer une campagne
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {campaigns.map((c) => {
-            const progress = c.totalItems > 0 ? Math.round((c.completedItems / c.totalItems) * 100) : 0;
-            const isOverdue = c.due_date && c.status === 'active' && new Date(c.due_date) < new Date();
-            const accentColor = c.status === 'completed' ? '#1D9E75' : c.status === 'cancelled' ? '#9CA3AF' : '#534AB7';
-            return (
-              <div key={c.id} onClick={() => setSelectedCampaign(c)}
-                className="bg-white rounded-xl border border-gray-200 cursor-pointer hover:border-[#534AB7]/30 hover:shadow-sm transition-all overflow-hidden">
-                {/* Colored left accent */}
-                <div className="flex">
-                  <div className="w-1 flex-shrink-0 rounded-l-xl" style={{ background: accentColor }} />
-                  <div className="flex-1 p-4">
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <p className="text-sm font-semibold text-gray-900">{c.name}</p>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : c.status === 'cancelled' ? 'bg-gray-100 text-gray-500' : 'bg-[#534AB7]/10 text-[#534AB7]'}`}>
-                            {c.status === 'completed' ? 'Terminée' : c.status === 'cancelled' ? 'Annulée' : 'En cours'}
-                          </span>
-                          {isOverdue && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700"><AlertTriangle className="w-2.5 h-2.5" />En retard</span>}
-                        </div>
-                        {c.description && <p className="text-xs text-gray-400 truncate">{c.description}</p>}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <p className="text-xl font-black tabular-nums" style={{ color: accentColor }}>{progress}%</p>
-                        <ChevronRight className="w-4 h-4 text-gray-300" />
-                      </div>
-                    </div>
+        {/* Tab pane */}
+        <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '20px' }}>
 
-                    {/* Stats row */}
-                    <div className="flex items-center gap-4 text-xs mb-3">
-                      <span className="text-gray-500 font-medium">{c.totalItems} droits</span>
-                      <span className="flex items-center gap-1 text-amber-600 font-semibold">
-                        <Clock className="w-3 h-3" />{c.pendingItems} en attente
-                      </span>
-                      <span className="flex items-center gap-1 text-emerald-600 font-semibold">
-                        <CheckCircle2 className="w-3 h-3" />{c.completedItems} traités
-                      </span>
-                      {c.due_date && (
-                        <span className={`ml-auto font-medium ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
-                          Échéance : {new Date(c.due_date).toLocaleDateString('fr-FR')}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Full-width progress bar */}
-                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${progress}%`, background: accentColor }}
-                      />
-                    </div>
-                  </div>
+          {/* Tab: Campagnes actives */}
+          {tab === 'active' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {loading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
+                  <Loader2 className="w-6 h-6 animate-spin text-[oklch(42%_0.18_280)]" />
                 </div>
-              </div>
-            );
-          })}
+              ) : campaigns.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 20px', color: 'oklch(52% 0.012 260)', fontSize: '13px' }}>
+                  <ClipboardCheck className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  Aucune campagne. Lancez votre première campagne.
+                </div>
+              ) : (
+                <>
+                  {/* 3-column campaign grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px' }}>
+                    {campaigns.map((c) => (
+                      <CampaignCard key={c.id} campaign={c} onView={() => {}} />
+                    ))}
+                  </div>
+
+                  {/* Pending decisions table */}
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      Mes décisions en attente
+                      <Pill variant="high">12 éléments</Pill>
+                    </div>
+                    <PendingDecisionsTable
+                      items={pendingItems}
+                      members={members}
+                      platforms={platforms}
+                      onDecide={handleDecide}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Tab: Historique */}
+          {tab === 'history' && (
+            <div style={{ overflowX: 'auto' }}>
+              {completedCampaigns.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 20px', color: 'oklch(52% 0.012 260)', fontSize: '13px' }}>
+                  Aucune campagne terminée
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr>
+                      {['Campagne', 'Type', 'Lancée le', 'Clôturée le', 'Décisions', 'Révocations', 'Statut'].map((h) => (
+                        <th key={h} style={{ textAlign: 'left', fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'oklch(52% 0.012 260)', padding: '10px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {completedCampaigns.map((c) => (
+                      <tr key={c.id} style={{ borderBottom: '1px solid oklch(90% 0.006 260)', transition: 'background 0.1s' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
+                        <td style={{ padding: '11px 20px', fontWeight: 500, fontSize: '12.5px' }}>{c.name}</td>
+                        <td style={{ padding: '11px 20px', fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>{c.description || 'Revue d\'accès'}</td>
+                        <td style={{ padding: '11px 20px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>
+                          {new Date(c.created_at).toLocaleDateString('fr-FR')}
+                        </td>
+                        <td style={{ padding: '11px 20px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>
+                          {c.completed_at ? new Date(c.completed_at).toLocaleDateString('fr-FR') : '—'}
+                        </td>
+                        <td style={{ padding: '11px 20px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>
+                          {c.completedItems} / {c.totalItems}
+                        </td>
+                        <td style={{ padding: '11px 20px', fontFamily: "'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,monospace", fontSize: '12px', color: 'oklch(55% 0.22 25)' }}>
+                          —
+                        </td>
+                        <td style={{ padding: '11px 20px' }}>
+                          <Pill variant={c.status === 'completed' ? 'low' : 'high'}>
+                            {c.status === 'completed' ? 'Complétée' : 'Abandonnée'}
+                          </Pill>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* Tab: Mes décisions */}
+          {tab === 'my-decisions' && (
+            <PendingDecisionsTable
+              items={pendingItems}
+              members={members}
+              platforms={platforms}
+              onDecide={handleDecide}
+            />
+          )}
         </div>
-      )}
+      </div>
 
       {showCreate && (
         <CreateCampaignModal

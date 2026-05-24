@@ -220,7 +220,7 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
                     </div>
                     <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5, color: isErr ? 'oklch(55% 0.22 25)' : 'oklch(52% 0.012 260)', display: 'flex', alignItems: 'center', gap: 5 }}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
-                      {isErr ? 'Sync échoué' : `Sync ${lastSync}`}
+                      {p.status === 'inactif' ? 'Inactif' : p.status === 'déprécié' ? 'Déprécié' : lastSync !== '—' ? `Vérifié le ${lastSync}` : 'Non vérifié'}
                     </div>
                   </div>
                   {p.category?.trim() && (() => {

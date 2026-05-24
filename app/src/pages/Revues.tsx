@@ -270,8 +270,6 @@ function CampaignCard({ campaign, onView }: { campaign: ReviewCampaign; onView: 
     }
   }
 
-  const avatarColors = ['oklch(42% 0.18 280)', 'oklch(62% 0.14 88)', 'oklch(62% 0.18 52)', 'oklch(62% 0.16 155)'];
-  const initials = ['JB', 'SL', 'AD', 'KN'].slice(0, Math.min(4, Math.ceil(campaign.totalItems / 100) + 1));
 
   return (
     <div style={{ background: 'oklch(100% 0 0)', border: `1px solid ${isLate ? 'oklch(62% 0.18 52 / 0.4)' : 'oklch(90% 0.006 260)'}`, borderRadius: '10px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', opacity: isDone ? 0.85 : 1 }}>
@@ -311,13 +309,6 @@ function CampaignCard({ campaign, onView }: { campaign: ReviewCampaign; onView: 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
           {deadlineText && <div style={{ fontSize: '11.5px', fontWeight: 600 }} className={deadlineClass}>{deadlineText}</div>}
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {initials.map((init, i) => (
-              <div key={i} style={{ width: '24px', height: '24px', borderRadius: '50%', background: avatarColors[i % avatarColors.length], border: '2px solid oklch(100% 0 0)', display: 'grid', placeItems: 'center', fontSize: '9px', fontWeight: 700, color: '#fff', marginLeft: i === 0 ? 0 : '-6px', flexShrink: 0 }}>
-                {init}
-              </div>
-            ))}
-          </div>
         </div>
         <button onClick={onView}
           style={{ background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', padding: '5px 10px', borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, cursor: 'pointer', transition: 'background 0.12s, color 0.12s, border-color 0.12s', whiteSpace: 'nowrap' }}
@@ -339,10 +330,12 @@ export function Revues({ members, platforms }: RevuesProps) {
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      api.reviews.list(),
-    ]).then(([c]) => {
-      setCampaigns(c);
+    api.reviews.list().then(async (campaigns) => {
+      setCampaigns(campaigns);
+      // Fetch items for all active campaigns to populate pending decisions
+      const activeCampaignIds = campaigns.filter((c) => c.status === 'active').map((c) => c.id);
+      const itemArrays = await Promise.all(activeCampaignIds.map((id) => api.reviews.get(id).then((r) => r.items)));
+      setAllItems(itemArrays.flat());
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -374,7 +367,7 @@ export function Revues({ members, platforms }: RevuesProps) {
   const TABS = [
     { id: 'active' as const, label: 'Campagnes actives' },
     { id: 'history' as const, label: 'Historique' },
-    { id: 'my-decisions' as const, label: 'Mes décisions en attente', badge: pendingItems.length || 12 },
+    { id: 'my-decisions' as const, label: 'Mes décisions en attente', badge: pendingItems.length },
   ];
 
   return (
@@ -399,8 +392,8 @@ export function Revues({ members, platforms }: RevuesProps) {
         {[
           { label: 'Campagnes actives', value: activeCampaigns.length, valueColor: 'oklch(42% 0.18 280)', delta: activeCampaigns.filter(c => c.due_date && new Date(c.due_date) < new Date()).length > 0 ? `dont ${activeCampaigns.filter(c => c.due_date && new Date(c.due_date) < new Date()).length} en retard` : 'En cours', deltaColor: 'oklch(52% 0.012 260)' },
           { label: 'En attente de décision', value: totalPending, valueColor: 'oklch(62% 0.18 52)', delta: 'Urgent', deltaColor: 'oklch(62% 0.18 52)' },
-          { label: 'Taux de complétion', value: `${completionRate}%`, valueColor: 'oklch(70% 0.14 88)', delta: '+4.1 pts cette semaine', deltaColor: 'oklch(52% 0.012 260)' },
-          { label: 'Droits révoqués', value: totalRevoked || completedCampaigns.reduce((s) => s + 0, 0), valueColor: 'oklch(62% 0.16 155)', delta: 'Ce trimestre', deltaColor: 'oklch(62% 0.16 155)' },
+          { label: 'Taux de complétion', value: `${completionRate}%`, valueColor: 'oklch(70% 0.14 88)', delta: campaigns.length > 0 ? `${campaigns.reduce((s, c) => s + c.totalItems, 0)} droits au total` : 'Aucune campagne', deltaColor: 'oklch(52% 0.012 260)' },
+          { label: 'Droits révoqués', value: totalRevoked, valueColor: 'oklch(62% 0.16 155)', delta: completedCampaigns.length > 0 ? `Sur ${completedCampaigns.length} campagne${completedCampaigns.length > 1 ? 's' : ''} clôturée${completedCampaigns.length > 1 ? 's' : ''}` : 'Aucune campagne clôturée', deltaColor: 'oklch(62% 0.16 155)' },
         ].map(({ label, value, valueColor, delta, deltaColor }) => (
           <div key={label} style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', padding: '18px 20px' }}>
             <div style={{ fontSize: '11px', color: 'oklch(52% 0.012 260)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>{label}</div>
@@ -470,7 +463,7 @@ export function Revues({ members, platforms }: RevuesProps) {
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       Mes décisions en attente
-                      <Pill variant="high">12 éléments</Pill>
+                      {pendingItems.length > 0 && <Pill variant="high">{pendingItems.length} élément{pendingItems.length > 1 ? 's' : ''}</Pill>}
                     </div>
                     <PendingDecisionsTable
                       items={pendingItems}

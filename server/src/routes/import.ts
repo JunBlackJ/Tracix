@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
 import { recomputeAllRiskScores } from '../services/risk.service';
+import { generateAlerts } from '../services/alert.service';
 
 const router = Router();
 router.use(requireAuth);
@@ -314,8 +315,9 @@ router.post('/batch', async (req: Request, res: Response): Promise<void> => {
     return { membersCreated, platformsCreated, accessCreated };
   });
 
-  // Recompute risk scores asynchronously
+  // Recompute risk scores and generate alerts asynchronously
   recomputeAllRiskScores(orgId).catch(() => {});
+  generateAlerts(orgId).catch(() => {});
 
   await createAuditEntry({
     organizationId: orgId,

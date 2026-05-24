@@ -174,10 +174,48 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
     : null;
 
   const KPI_CELLS = [
-    { label: 'Conformité globale',   value: `${score}%`,  color: 'oklch(70% 0.14 88)', sub: score >= 80 ? 'Bonne conformité' : score >= 50 ? 'À améliorer' : 'Action requise' },
-    { label: 'Alertes critiques',    value: String(criticalAlerts), color: 'oklch(55% 0.22 25)', sub: criticalAlerts > 0 ? 'Action requise' : 'Aucune alerte critique' },
-    { label: 'Revues en retard',     value: String(overdueCount),   color: 'oklch(62% 0.18 52)', sub: overdueCount > 0 ? 'À traiter' : 'Revues à jour' },
-    { label: 'Prochain renouvellement', value: nextExpiringSub ? nextExpiringSub.name.split(' ')[0] : '—', color: 'oklch(42% 0.18 280)', sub: nextSubDays !== null ? `dans ${nextSubDays} jour${nextSubDays !== 1 ? 's' : ''}` : 'Aucun abonnement' },
+    {
+      label: "Revues d'accès en retard",
+      value: String(overdueCount),
+      color: overdueCount > 0 ? 'oklch(62% 0.18 52)' : 'oklch(62% 0.16 155)',
+      sub: overdueCount > 0 ? 'Action requise' : 'À jour',
+      ok: overdueCount === 0,
+    },
+    {
+      label: 'Plateformes sans MFA',
+      value: String(noMfaCount),
+      color: noMfaCount > 0 ? 'oklch(55% 0.22 25)' : 'oklch(62% 0.16 155)',
+      sub: noMfaCount > 0 ? 'Risque' : 'Toutes protégées',
+      ok: noMfaCount === 0,
+    },
+    {
+      label: 'Alertes critiques actives',
+      value: String(criticalAlerts),
+      color: criticalAlerts > 0 ? 'oklch(55% 0.22 25)' : 'oklch(62% 0.16 155)',
+      sub: criticalAlerts > 0 ? 'Action requise' : 'Aucune',
+      ok: criticalAlerts === 0,
+    },
+    {
+      label: 'Abonnements expirant sous 30j',
+      value: String(expiringSubs),
+      color: expiringSubs > 0 ? 'oklch(62% 0.18 52)' : 'oklch(62% 0.16 155)',
+      sub: expiringSubs > 0 ? 'À renouveler' : 'OK',
+      ok: expiringSubs === 0,
+    },
+    {
+      label: 'Systèmes fin de support (<90j)',
+      value: String(eolSystems),
+      color: eolSystems > 0 ? 'oklch(62% 0.18 52)' : 'oklch(62% 0.16 155)',
+      sub: eolSystems > 0 ? 'À migrer' : 'OK',
+      ok: eolSystems === 0,
+    },
+    {
+      label: 'Score de conformité',
+      value: `${score}%`,
+      color: score >= 80 ? 'oklch(62% 0.16 155)' : score >= 50 ? 'oklch(62% 0.18 52)' : 'oklch(55% 0.22 25)',
+      sub: score >= 80 ? 'Bonne conformité' : score >= 50 ? 'À améliorer' : 'Action requise',
+      ok: score >= 80,
+    },
   ];
 
   const BORDER  = 'oklch(90% 0.006 260)';
@@ -321,14 +359,14 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
             )}
           </div>
 
-          {/* KPI grid 2×2 */}
+          {/* KPI grid 3×2 */}
           <div style={card}>
             <div style={cardHeader}>
               <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Indicateurs clés</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
               {KPI_CELLS.map((k, i) => (
-                <div key={i} style={{ padding: '18px 20px', borderRight: i % 2 === 0 ? `1px solid ${BORDER}` : 'none', borderBottom: i < 2 ? `1px solid ${BORDER}` : 'none' }}>
+                <div key={i} style={{ padding: '18px 20px', borderRight: i % 3 !== 2 ? `1px solid ${BORDER}` : 'none', borderBottom: i < 3 ? `1px solid ${BORDER}` : 'none' }}>
                   <div style={{ fontSize: 11, color: MUTED, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{k.label}</div>
                   <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "'JetBrains Mono',ui-monospace,monospace", letterSpacing: '-0.02em', color: k.color }}>{k.value}</div>
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>{k.sub}</div>

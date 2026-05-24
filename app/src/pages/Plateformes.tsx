@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
-import type { Platform, Member, Alert, AccessRight } from '@/types';
+import type { Platform, Member, Alert, AccessRight, Category } from '@/types';
 import { PlatformIcon } from '@/components/ui/PlatformIcon';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -20,10 +20,11 @@ interface PlateformesProps {
   members: Member[];
   alerts: Alert[];
   accessRights: AccessRight[];
+  categories?: Category[];
   onPlatformCreated?: (p: Platform) => void;
 }
 
-export function Plateformes({ platforms, members, alerts, accessRights, onPlatformCreated }: PlateformesProps) {
+export function Plateformes({ platforms, members, alerts, accessRights, categories = [], onPlatformCreated }: PlateformesProps) {
   const { id } = useParams<{ id: string }>();
   const [showForm, setShowForm] = useState(false);
 
@@ -36,6 +37,7 @@ export function Plateformes({ platforms, members, alerts, accessRights, onPlatfo
         members={members}
         alerts={alerts}
         accessRights={accessRights}
+        categories={categories}
         onNew={() => setShowForm(true)}
       />
       {showForm && (
@@ -77,8 +79,6 @@ function KpiSimpleCard({ label, value, delta, deltaUp, kpiColor }: {
   );
 }
 
-const TABS = ['Toutes', 'Cloud', 'SaaS', 'IdP', 'Dev', 'Communication'];
-
 function timeSince(dateStr: string): string {
   const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
   if (mins < 1) return '< 1 min';
@@ -88,9 +88,21 @@ function timeSince(dateStr: string): string {
   return `${Math.floor(hrs / 24)}j`;
 }
 
-function PlateformesList({ platforms, members: _members, alerts: _alerts, accessRights, onNew }: PlateformesProps & { onNew: () => void }) {
+function PlateformesList({ platforms, members: _members, alerts: _alerts, accessRights, categories = [], onNew }: PlateformesProps & { onNew: () => void }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Toutes');
+
+  // Build tabs from real platform categories — only show categories that have at least one platform
+  const usedCategories = [...new Set(
+    platforms.map((p) => p.category?.trim()).filter(Boolean)
+  )].sort();
+  const tabs = ['Toutes', ...usedCategories];
+
+  // If the active tab no longer has any platforms (e.g. after a data refresh), reset to Toutes
+  const safeTab = tabs.includes(activeTab) ? activeTab : 'Toutes';
+
+  // Category color lookup from Category records
+  const categoryColorMap = new Map(categories.map((c) => [c.label, c.color]));
 
   const getPlatformAccess = (platformId: string) =>
     accessRights.filter((a) => a.platform_id === platformId && a.level !== 'none');
@@ -122,7 +134,7 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
   const lastSyncDelta = oldestSync < Infinity ? `Sync min: il y a ${timeSince(new Date(oldestSync).toISOString())}` : '— Aucune sync';
 
   const filtered = platforms.filter(p =>
-    activeTab === 'Toutes' || p.category.toLowerCase() === activeTab.toLowerCase()
+    safeTab === 'Toutes' || (p.category?.trim() ?? '') === safeTab
   );
 
   return (
@@ -149,15 +161,26 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
 
       {/* Tabs + grid section */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 2, background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, overflow: 'hidden', width: 'fit-content' }}>
-          {TABS.map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              style={{ padding: '8px 16px', fontSize: 12.5, fontWeight: 500, cursor: 'pointer', border: 'none', borderRadius: 8, transition: 'background 0.12s, color 0.12s', whiteSpace: 'nowrap', background: activeTab === tab ? 'oklch(42% 0.18 280)' : 'transparent', color: activeTab === tab ? '#fff' : 'oklch(52% 0.012 260)' }}>
-              {tab}
-            </button>
-          ))}
-        </div>
+        {/* Tabs — built from real platform categories */}
+        {tabs.length > 1 && (
+          <div style={{ display: 'flex', gap: 2, background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, overflow: 'hidden', width: 'fit-content', flexWrap: 'wrap' }}>
+            {tabs.map(tab => {
+              const isActive = safeTab === tab;
+              const accentColor = tab === 'Toutes' ? 'oklch(42% 0.18 280)' : (categoryColorMap.get(tab) ?? 'oklch(42% 0.18 280)');
+              return (
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  style={{ padding: '8px 16px', fontSize: 12.5, fontWeight: 500, cursor: 'pointer', border: 'none', borderRadius: 8, transition: 'background 0.12s, color 0.12s', whiteSpace: 'nowrap', background: isActive ? accentColor : 'transparent', color: isActive ? '#fff' : 'oklch(52% 0.012 260)' }}>
+                  {tab}
+                  {tab !== 'Toutes' && (
+                    <span style={{ marginLeft: 5, fontSize: 10, opacity: isActive ? 0.8 : 0.5, fontFamily: 'JetBrains Mono, monospace' }}>
+                      {platforms.filter(p => p.category?.trim() === tab).length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Platform grid */}
         {filtered.length === 0 && platforms.length === 0 && (
@@ -200,9 +223,14 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
                       {isErr ? 'Sync échoué' : `Sync ${lastSync}`}
                     </div>
                   </div>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: `${color}20`, color }}>
-                    {p.category}
-                  </span>
+                  {p.category?.trim() && (() => {
+                    const catColor = categoryColorMap.get(p.category.trim()) ?? color;
+                    return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: `${catColor}22`, color: catColor }}>
+                        {p.category.trim()}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
             );

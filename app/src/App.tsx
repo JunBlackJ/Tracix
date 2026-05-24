@@ -144,6 +144,7 @@ function App() {
                 members={store.members}
                 alerts={store.alerts}
                 accessRights={store.accessRights}
+                categories={store.categories.filter((c) => c.type === 'platform')}
                 onPlatformCreated={store.upsertPlatform}
               />
             }
@@ -156,6 +157,7 @@ function App() {
                 members={store.members}
                 alerts={store.alerts}
                 accessRights={store.accessRights}
+                categories={store.categories.filter((c) => c.type === 'platform')}
                 onPlatformCreated={store.upsertPlatform}
               />
             }

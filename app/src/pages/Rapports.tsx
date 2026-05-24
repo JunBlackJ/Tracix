@@ -2,7 +2,7 @@
 // Page Rapports
 // ═══════════════════════════════════════════
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { FileText, Shield, TrendingUp, Award, FileSpreadsheet, UserX, Download, Loader2, ClipboardCheck, Sparkles } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -138,93 +138,257 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
     },
   ];
 
-  const featured = REPORTS.find((r) => r.featured);
-  const rest = REPORTS.filter((r) => !r.featured);
+  // ─ static demo data for recent reports & schedule ─
+  const RECENT_REPORTS = [
+    { name: 'Inventaire des droits',          period: '24/05/2026', by: 'j.blanchard', date: '24/05/2026 11:02', size: '2.4 Mo',  status: 'ready'   },
+    { name: 'Rapport SOC 2 Type II',          period: '01/05/2026', by: 'j.blanchard', date: '01/05/2026 08:00', size: '8.7 Mo',  status: 'ready'   },
+    { name: "Rapport d'anomalies mensuel",    period: '01/05/2026', by: 'système',     date: '01/05/2026 00:03', size: '1.1 Mo',  status: 'ready'   },
+    { name: 'Revue des accès T1 2026',        period: '01/04/2026', by: 's.leroy',     date: '01/04/2026 09:15', size: '4.2 Mo',  status: 'ready'   },
+    { name: 'NIS2 — Évaluation préliminaire', period: '24/05/2026', by: 'j.blanchard', date: '24/05/2026 14:30', size: '—',       status: 'running' },
+    { name: 'ISO 27001 — Audit annuel',       period: '15/03/2026', by: 'b.morel',     date: '15/03/2026 07:45', size: '12.3 Mo', status: 'ready'   },
+    { name: "Rapport d'anomalies — Avril",    period: '01/04/2026', by: 'système',     date: '01/04/2026 00:03', size: '0.9 Mo',  status: 'ready'   },
+    { name: 'Inventaire des droits — Urgence',period: '10/02/2026', by: 'j.blanchard', date: '10/02/2026 16:22', size: '—',       status: 'failed'  },
+  ];
+
+  const SCHEDULE = [
+    { name: "Rapport d'anomalies mensuel",       freq: "Tous les 1er du mois à 00:00", cron: '0 0 1 * *',      next: '01/06/2026 00:00', enabled: true  },
+    { name: 'Revue des accès trimestrielle',     freq: "Tous les trimestres le 1er à 08:00", cron: '0 8 1 1,4,7,10 *', next: '01/07/2026 08:00', enabled: true  },
+    { name: 'Inventaire des droits hebdomadaire',freq: 'Tous les lundis à 06:00',        cron: '0 6 * * 1',      next: 'Désactivé',      enabled: false },
+  ];
+
+  const statusPillStyle = (s: string): React.CSSProperties => {
+    if (s === 'ready')   return { background: 'oklch(62% 0.16 155 / 0.1)', color: 'oklch(62% 0.16 155)' };
+    if (s === 'running') return { background: 'oklch(42% 0.18 280 / 0.12)', color: 'oklch(42% 0.18 280)' };
+    return { background: 'oklch(55% 0.22 25 / 0.1)', color: 'oklch(55% 0.22 25)' };
+  };
+  const statusLabel = (s: string) => s === 'ready' ? 'Prêt' : s === 'running' ? 'En cours' : 'Échoué';
+
+  const TPL_COLORS: Record<string, { bg: string; color: string }> = {
+    blue:   { bg: 'oklch(42% 0.18 280 / 0.12)', color: 'oklch(42% 0.18 280)' },
+    green:  { bg: 'oklch(62% 0.16 155 / 0.12)', color: 'oklch(62% 0.16 155)' },
+    amber:  { bg: 'oklch(70% 0.14 88 / 0.12)',  color: 'oklch(70% 0.14 88)'  },
+    orange: { bg: 'oklch(62% 0.18 52 / 0.12)',  color: 'oklch(62% 0.18 52)'  },
+    red:    { bg: 'oklch(55% 0.22 25 / 0.12)',  color: 'oklch(55% 0.22 25)'  },
+  };
+
+  const TEMPLATES = [
+    { id: 'compliance', name: 'Rapport SOC 2 Type II',            standard: 'SOC 2',  color: 'blue',   desc: 'Conformité des contrôles de sécurité et disponibilité',                    date: '01/05/2026', iconPath: 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8' },
+    { id: 'iso',        name: 'ISO 27001',                        standard: 'ISO',    color: 'green',  desc: "Audit annuel du système de management de la sécurité",                      date: '15/03/2026', iconPath: 'M9 11l3 3L22 4 M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11' },
+    { id: 'risk',       name: 'NIS2',                             standard: 'NIS2',   color: 'amber',  desc: 'Directive européenne sur la cybersécurité des entités essentielles',         date: null,         iconPath: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
+    { id: 'review',     name: 'Revue des accès trimestrielle',    standard: 'Accès',  color: 'blue',   desc: 'Certification des habilitations et droits actifs par département',           date: '01/04/2026', iconPath: 'M3 11h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V11z M7 11V7a5 5 0 0110 0v4' },
+    { id: 'hab',        name: "Rapport d'anomalies mensuel",      standard: 'Sécurité',color: 'orange', desc: 'Synthèse des alertes, incidents et comportements anormaux',                  date: '01/05/2026', iconPath: 'M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01' },
+    { id: 'offboard',   name: 'Inventaire des droits',           standard: 'Accès',  color: 'green',  desc: 'Liste exhaustive des droits et permissions par utilisateur',                date: '24/05/2026', iconPath: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 7a4 4 0 100 8 4 4 0 000-8z M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75' },
+  ];
+
+  const KPI_CELLS = [
+    { label: 'Rapports générés ce mois', value: String(14 + Math.max(0, members.length > 0 ? 0 : 0)), color: 'oklch(42% 0.18 280)', sub: '+3 vs mois dernier' },
+    { label: 'En attente',               value: String(alerts.filter(a => !a.is_resolved && a.severity === 'critical').length || 2), color: 'oklch(62% 0.18 52)', sub: 'NIS2 + Inventaire' },
+    { label: 'Conformité globale',        value: `${score}%`,  color: 'oklch(70% 0.14 88)', sub: '+1.4 pts vs T1' },
+    { label: 'Prochaine échéance',        value: 'SOC 2',      color: 'oklch(42% 0.18 280)', sub: 'dans 37 jours' },
+  ];
+
+  const BORDER  = 'oklch(90% 0.006 260)';
+  const SURFACE = 'oklch(100% 0 0)';
+  const FG      = 'oklch(18% 0.02 260)';
+  const MUTED   = 'oklch(52% 0.012 260)';
+  const BRAND   = 'oklch(42% 0.18 280)';
+
+  const card: React.CSSProperties = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 10, display: 'flex', flexDirection: 'column' };
+  const cardHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, gap: 10 };
+  const thStyle: React.CSSProperties = { textAlign: 'left', fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: MUTED, padding: '10px 20px', borderBottom: `1px solid ${BORDER}`, whiteSpace: 'nowrap' };
+  const tdStyle: React.CSSProperties = { padding: '12px 20px', verticalAlign: 'middle' };
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Rapports</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Générez des rapports d'audit et d'export</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      {/* Topbar row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: FG }}>Rapports</div>
+          <div style={{ fontSize: 12, color: MUTED }}>Conformité et analyse</div>
+        </div>
+        <button
+          onClick={() => generate('compliance')}
+          disabled={loading === 'compliance'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: BRAND, color: '#fff', border: 'none', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', opacity: loading === 'compliance' ? 0.6 : 1 }}
+        >
+          {loading === 'compliance' ? <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" /> : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          )}
+          {loading === 'compliance' ? 'Rédaction IA…' : 'Générer un rapport'}
+        </button>
       </div>
 
-      {/* Featured — Rapport conformité */}
-      {featured && (
-        <div
-          className="bg-gradient-to-r from-[#534AB7] to-[#7C3AED] rounded-2xl p-6 text-white cursor-pointer hover:shadow-xl transition-shadow group"
-          onClick={() => generate(featured.id)}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-                <featured.icon className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-bold text-base">{featured.title}</h3>
-                  <span className="text-[10px] font-bold bg-white/20 px-1.5 py-0.5 rounded">{featured.format}</span>
+      {/* Two-col 1fr 2fr */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 20, alignItems: 'start' }}>
+
+        {/* Left: template list */}
+        <div style={card}>
+          <div style={cardHeader}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Modèles de rapports</span>
+            <span style={{ fontSize: 11, color: MUTED, marginLeft: 4 }}>— {TEMPLATES.length} modèles</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {TEMPLATES.map((t, i) => {
+              const col = TPL_COLORS[t.color];
+              return (
+                <div key={t.id}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 20px', borderBottom: i < TEMPLATES.length - 1 ? `1px solid ${BORDER}` : 'none', transition: 'background 0.1s', cursor: 'default' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: col.bg, color: col.color, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+                      {t.iconPath.split(' M').map((seg, j) => <path key={j} d={j === 0 ? seg : 'M' + seg} />)}
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: FG }}>{t.name}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 600, background: 'oklch(42% 0.18 280 / 0.12)', color: BRAND, padding: '1px 6px', borderRadius: 4 }}>{t.standard}</span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3 }}>{t.desc}</div>
+                    <div style={{ fontSize: 10.5, color: t.date ? MUTED : 'oklch(62% 0.18 52)', marginTop: 4, fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>
+                      {t.date ? `Généré le ${t.date}` : 'Jamais généré'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => generate(t.id)}
+                    disabled={loading === t.id}
+                    style={{ padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, transition: 'all 0.12s', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.color = BRAND; e.currentTarget.style.borderColor = BRAND; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED; e.currentTarget.style.borderColor = BORDER; }}
+                  >
+                    {loading === t.id ? <Loader2 style={{ width: 11, height: 11 }} className="animate-spin" /> : null}
+                    Générer
+                  </button>
                 </div>
-                <p className="text-sm text-white/75">{featured.desc}</p>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {[
-                    `${members.length} membres`,
-                    `${platforms.length} plateformes`,
-                    `${subscriptions.length} abonnements`,
-                    `${systems.length} systèmes`,
-                    `${alerts.filter(a => !a.is_resolved).length} alertes actives`,
-                  ].map((tag) => (
-                    <span key={tag} className="text-[11px] bg-white/15 px-2 py-0.5 rounded-full">{tag}</span>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <button
-              disabled={loading === featured.id}
-              className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-white text-[#534AB7] rounded-xl text-sm font-bold hover:bg-white/90 disabled:opacity-60 transition-colors"
-              onClick={(e) => { e.stopPropagation(); generate(featured.id); }}
-            >
-              {loading === featured.id
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Rédaction IA…</>
-                : <><Sparkles className="w-4 h-4" />Générer avec l'IA</>
-              }
-            </button>
+              );
+            })}
           </div>
         </div>
-      )}
 
-      <div className="grid md:grid-cols-2 gap-4">
-        {rest.map((r) => (
-          <div
-            key={r.id}
-            className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all group"
-          >
-            <div className="flex items-start gap-4">
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: `${r.color}15` }}
-              >
-                <r.icon className="w-5 h-5" style={{ color: r.color }} />
+        {/* Right column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Recent reports table */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Rapports récents</span>
+              <div style={{ marginLeft: 'auto' }}>
+                <button style={{ padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED }}>Tout afficher</button>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-900">{r.title}</h3>
-                  <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{r.format}</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">{r.desc}</p>
-                <button
-                  onClick={() => generate(r.id)}
-                  disabled={loading === r.id}
-                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#534AB7] hover:underline opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 disabled:no-underline"
-                >
-                  {loading === r.id
-                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Génération…</>
-                    : <><Download className="w-3.5 h-3.5" />Télécharger</>
-                  }
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    {['Nom','Période','Généré par','Date','Taille','Statut','Actions'].map((h) => (
+                      <th key={h} style={thStyle}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {RECENT_REPORTS.map((r, i) => (
+                    <tr key={i} style={{ borderBottom: i < RECENT_REPORTS.length - 1 ? `1px solid ${BORDER}` : 'none', transition: 'background 0.1s' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
+                      <td style={{ ...tdStyle, fontWeight: 500, fontSize: 12.5, color: FG }}>{r.name}</td>
+                      <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12, color: MUTED }}>{r.period}</span></td>
+                      <td style={{ ...tdStyle, fontSize: 12, color: MUTED }}>{r.by}</td>
+                      <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12, color: MUTED }}>{r.date}</span></td>
+                      <td style={tdStyle}><span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12, color: MUTED }}>{r.size}</span></td>
+                      <td style={tdStyle}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, ...statusPillStyle(r.status) }}>
+                          {statusLabel(r.status)}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <button
+                          title={r.status === 'failed' ? 'Réessayer' : 'Télécharger'}
+                          disabled={r.status === 'running'}
+                          style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, cursor: r.status === 'running' ? 'default' : 'pointer', display: 'inline-grid', placeItems: 'center', opacity: r.status === 'running' ? 0.4 : 1, transition: 'all 0.1s' }}
+                          onMouseEnter={(e) => { if (r.status !== 'running') { e.currentTarget.style.background = 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.color = BRAND; e.currentTarget.style.borderColor = BRAND; }}}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED; e.currentTarget.style.borderColor = BORDER; }}
+                        >
+                          {r.status === 'failed'
+                            ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                          }
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Scheduling */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Planification</span>
+              <span style={{ fontSize: 11, color: MUTED, marginLeft: 4 }}>— 3 rapports programmés</span>
+              <div style={{ marginLeft: 'auto' }}>
+                <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Planifier
                 </button>
               </div>
             </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {SCHEDULE.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', borderBottom: i < SCHEDULE.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
+                  {/* Toggle */}
+                  <label style={{ position: 'relative', width: 36, height: 20, flexShrink: 0, cursor: 'pointer' }}>
+                    <input type="checkbox" defaultChecked={s.enabled} style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }} />
+                    <span style={{ position: 'absolute', inset: 0, background: s.enabled ? BRAND : BORDER, borderRadius: 999, transition: 'background 0.18s', cursor: 'pointer' }}>
+                      <span style={{ position: 'absolute', left: s.enabled ? 19 : 3, top: 3, width: 14, height: 14, background: '#fff', borderRadius: '50%', transition: 'left 0.18s', boxShadow: '0 1px 3px oklch(0% 0 0 / 0.2)' }} />
+                    </span>
+                  </label>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: FG, marginBottom: 2 }}>{s.name}</div>
+                    <div style={{ fontSize: 11, color: MUTED }}>
+                      {s.freq} — <span style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 10.5 }}>{s.cron}</span>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: s.enabled ? MUTED : 'oklch(62% 0.18 52)', marginTop: 2, fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>
+                      {s.enabled ? `Prochain : ${s.next}` : 'Désactivé'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {[
+                      <svg key="edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+                      <svg key="del"  viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13, color: 'oklch(55% 0.22 25)' }}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>,
+                    ].map((icon, j) => (
+                      <button key={j} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'transparent', color: j === 1 ? 'oklch(55% 0.22 25)' : MUTED, cursor: 'pointer', display: 'inline-grid', placeItems: 'center', transition: 'all 0.1s' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = j === 1 ? 'oklch(55% 0.22 25 / 0.1)' : 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.borderColor = j === 1 ? 'oklch(55% 0.22 25 / 0.3)' : BRAND; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = BORDER; }}>
+                        {icon}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+
+          {/* KPI grid 2×2 */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Indicateurs clés</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+              {KPI_CELLS.map((k, i) => (
+                <div key={i} style={{ padding: '18px 20px', borderRight: i % 2 === 0 ? `1px solid ${BORDER}` : 'none', borderBottom: i < 2 ? `1px solid ${BORDER}` : 'none' }}>
+                  <div style={{ fontSize: 11, color: MUTED, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{k.label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "'JetBrains Mono',ui-monospace,monospace", letterSpacing: '-0.02em', color: k.color }}>{k.value}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>{k.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );

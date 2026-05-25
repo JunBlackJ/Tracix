@@ -11,9 +11,9 @@ export interface RiskResult {
 }
 
 // Score starts at 100 (fully compliant) and penalties are subtracted.
-// score >= 70 → green (Conforme)
-// score 40-69 → orange (À surveiller)
-// score <= 39 → red (Critique)
+// 80–100 → Conforme | 60–79 → Modéré | 40–59 → Élevé | 0–39 → Critique
+// Max theoretical penalties: 20+35+30+15+10+20 = 130 pts
+// Worst realistic scenario (3–4 factors): ~75–85 pts → score 15–25 (Critique, discriminant)
 export async function computeMemberRisk(memberId: string): Promise<RiskResult> {
   const member = await prisma.member.findUnique({
     where: { id: memberId },
@@ -38,7 +38,7 @@ export async function computeMemberRisk(memberId: string): Promise<RiskResult> {
   // ─── 1. Trop d'accès Admin ───
   const adminCount = activeAccess.filter((a) => a.level === 'admin').length;
   if (adminCount > org.max_admin_per_platform) {
-    const penalty = 30;
+    const penalty = 20;
     score -= penalty;
     factors.push({
       label: `${adminCount} accès Admin (seuil: ${org.max_admin_per_platform})`,
@@ -64,8 +64,9 @@ export async function computeMemberRisk(memberId: string): Promise<RiskResult> {
         )
       )
     );
-    // Penalty scales with how overdue: 25 base + 5 for every extra 30 days, capped at 45
-    const penalty = Math.min(45, 25 + Math.floor((maxDays - reviewDelay) / 30) * 5);
+    // Retard < 30j → −15 pts | Retard 30–90j → −25 pts | Retard > 90j → −35 pts
+    const overdueDays = maxDays - reviewDelay;
+    const penalty = overdueDays < 30 ? 15 : overdueDays <= 90 ? 25 : 35;
     score -= penalty;
     factors.push({
       label: `${overdueRights.length} revue(s) dépassée(s) — plus ancienne: ${maxDays}j`,
@@ -77,7 +78,7 @@ export async function computeMemberRisk(memberId: string): Promise<RiskResult> {
   if (member.departure_date) {
     const departed = new Date(member.departure_date) < now;
     if (departed && member.status === 'actif' && activeAccess.length > 0) {
-      const penalty = 40;
+      const penalty = 30;
       score -= penalty;
       factors.push({
         label: `Date de départ passée (${member.departure_date}), ${activeAccess.length} accès encore actifs`,
@@ -90,7 +91,7 @@ export async function computeMemberRisk(memberId: string): Promise<RiskResult> {
   const isShared = member.account_type === 'partagé' || member.account_type === 'service';
   if (isShared) {
     if (adminCount > 0) {
-      const penalty = 20;
+      const penalty = 15;
       score -= penalty;
       factors.push({ label: 'Compte partagé avec droits Admin', delta: -penalty });
     } else {
@@ -105,7 +106,7 @@ export async function computeMemberRisk(memberId: string): Promise<RiskResult> {
     (a) => a.level === 'admin' && a.platform && !a.platform.has_mfa
   );
   if (adminNoMfa.length > 0) {
-    const penalty = 15;
+    const penalty = 10;
     score -= penalty;
     const names = adminNoMfa.map((a) => a.platform.name).join(', ');
     factors.push({
@@ -116,7 +117,7 @@ export async function computeMemberRisk(memberId: string): Promise<RiskResult> {
 
   // ─── 6. Membre inactif/suspendu avec accès actifs ───
   if (member.status !== 'actif' && activeAccess.length > 0) {
-    const penalty = 25;
+    const penalty = 20;
     score -= penalty;
     factors.push({
       label: `Membre ${member.status} avec ${activeAccess.length} accès encore actifs`,

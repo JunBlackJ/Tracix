@@ -91,6 +91,7 @@ function App() {
         user={store.user!}
         organization={store.organization!}
         onLogout={store.logout}
+        onRefresh={store.loadAllData}
         unresolvedAlerts={unresolvedAlerts}
         customModules={store.customModules}
         userOrganizations={store.userOrganizations}

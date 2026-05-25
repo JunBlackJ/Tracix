@@ -27,6 +27,7 @@ interface AppLayoutProps {
   user: UserApp;
   organization: Organization;
   onLogout: () => void;
+  onRefresh?: () => void;
   unresolvedAlerts: number;
   customModules?: CustomModule[];
   userOrganizations?: OrgEntry[];
@@ -102,7 +103,7 @@ function NavItem({
 function SidebarContent({
   location, enabledSet, unresolvedAlerts, customModules, user, organization,
   orgMenuOpen, setOrgMenuOpen, userOrganizations, onSwitchOrg, onCreateOrg,
-  showNewOrgModal, setShowNewOrgModal, onLogout, onClose,
+  showNewOrgModal, setShowNewOrgModal, onLogout, onRefresh, onClose,
 }: {
   location: { pathname: string };
   enabledSet: Set<string>;
@@ -118,6 +119,7 @@ function SidebarContent({
   showNewOrgModal: boolean;
   setShowNewOrgModal: (v: boolean) => void;
   onLogout: () => void;
+  onRefresh?: () => void;
   onClose?: () => void;
 }) {
   const [switchingOrg, setSwitchingOrg] = useState<string | null>(null);
@@ -131,7 +133,7 @@ function SidebarContent({
     <div className="flex flex-col h-full" style={{ background: 'hsl(246 20% 14%)' }}>
       {/* Logo */}
       <div className="flex items-center justify-between gap-2.5 px-5 py-[18px] border-b" style={{ borderColor: 'hsl(246 10% 22%)' }}>
-        <Link to="/dashboard" className="flex items-center gap-2.5">
+        <Link to="/dashboard" onClick={onRefresh} className="flex items-center gap-2.5">
           <img src="/logo.png" alt="Tracix" className="h-8 w-auto object-contain flex-shrink-0" />
         </Link>
         {onClose && (
@@ -302,7 +304,7 @@ function Clock() {
 }
 
 export function AppLayout({
-  children, user, organization, onLogout, unresolvedAlerts,
+  children, user, organization, onLogout, onRefresh, unresolvedAlerts,
   customModules = [], userOrganizations = [], onSwitchOrg, onCreateOrg,
 }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -318,7 +320,7 @@ export function AppLayout({
     location, enabledSet, unresolvedAlerts, customModules,
     user, organization, orgMenuOpen, setOrgMenuOpen,
     userOrganizations, onSwitchOrg, onCreateOrg,
-    showNewOrgModal, setShowNewOrgModal, onLogout,
+    showNewOrgModal, setShowNewOrgModal, onLogout, onRefresh,
   };
 
   return (

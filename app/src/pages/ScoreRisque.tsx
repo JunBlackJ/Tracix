@@ -132,6 +132,7 @@ function Gauge({ score, color }: { score: number; color: string }) {
 export function ScoreRisque({ members, platforms, accessRights }: ScoreRisqueProps) {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<'7j' | '30j' | '90j'>('30j');
+  const [chartView, setChartView] = useState<'global' | 'facteurs'>('global');
 
   const critiques   = members.filter((m) => m.risk_score <= 39).length;
   const elevated    = members.filter((m) => m.risk_score >= 40 && m.risk_score <= 59).length;
@@ -212,11 +213,35 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
             <span style={{ fontSize: '13px', fontWeight: 600 }}>Évolution du score moyen</span>
             <span style={{ fontSize: '11px', color: 'oklch(52% 0.012 260)' }}>— 30 derniers jours</span>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-              <button style={{ padding: '5px 10px', fontSize: '11.5px', fontWeight: 500, borderRadius: '7px', border: '1px solid oklch(90% 0.006 260)', background: 'transparent', color: 'oklch(52% 0.012 260)', cursor: 'pointer' }}>Score global</button>
-              <button style={{ padding: '5px 10px', fontSize: '11.5px', fontWeight: 500, borderRadius: '7px', border: '1px solid oklch(42% 0.18 280)', background: 'oklch(42% 0.18 280 / 0.12)', color: 'oklch(42% 0.18 280)', cursor: 'pointer' }}>Par facteur</button>
+              {(['global', 'facteurs'] as const).map((v) => {
+                const active = chartView === v;
+                return (
+                  <button key={v} onClick={() => setChartView(v)}
+                    style={{ padding: '5px 10px', fontSize: '11.5px', fontWeight: 500, borderRadius: '7px', cursor: 'pointer',
+                      border: `1px solid ${active ? 'oklch(42% 0.18 280)' : 'oklch(90% 0.006 260)'}`,
+                      background: active ? 'oklch(42% 0.18 280 / 0.12)' : 'transparent',
+                      color: active ? 'oklch(42% 0.18 280)' : 'oklch(52% 0.012 260)' }}>
+                    {v === 'global' ? 'Score global' : 'Par facteur'}
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <Sparkline points={sparkPoints} color="oklch(70% 0.14 88)" />
+          {chartView === 'global' ? (
+            <Sparkline points={sparkPoints} color="oklch(70% 0.14 88)" />
+          ) : (
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {factors.map((f, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '160px', fontSize: '12px', color: 'oklch(35% 0.012 260)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }}>{f.name}</div>
+                  <div style={{ flex: 1, height: '8px', background: 'oklch(90% 0.006 260)', borderRadius: '999px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: '999px', background: f.color, width: `${f.score}%`, transition: 'width 0.4s' }} />
+                  </div>
+                  <span style={{ width: '32px', textAlign: 'right', fontSize: '13px', fontWeight: 700, fontFamily: "'JetBrains Mono',ui-monospace,monospace", color: f.color, flexShrink: 0 }}>{f.score}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Gauge */}
@@ -322,13 +347,13 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px' }}>
           {[
-            { factor: 'Trop d\'accès Admin', penalty: '−30 pts', detail: `Dépasse le seuil d'admins configuré dans Paramètres → Organisation` },
-            { factor: 'Revues d\'accès dépassées', penalty: '−25 à −45 pts', detail: 'Progressif selon le retard : +5 pts tous les 30 jours supplémentaires (cap 45)' },
-            { factor: 'Départ passé + accès actifs', penalty: '−40 pts', detail: 'Date de départ dans le passé, statut encore actif et accès non révoqués' },
-            { factor: 'Compte partagé avec droits Admin', penalty: '−20 pts', detail: 'Compte de type « partagé » ou « service » avec au moins un accès admin' },
+            { factor: 'Trop d\'accès Admin', penalty: '−20 pts', detail: `Dépasse le seuil d'admins configuré dans Paramètres → Organisation` },
+            { factor: 'Revues d\'accès dépassées', penalty: '−15 / −25 / −35 pts', detail: 'Retard < 30j → −15 pts · Retard 30–90j → −25 pts · Retard > 90j → −35 pts' },
+            { factor: 'Départ passé + accès actifs', penalty: '−30 pts', detail: 'Date de départ dans le passé, statut encore actif et accès non révoqués' },
+            { factor: 'Compte partagé avec droits Admin', penalty: '−15 pts', detail: 'Compte de type « partagé » ou « service » avec au moins un accès admin' },
             { factor: 'Compte partagé sans Admin', penalty: '−10 pts', detail: 'Compte non nominatif, sans droits admin (accès nominatif recommandé)' },
-            { factor: 'Admin sur plateforme sans MFA', penalty: '−15 pts', detail: 'Accès admin sur une plateforme où le MFA n\'est pas activé' },
-            { factor: 'Membre inactif avec accès actifs', penalty: '−25 pts', detail: 'Statut « inactif » ou « suspendu » mais des droits sont encore en place' },
+            { factor: 'Admin sur plateforme sans MFA', penalty: '−10 pts', detail: 'Accès admin sur une plateforme où le MFA n\'est pas activé' },
+            { factor: 'Membre inactif avec accès actifs', penalty: '−20 pts', detail: 'Statut « inactif » ou « suspendu » mais des droits sont encore en place' },
           ].map(({ factor, penalty, detail }) => (
             <div key={factor} style={{ background: '#fff', border: '1px solid oklch(90% 0.006 260)', borderRadius: '8px', padding: '10px 14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>

@@ -656,9 +656,19 @@ function MemberAccessTable({ memberId, member, platforms, onRevokeAccess, onUpda
                 <tr key={a.id} className={`border-b border-gray-100 hover:bg-gray-50 ${a.level === 'none' ? 'opacity-40' : ''}`}>
                   <td className="px-3 py-2.5 font-medium text-gray-800">{platform?.name || a.platform_id}</td>
                   <td className="px-3 py-2.5 text-center">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${cfg.bg} ${cfg.text}`}>
-                      {cfg.label}
-                    </span>
+                    <div className="inline-flex items-center gap-1.5 justify-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${cfg.bg} ${cfg.text}`}>
+                        {cfg.label}
+                      </span>
+                      {a.level === 'admin' && a.granted_at && (Date.now() - new Date(a.granted_at).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
+                        <span
+                          title="Accès Admin accordé récemment — à vérifier"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 cursor-help select-none"
+                        >
+                          ⚡ Récent
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 text-gray-500 text-xs">{a.granted_at ? new Date(a.granted_at).toLocaleDateString('fr-FR') : '—'}</td>
                   <td className="px-3 py-2.5 text-gray-500 text-xs">{a.granted_by || '—'}</td>

@@ -8,6 +8,7 @@ import { requireAuth, generateToken } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
 import { generateAlerts } from '../services/alert.service';
+import { recomputeAllRiskScores } from '../services/risk.service';
 import { config } from '../config';
 import { authLimiter } from '../middleware/rateLimiter';
 
@@ -330,12 +331,17 @@ router.put('/organization', requireAuth, async (req: Request, res: Response): Pr
     },
   });
 
-  // Si un seuil a changé, recalculer les alertes pour résoudre les obsolètes et créer les nouvelles
+  // Si un seuil a changé, recalculer alertes et scores de risque
   const thresholdChanged = max_admin_per_platform !== undefined
     || access_review_delay_days !== undefined
     || subscription_alert_days !== undefined;
   if (thresholdChanged) {
     generateAlerts(orgId).catch((err) => console.error('[Alerts] Erreur recalcul après mise à jour seuils:', err));
+  }
+  // max_admin_per_platform et access_review_delay_days influencent le score de risque
+  const riskThresholdChanged = max_admin_per_platform !== undefined || access_review_delay_days !== undefined;
+  if (riskThresholdChanged) {
+    recomputeAllRiskScores(orgId).catch((err) => console.error('[Risk] Erreur recalcul scores après mise à jour seuils:', err));
   }
 
   res.json(serializeOrg(updated));

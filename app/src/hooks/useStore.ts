@@ -247,6 +247,16 @@ export function useStore() {
     }
   }, []);
 
+  // ─── Refresh members (scores de risque recalculés côté serveur) ───
+  const refreshMembers = useCallback(async () => {
+    try {
+      const updated = await api.members.list();
+      setMembers(updated);
+    } catch {
+      // silently fail
+    }
+  }, []);
+
   // ─── Add or update a single member in local state ───
   const upsertMember = useCallback((m: Member) => {
     setMembers((prev) => {
@@ -378,5 +388,6 @@ export function useStore() {
     upsertPlatform,
     removePlatform,
     upsertNetworkFlow,
+    refreshMembers,
   };
 }

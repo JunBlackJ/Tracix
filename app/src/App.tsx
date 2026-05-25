@@ -251,7 +251,9 @@ function App() {
                 onOrganizationUpdated={store.setOrganization}
                 onCustomModuleCreated={store.upsertCustomModule}
                 onCustomModuleRemoved={store.removeCustomModule}
-                onThresholdSaved={store.refreshAlerts}
+                onThresholdSaved={async () => {
+                  await Promise.all([store.refreshAlerts(), store.refreshMembers()]);
+                }}
               />
             }
           />

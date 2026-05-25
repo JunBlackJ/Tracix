@@ -32,30 +32,30 @@ export function Plateformes({ platforms, members, alerts, accessRights, categori
   const [showForm, setShowForm] = useState(false);
   const [editingPlatform, setEditingPlatform] = useState<Platform | null>(null);
 
-  if (id) return (
-    <PlateformeDetail
-      platformId={id}
-      platforms={platforms}
-      members={members}
-      alerts={alerts}
-      accessRights={accessRights}
-      onEdit={(p) => setEditingPlatform(p)}
-      onDeleted={onPlatformDeleted}
-    />
-  );
-
   return (
     <>
-      <PlateformesList
-        platforms={platforms}
-        members={members}
-        alerts={alerts}
-        accessRights={accessRights}
-        categories={categories}
-        onNew={() => setShowForm(true)}
-        onEdit={(p) => setEditingPlatform(p)}
-        onDeleted={onPlatformDeleted}
-      />
+      {id ? (
+        <PlateformeDetail
+          platformId={id}
+          platforms={platforms}
+          members={members}
+          alerts={alerts}
+          accessRights={accessRights}
+          onEdit={(p) => setEditingPlatform(p)}
+          onDeleted={onPlatformDeleted}
+        />
+      ) : (
+        <PlateformesList
+          platforms={platforms}
+          members={members}
+          alerts={alerts}
+          accessRights={accessRights}
+          categories={categories}
+          onNew={() => setShowForm(true)}
+          onEdit={(p) => setEditingPlatform(p)}
+          onDeleted={onPlatformDeleted}
+        />
+      )}
       {showForm && (
         <PlatformFormModal
           onClose={() => setShowForm(false)}

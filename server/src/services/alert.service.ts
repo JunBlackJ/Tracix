@@ -330,6 +330,60 @@ export async function generateAlerts(orgId: string): Promise<void> {
     }
   }
 
+  // ─── Resolve alerts that are no longer valid ───
+  // admin_count_high : resolve if adminCount <= max_admin_per_platform
+  for (const platform of platforms) {
+    const adminCount = platform.accessRights.length;
+    if (adminCount <= org.max_admin_per_platform) {
+      await prisma.alert.updateMany({
+        where: {
+          organization_id: orgId,
+          source_id: platform.id,
+          type: 'admin_count_high',
+          is_resolved: false,
+        },
+        data: { is_resolved: true, resolved_by: 'system', resolved_at: now.toISOString() },
+      });
+    }
+  }
+
+  // access_review_overdue : resolve if no access is overdue anymore
+  for (const member of overdueMembers) {
+    const overdueAccess = member.accessRights.filter((ar) => {
+      if (!ar.last_review_date) return false;
+      return new Date(ar.last_review_date) < overdueThreshold;
+    });
+    if (overdueAccess.length === 0) {
+      await prisma.alert.updateMany({
+        where: {
+          organization_id: orgId,
+          source_id: member.id,
+          type: 'access_review_overdue',
+          is_resolved: false,
+        },
+        data: { is_resolved: true, resolved_by: 'system', resolved_at: now.toISOString() },
+      });
+    }
+  }
+
+  // subscription_expiring : resolve if renewal is now beyond the threshold
+  for (const sub of subscriptions) {
+    if (!sub.renewal_date) continue;
+    const renewalDate = new Date(sub.renewal_date);
+    const daysUntilRenewal = Math.floor((renewalDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysUntilRenewal > org.subscription_alert_days) {
+      await prisma.alert.updateMany({
+        where: {
+          organization_id: orgId,
+          source_id: sub.id,
+          type: 'subscription_expiring',
+          is_resolved: false,
+        },
+        data: { is_resolved: true, resolved_by: 'system', resolved_at: now.toISOString() },
+      });
+    }
+  }
+
   // ─── Insert all new alerts ───
   if (newAlerts.length > 0) {
     await prisma.alert.createMany({ data: newAlerts });

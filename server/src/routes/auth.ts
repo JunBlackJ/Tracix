@@ -7,6 +7,7 @@ import prisma from '../prisma/client';
 import { requireAuth, generateToken } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
+import { generateAlerts } from '../services/alert.service';
 import { config } from '../config';
 import { authLimiter } from '../middleware/rateLimiter';
 
@@ -328,6 +329,14 @@ router.put('/organization', requireAuth, async (req: Request, res: Response): Pr
       ...(safeFreq !== undefined && { alert_email_frequency: safeFreq }),
     },
   });
+
+  // Si un seuil a changé, recalculer les alertes pour résoudre les obsolètes et créer les nouvelles
+  const thresholdChanged = max_admin_per_platform !== undefined
+    || access_review_delay_days !== undefined
+    || subscription_alert_days !== undefined;
+  if (thresholdChanged) {
+    generateAlerts(orgId).catch((err) => console.error('[Alerts] Erreur recalcul après mise à jour seuils:', err));
+  }
 
   res.json(serializeOrg(updated));
 });

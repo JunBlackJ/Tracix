@@ -19,6 +19,7 @@ import type { UserApp, Organization, Category, CategoryType, ModuleId, CustomMod
 interface ParametresProps {
   user: UserApp | null;
   organization: Organization | null;
+  onThresholdSaved?: () => void;
   categories: Category[];
   customModules: CustomModule[];
   onCategoryAdded: (c: Category) => void;
@@ -30,7 +31,7 @@ interface ParametresProps {
 
 type Section = 'profil' | 'organisation' | 'plan' | 'modules' | 'custom-modules' | 'membres' | 'categories' | 'sso' | 'integrations' | 'securite';
 
-export function Parametres({ user, organization, categories, customModules, onCategoryAdded, onCategoryRemoved, onOrganizationUpdated, onCustomModuleCreated, onCustomModuleRemoved }: ParametresProps) {
+export function Parametres({ user, organization, categories, customModules, onCategoryAdded, onCategoryRemoved, onOrganizationUpdated, onCustomModuleCreated, onCustomModuleRemoved, onThresholdSaved }: ParametresProps) {
   const [section, setSection] = useState<Section>('profil');
 
   const sections: { id: Section; label: string; icon: React.ElementType; badge?: string }[] = [
@@ -84,7 +85,7 @@ export function Parametres({ user, organization, categories, customModules, onCa
         {/* Content */}
         <div className="flex-1">
           {section === 'profil' && <ProfilSection user={user} />}
-          {section === 'organisation' && <OrganisationSection organization={organization} onUpdated={onOrganizationUpdated} />}
+          {section === 'organisation' && <OrganisationSection organization={organization} onUpdated={onOrganizationUpdated} onThresholdSaved={onThresholdSaved} />}
           {section === 'plan' && <PlanSection organization={organization} onUpdated={onOrganizationUpdated} />}
           {section === 'modules' && <ModulesSection organization={organization} onUpdated={onOrganizationUpdated} />}
           {section === 'custom-modules' && (
@@ -172,7 +173,7 @@ function ProfilSection({ user }: { user: UserApp | null }) {
   );
 }
 
-function OrganisationSection({ organization, onUpdated }: { organization: Organization | null; onUpdated: (o: Organization) => void }) {
+function OrganisationSection({ organization, onUpdated, onThresholdSaved }: { organization: Organization | null; onUpdated: (o: Organization) => void; onThresholdSaved?: () => void }) {
   const [form, setForm] = useState({
     name: organization?.name ?? '',
     max_admin_per_platform: organization?.max_admin_per_platform ?? 3,
@@ -183,12 +184,19 @@ function OrganisationSection({ organization, onUpdated }: { organization: Organi
 
   if (!organization) return null;
 
+  const thresholdFields: (keyof typeof form)[] = ['max_admin_per_platform', 'access_review_delay_days', 'subscription_alert_days'];
+  const thresholdChanged = thresholdFields.some((k) => form[k] !== (organization as unknown as Record<string, unknown>)[k]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const updated = await api.auth.updateOrganization(form);
       onUpdated(updated);
       toast.success('Organisation mise à jour');
+      if (thresholdChanged && onThresholdSaved) {
+        // Laisser ~800ms au serveur pour recalculer les alertes avant de rafraîchir
+        setTimeout(() => onThresholdSaved(), 800);
+      }
     } catch {
       toast.error('Erreur lors de la sauvegarde');
     } finally {

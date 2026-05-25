@@ -251,6 +251,7 @@ function App() {
                 onOrganizationUpdated={store.setOrganization}
                 onCustomModuleCreated={store.upsertCustomModule}
                 onCustomModuleRemoved={store.removeCustomModule}
+                onThresholdSaved={store.refreshAlerts}
               />
             }
           />

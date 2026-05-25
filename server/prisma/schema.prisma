@@ -57,6 +57,7 @@ model UserApp {
   oauth_id        String?
   totp_secret            String?
   totp_enabled           Boolean  @default(false)
+  totp_recovery_codes    String[] @default([])
   role                   String   @default("viewer")
   is_superadmin          Boolean  @default(false)
   failed_login_attempts  Int      @default(0)

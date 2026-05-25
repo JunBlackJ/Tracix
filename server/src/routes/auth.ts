@@ -702,12 +702,36 @@ async function handleOAuthUser(
   );
 }
 
+// ─── OAuth CSRF state helpers ───
+const OAUTH_STATE_COOKIE = '__oauth_state';
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+function setOAuthStateCookie(res: Response): string {
+  const state = crypto.randomBytes(32).toString('hex');
+  res.cookie(OAUTH_STATE_COOKIE, state, {
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: 'lax',
+    maxAge: OAUTH_STATE_TTL_MS,
+    path: '/api/auth/oauth',
+  });
+  return state;
+}
+
+function verifyAndClearOAuthState(req: Request, res: Response, receivedState: string | undefined): boolean {
+  const expected = req.cookies?.[OAUTH_STATE_COOKIE];
+  res.clearCookie(OAUTH_STATE_COOKIE, { httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax', path: '/api/auth/oauth' });
+  if (!expected || !receivedState) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(receivedState));
+}
+
 // ─── Google OAuth ───
 // GET /api/auth/oauth/google
 router.get('/oauth/google', (_req: Request, res: Response) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) { res.status(501).json({ error: 'Google OAuth non configuré' }); return; }
 
+  const state = setOAuthStateCookie(res);
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: `${config.apiUrl}/api/auth/oauth/google/callback`,
@@ -715,12 +739,18 @@ router.get('/oauth/google', (_req: Request, res: Response) => {
     scope: 'openid email profile',
     access_type: 'online',
     prompt: 'select_account',
+    state,
   });
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
 });
 
 // GET /api/auth/oauth/google/callback
 router.get('/oauth/google/callback', async (req: Request, res: Response): Promise<void> => {
+  if (!verifyAndClearOAuthState(req, res, req.query.state as string | undefined)) {
+    res.redirect(`${FRONTEND}/oauth/callback?error=${encodeURIComponent('État CSRF invalide ou expiré')}`);
+    return;
+  }
+
   const code = req.query.code as string;
   const clientId = process.env.GOOGLE_CLIENT_ID!;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
@@ -755,18 +785,25 @@ router.get('/oauth/microsoft', (_req: Request, res: Response) => {
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   if (!clientId) { res.status(501).json({ error: 'Microsoft OAuth non configuré' }); return; }
 
+  const state = setOAuthStateCookie(res);
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: `${config.apiUrl}/api/auth/oauth/microsoft/callback`,
     response_type: 'code',
     scope: 'openid email profile User.Read',
     response_mode: 'query',
+    state,
   });
   res.redirect(`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`);
 });
 
 // GET /api/auth/oauth/microsoft/callback
 router.get('/oauth/microsoft/callback', async (req: Request, res: Response): Promise<void> => {
+  if (!verifyAndClearOAuthState(req, res, req.query.state as string | undefined)) {
+    res.redirect(`${FRONTEND}/oauth/callback?error=${encodeURIComponent('État CSRF invalide ou expiré')}`);
+    return;
+  }
+
   const code = req.query.code as string;
   const clientId = process.env.MICROSOFT_CLIENT_ID!;
   const clientSecret = process.env.MICROSOFT_CLIENT_SECRET!;
@@ -801,16 +838,23 @@ router.get('/oauth/github', (_req: Request, res: Response) => {
   const clientId = process.env.GITHUB_CLIENT_ID;
   if (!clientId) { res.status(501).json({ error: 'GitHub OAuth non configuré' }); return; }
 
+  const state = setOAuthStateCookie(res);
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: `${config.apiUrl}/api/auth/oauth/github/callback`,
     scope: 'read:user user:email',
+    state,
   });
   res.redirect(`https://github.com/login/oauth/authorize?${params}`);
 });
 
 // GET /api/auth/oauth/github/callback
 router.get('/oauth/github/callback', async (req: Request, res: Response): Promise<void> => {
+  if (!verifyAndClearOAuthState(req, res, req.query.state as string | undefined)) {
+    res.redirect(`${FRONTEND}/oauth/callback?error=${encodeURIComponent('État CSRF invalide ou expiré')}`);
+    return;
+  }
+
   const code = req.query.code as string;
   const clientId = process.env.GITHUB_CLIENT_ID!;
   const clientSecret = process.env.GITHUB_CLIENT_SECRET!;
@@ -1053,10 +1097,14 @@ router.post('/mfa/enable', requireAuth, async (req: Request, res: Response): Pro
     return;
   }
 
+  // Generate 8 single-use recovery codes, store them hashed
+  const rawCodes = Array.from({ length: 8 }, () => crypto.randomBytes(5).toString('hex').toUpperCase().match(/.{1,5}/g)!.join('-'));
+  const hashedCodes = rawCodes.map((c) => crypto.createHash('sha256').update(c).digest('hex'));
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (prisma.userApp.update as any)({
     where: { id: user.id },
-    data: { totp_enabled: true },
+    data: { totp_enabled: true, totp_recovery_codes: hashedCodes },
   });
 
   await createAuditEntry({
@@ -1072,7 +1120,8 @@ router.post('/mfa/enable', requireAuth, async (req: Request, res: Response): Pro
     userAgent: req.headers['user-agent'] ?? '',
   });
 
-  res.json({ message: 'MFA activé avec succès.' });
+  // Recovery codes are returned exactly once — the client must display and save them
+  res.json({ message: 'MFA activé avec succès.', recovery_codes: rawCodes });
 });
 
 // DELETE /api/auth/mfa — désactive le MFA avec confirmation TOTP
@@ -1111,7 +1160,7 @@ router.delete('/mfa', requireAuth, async (req: Request, res: Response): Promise<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (prisma.userApp.update as any)({
     where: { id: user.id },
-    data: { totp_enabled: false, totp_secret: null },
+    data: { totp_enabled: false, totp_secret: null, totp_recovery_codes: [] },
   });
 
   await createAuditEntry({
@@ -1128,6 +1177,64 @@ router.delete('/mfa', requireAuth, async (req: Request, res: Response): Promise<
   });
 
   res.json({ message: 'MFA désactivé avec succès.' });
+});
+
+// POST /api/auth/mfa/recovery — consume a recovery code to bypass TOTP + reset MFA
+router.post('/mfa/recovery', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { recovery_code } = req.body as { recovery_code?: string };
+
+  if (!recovery_code) {
+    res.status(400).json({ error: 'Code de récupération requis.' });
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = await (prisma.userApp.findUnique as any)({
+    where: { id: req.user!.userId },
+    select: { id: true, email: true, full_name: true, organization_id: true, totp_enabled: true, totp_recovery_codes: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ error: 'Utilisateur introuvable.' });
+    return;
+  }
+
+  if (!user.totp_enabled) {
+    res.status(400).json({ error: 'Le MFA n\'est pas activé.' });
+    return;
+  }
+
+  const codes: string[] = user.totp_recovery_codes ?? [];
+  const inputHash = crypto.createHash('sha256').update(String(recovery_code).toUpperCase().trim()).digest('hex');
+  const idx = codes.indexOf(inputHash);
+
+  if (idx === -1) {
+    res.status(401).json({ error: 'Code de récupération invalide ou déjà utilisé.' });
+    return;
+  }
+
+  // Consume the code and disable TOTP — user must re-setup MFA
+  const remaining = codes.filter((_, i) => i !== idx);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma.userApp.update as any)({
+    where: { id: user.id },
+    data: { totp_enabled: false, totp_secret: null, totp_recovery_codes: remaining },
+  });
+
+  await createAuditEntry({
+    organizationId: user.organization_id,
+    actor: req.user!.email,
+    action: 'auth.mfa_recovery_used',
+    targetType: 'user',
+    targetId: user.id,
+    targetLabel: user.full_name,
+    oldValue: { totp_enabled: true, recovery_codes_remaining: codes.length },
+    newValue: { totp_enabled: false, recovery_codes_remaining: remaining.length },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ message: 'MFA réinitialisé. Vous devez reconfigurer votre application TOTP.' });
 });
 
 // POST /api/auth/change-password

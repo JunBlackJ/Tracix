@@ -11,10 +11,10 @@ Ce document couvre la sécurité, la conformité, l'observabilité, la qualité,
 | # | Menace | Vecteur | Contrôle en place |
 |---|---|---|---|
 | T1 | Vol de session (access token) | XSS, réseau non chiffré | Token court (1h), HTTPS obligatoire, CSP stricte (`script-src 'self'`) |
-| T2 | Vol de refresh token | XSS, localStorage exposé | Family revocation : si token révoqué réutilisé → révocation de toute la famille + 401 |
+| T2 | Vol de refresh token | XSS | Refresh token dans cookie HttpOnly `__rt` (Secure, SameSite=Strict, Path=/api/auth) — inaccessible au JS, y compris en cas d'XSS. Family revocation si token révoqué réutilisé → révocation de toute la famille + 401 |
 | T3 | Réutilisation d'un refresh révoqué | Token volé + replay | Détecté à `POST /auth/refresh` : `stored.revoked === true` → `updateMany revoked=true` + log |
 | T4 | Brute-force login | Bots, credential stuffing | `authLimiter` 20 req/15 min, verrouillage 15 min après 5 échecs, bcrypt coût 10 |
-| T5 | Takeover compte OAuth | State param manquant, open redirect | State CSRF non persisté (flux redirect direct), CORS whitelist `FRONTEND_URL` |
+| T5 | Takeover compte OAuth | Forgery de callback OAuth (CSRF) | State CSRF : valeur aléatoire 32 octets générée au redirect, stockée dans cookie HttpOnly `__oauth_state` (10 min, `SameSite=Lax`, `Path=/api/auth/oauth`), vérifiée par `crypto.timingSafeEqual` dans chaque callback Google/Microsoft/GitHub — toute divergence → rejet 401. CORS whitelist `FRONTEND_URL` pour les origines cross-site. |
 | T6 | Compromission clé JWT | Fuite env, rotation oubliée | Double clé `JWT_SECRET_CURRENT/PREVIOUS`, kid dans header, rotation sans interruption |
 | T7 | IDOR multi-tenant | Accès ressource d'une autre org | Toutes les mutations : `findFirst({ id, organization_id: orgId })` avant action |
 | T8 | Compromission API key | Clé trcx_* exposée dans log/repo | SHA-256 haché en DB, préfixe seul visible après création, clé complète retournée une fois |
@@ -39,13 +39,17 @@ Ce document couvre la sécurité, la conformité, l'observabilité, la qualité,
 - TOTP 6 chiffres (otplib v13, NobleCryptoPlugin, ScureBase32Plugin)
 - Recommandé pour tous les comptes admin
 - Obligatoire pour le super-admin (activé en production avant mise en ligne)
-- QR code scannable + code de récupération à implémenter (roadmap)
+- QR code scannable à l'activation (`POST /auth/mfa/setup` → `POST /auth/mfa/enable`)
+- **Recovery codes** : 8 codes aléatoires à usage unique générés à l'activation (`POST /auth/mfa/enable`), retournés en clair **une seule fois**, stockés hashés SHA-256 en DB (`totp_recovery_codes String[]`). `POST /auth/mfa/recovery` consomme un code, désactive le TOTP et force un re-setup — le code utilisé est supprimé de la liste.
+- Sans recovery code ni accès admin, le compte TOTP est définitivement verrouillé (acceptable pour le super-admin interne).
 
 **Sessions**
 - Access token : 1h — expiration courte pour limiter l'impact d'un vol
 - Refresh token : 7j, renouvelé à chaque utilisation (rotation)
-- Politique recommandée : forcer re-authentification après 30j d'inactivité (à implémenter côté cron : purge des refresh tokens non utilisés depuis 30j)
-- Déconnexion : révoque TOUS les refresh tokens de l'utilisateur (`DELETE FROM refresh_tokens WHERE user_id = ?`)
+- Transport du refresh token : cookie HttpOnly `__rt` (flags : `Secure` en prod, `SameSite=Strict`, `Path=/api/auth`) — inaccessible au JS, y compris en cas d'XSS. Le corps des réponses JSON (`/auth/login`, `/auth/register`, `/auth/refresh`) ne contient **jamais** le refresh token.
+- Le frontend envoie `credentials: 'include'` sur toutes les requêtes ; le cookie est transmis automatiquement par le navigateur.
+- Politique recommandée : forcer re-authentification après 30j d'inactivité (implémentée via `purgeOldData()` — purge des refresh tokens expirés ou révoqués depuis > 30j)
+- Déconnexion : révoque TOUS les refresh tokens de l'utilisateur + efface le cookie (`Max-Age=0`)
 
 **API Keys**
 - Rotation recommandée tous les 90 jours
@@ -73,37 +77,34 @@ Ce document couvre la sécurité, la conformité, l'observabilité, la qualité,
 
 **En production** : utiliser un secrets manager (AWS Secrets Manager, HashiCorp Vault, Doppler). Le code lit `process.env.*` — compatible sans modification.
 
-### 1.4 Migration RBAC — Matrice des permissions cibles
+### 1.4 RBAC — Matrice des permissions (active)
 
-Les tables `roles`, `permissions`, `role_permissions`, `user_roles` sont créées en DB. Le code utilise encore les rôles string. Voici la matrice cible pour la migration :
+Le middleware `requirePermission(key)` est câblé sur 8 fichiers de routes (`members`, `access`, `alerts`, `audit`, `import`, `connectors`, `webhooks`, `api-keys`). Les tables `roles`, `permissions`, `role_permissions` sont seedées via `prisma/seed.ts`. Le cache en mémoire (TTL 5 min) évite une requête DB à chaque appel.
 
-| Permission | owner | admin | security_manager | reviewer | auditor | viewer | billing_admin |
-|---|---|---|---|---|---|---|---|
-| `members.read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| `members.write` | ✅ | ✅ | ✅ | — | — | — | — |
-| `members.delete` | ✅ | ✅ | — | — | — | — | — |
-| `access_rights.read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| `access_rights.write` | ✅ | ✅ | ✅ | — | — | — | — |
-| `access_rights.revoke` | ✅ | ✅ | ✅ | ✅ | — | — | — |
-| `alerts.read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| `alerts.resolve` | ✅ | ✅ | ✅ | ✅ | — | — | — |
-| `reviews.manage` | ✅ | ✅ | ✅ | ✅ | — | — | — |
-| `platforms.write` | ✅ | ✅ | ✅ | — | — | — | — |
-| `connectors.manage` | ✅ | ✅ | ✅ | — | — | — | — |
-| `webhooks.manage` | ✅ | ✅ | ✅ | — | — | — | — |
-| `api_keys.manage` | ✅ | ✅ | — | — | — | — | — |
-| `audit_trail.read` | ✅ | ✅ | ✅ | — | ✅ | — | — |
-| `reports.generate` | ✅ | ✅ | ✅ | — | ✅ | — | — |
-| `organization.settings` | ✅ | ✅ | — | — | — | — | — |
-| `billing.manage` | ✅ | — | — | — | — | — | ✅ |
-| `members.invite` | ✅ | ✅ | — | — | — | — | — |
+**Fallback** : si les tables sont vides (deploy sans seed), `admin` et `owner` passent — aucune régression sur les environnements non seedés.
 
-**Plan de migration :**
-1. Seeder les rôles/permissions dans la DB via `prisma/seed.ts`
-2. Ajouter un helper `hasPermission(req, 'permission.key'): boolean` dans `middleware/auth.ts`
-3. Remplacer progressivement `requireRole(['admin'])` par `requirePermission('members.write')`
-4. Exposer la gestion des rôles dans Paramètres > Membres (assignation par user)
-5. Conserver la compatibilité string `admin/viewer` via un mapping automatique pendant la transition
+**Règle** : toute nouvelle route doit utiliser `requirePermission('resource.action')` — ne pas utiliser `requireRole` pour les vérifications fonctionnelles.
+
+| Permission | owner | admin | security_manager | reviewer | auditor | viewer |
+|---|---|---|---|---|---|---|
+| `members.read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `members.write` | ✅ | ✅ | ✅ | — | — | — |
+| `members.delete` | ✅ | ✅ | — | — | — | — |
+| `access_rights.read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `access_rights.write` | ✅ | ✅ | ✅ | — | — | — |
+| `access_rights.revoke` | ✅ | ✅ | ✅ | ✅ | — | — |
+| `alerts.read` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `alerts.resolve` | ✅ | ✅ | ✅ | ✅ | — | — |
+| `reviews.manage` | ✅ | ✅ | ✅ | ✅ | — | — |
+| `platforms.write` | ✅ | ✅ | ✅ | — | — | — |
+| `connectors.manage` | ✅ | ✅ | ✅ | — | — | — |
+| `webhooks.manage` | ✅ | ✅ | ✅ | — | — | — |
+| `api_keys.manage` | ✅ | ✅ | — | — | — | — |
+| `audit_trail.read` | ✅ | ✅ | ✅ | — | ✅ | — |
+| `reports.generate` | ✅ | ✅ | ✅ | — | ✅ | — |
+| `organization.settings` | ✅ | ✅ | — | — | — | — |
+| `billing.manage` | ✅ | — | — | — | — | — |
+| `members.invite` | ✅ | ✅ | — | — | — | — |
 
 ### 1.5 Flow d'investigation de session compromise
 
@@ -165,40 +166,32 @@ Les tables `roles`, `permissions`, `role_permissions`, `user_roles` sont créée
 
 ### 2.2 Politique de rétention des données
 
-| Table | Rétention recommandée | Stratégie de purge |
-|---|---|---|
-| `audit_trails` | 24 mois (ISO 27001 exige 12 mois min) | Cron mensuel : `DELETE WHERE created_at < NOW() - INTERVAL '24 months'` |
-| `alerts` résolues | 12 mois | Cron mensuel : purge alertes `is_resolved = true AND resolved_at < 12 mois` |
-| `risk_snapshots` | 24 mois | Cron mensuel : purge `created_at < 24 mois` |
-| `refresh_tokens` révoqués | 30 jours | Cron quotidien : purge `revoked = true AND created_at < 30 jours` |
-| `password_reset_tokens` | 24h après expiration | Cron quotidien : purge `expires_at < NOW() - INTERVAL '24 hours'` |
-| `refresh_tokens` expirés | 30 jours | Cron quotidien : purge `expires_at < NOW() - INTERVAL '30 days'` |
-| `webhook_endpoints` | Tant que configuré | Suppression manuelle |
-| `connectors` | Tant que configuré | Suppression manuelle |
-| Logs applicatifs | 90 jours | Rotation fichiers / politique hébergeur |
+La purge automatique est implémentée dans `server/src/services/cron.service.ts` via `purgeOldData()`, exécutée quotidiennement après le cron d'alertes. Les seuils sont configurables par variable d'environnement.
 
-**Jobs de purge à ajouter dans `cron.service.ts` :**
+| Table | Rétention | Variable d'env | Implémentation |
+|---|---|---|---|
+| `audit_trails` | 365 j | `RETENTION_AUDIT_DAYS` (défaut: 365) | `purgeOldData()` — quotidien |
+| `alerts` résolues | 180 j | `RETENTION_RESOLVED_ALERTS_DAYS` (défaut: 180) | `purgeOldData()` — quotidien |
+| `refresh_tokens` révoqués/expirés | 30 j | `RETENTION_REFRESH_TOKEN_DAYS` (défaut: 30) | `purgeOldData()` — quotidien |
+| `risk_snapshots` | 24 mois | — | À ajouter dans `purgeOldData()` |
+| `password_reset_tokens` | 24h après expiration | — | À ajouter dans `purgeOldData()` |
+| `webhook_endpoints` | Tant que configuré | — | Suppression manuelle |
+| `connectors` | Tant que configuré | — | Suppression manuelle |
+| Logs applicatifs | 90 jours | — | Rotation fichiers / politique hébergeur |
 
-```typescript
-// Cron mensuel (1er de chaque mois à 03:00)
-cron.schedule('0 3 1 * *', async () => {
-  const cutoff24m = new Date(Date.now() - 24 * 30 * 24 * 60 * 60 * 1000);
-  const cutoff12m = new Date(Date.now() - 12 * 30 * 24 * 60 * 60 * 1000);
-  await prisma.auditTrail.deleteMany({ where: { created_at: { lt: cutoff24m } } });
-  await prisma.alert.deleteMany({ where: { is_resolved: true, created_at: { lt: cutoff12m } } });
-  await prisma.riskSnapshot.deleteMany({ where: { created_at: { lt: cutoff24m } } });
-});
-
-// Cron quotidien (03:30)
-cron.schedule('30 3 * * *', async () => {
-  const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  await (prisma as any).refreshToken.deleteMany({
-    where: { OR: [{ revoked: true, created_at: { lt: cutoff30d } }, { expires_at: { lt: cutoff30d } }] },
-  });
-  await (prisma as any).passwordResetToken.deleteMany({
-    where: { expires_at: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
-  });
-});
+**Chaque exécution de `purgeOldData()` produit un log JSON structuré :**
+```json
+{
+  "event": "data_retention_purge",
+  "audit_trails_deleted": 42,
+  "refresh_tokens_deleted": 15,
+  "resolved_alerts_deleted": 8,
+  "cutoffs": {
+    "audit_trail": "2025-05-25T03:00:00.000Z",
+    "refresh_token": "2026-04-25T03:00:00.000Z",
+    "resolved_alerts": "2025-11-25T03:00:00.000Z"
+  }
+}
 ```
 
 ### 2.3 Droit à l'oubli & suppression d'organisation
@@ -254,7 +247,7 @@ Ajouter `deleted_at DateTime?` sur `Member` et `UserApp` pour permettre la récu
 | Erreurs connecteurs sync | > 3 échecs consécutifs | `connectors.last_sync_status = 'error'` |
 | Durée cron quotidien | > 10 min | Log `[Cron] Daily check done` avec timestamp |
 
-**À implémenter dans `index.ts` :**
+**À implémenter dans `app.ts` :**
 ```typescript
 // Logging structuré (Pino recommandé)
 app.use((req, res, next) => {
@@ -350,60 +343,64 @@ pg_restore --dbname=$STAGING_DATABASE_URL tracix_backup.dump
 
 ## 4. Qualité, tests & déploiement
 
-### 4.1 Tests à ajouter — Backend
+### 4.1 Tests — Backend (état actuel)
 
-**`alert.service.test.ts`** (priorité haute) :
+**Implémentés — `server/tests/` (23 tests, vitest + supertest, DB PostgreSQL réelle) :**
+
+`auth.test.ts` (12 tests) :
+- Login : 200 + access token, cookie `__rt` HttpOnly, 401 mauvais mot de passe, 401 email inconnu, 400 malformé
+- Register : 201 crée user+org, 409 email déjà pris
+- Refresh via cookie `__rt` : 200 + nouveau token, 400 sans cookie
+- `/auth/me` : 200 avec token valide, 401 sans token
+- Logout : cookie effacé (`Max-Age=0`)
+
+`members.test.ts` (11 tests) :
+- GET liste : 200 admin, 200 viewer (`members.read`), 401 sans token
+- POST créer : 201 admin, 403 viewer (RBAC `members.write`)
+- GET/:id : 200, PUT 200 update, DELETE 204, GET 404 après suppression
+- Validation : 400 champs manquants, 400 email invalide
+
+**À ajouter (roadmap) :**
+
+`alert.service.test.ts` :
 ```typescript
-// Tests à couvrir :
 // - generateAlerts crée des alertes pour member_offboarding
 // - generateAlerts crée des alertes pour no_mfa_on_admin
-// - generateAlerts ne crée pas de doublons (idempotence)
-// - triggerWebhooks est appelé avec les alertes critiques
-// - triggerWebhooks ne s'exécute pas si aucune alerte critical/high
+// - idempotence : pas de doublons sur deux exécutions
 ```
 
-**`cron.service.test.ts`** :
+`cron.service.test.ts` :
 ```typescript
-// - processOffboarding révoque les accès et passe le membre à 'inactif'
-// - processOffboarding ne touche pas les membres sans date de départ
-// - advisory lock : si lock non obtenu, le job est skippé (mock pg_try_advisory_lock)
+// - purgeOldData : mock Date.now() pour vérifier les cutoffs
+// - advisory lock : si lock non obtenu, job skippé
 ```
 
-**`connectors.test.ts`** :
+`access.test.ts`, `alerts.test.ts` :
 ```typescript
-// - sync GitHub : mapping login → full_name, email fallback @github.local
-// - sync Okta : mapping firstName+lastName, email, team depuis groupe
-// - gestion d'erreur réseau : last_sync_status = 'error', last_sync_error rempli
-// - idempotence : deux syncs consécutives ne créent pas de doublons
+// - RBAC : reviewer peut révoquer (access_rights.revoke), viewer ne peut pas
+// - Cross-tenant : token org A → 404 sur ressources org B (pas 403)
 ```
 
 ### 4.2 Tests d'intégration API (supertest)
 
-**Flow 1 — Authentification complète :**
+**Flow 1 — Authentification complète (partiellement couvert) :**
 ```typescript
 describe('auth flow', () => {
-  it('login → MFA → refresh → family revocation → logout', async () => {
-    // 1. Login → reçoit mfa_required
-    // 2. Login MFA → reçoit { token, refreshToken }
-    // 3. POST /auth/refresh → reçoit nouvelle paire
-    // 4. Réutiliser l'ANCIEN refresh token → 401 + "session compromise"
-    // 5. Vérifier que tous les refresh tokens de l'user sont révoqués
-    // 6. POST /auth/logout → 200
+  it('login → refresh via cookie → logout', async () => {
+    // ✅ Couvert dans auth.test.ts
+    // À ajouter : login MFA → refresh → family revocation
   });
 });
 ```
 
-**Flow 2 — Cycle de vie d'un membre :**
+**Flow 2 — Cycle de vie d'un membre (partiellement couvert) :**
 ```typescript
 describe('member lifecycle', () => {
-  it('create → assign access → review → offboard', async () => {
-    // 1. POST /api/members → créer membre
-    // 2. POST /api/access-rights → assigner accès admin
-    // 3. POST /api/reviews → créer campagne
-    // 4. PATCH /api/reviews/:id/items/:itemId → décision 'revoked'
-    // 5. POST /api/members/:id/offboard → vérifier access_rights révoques
-    // 6. GET /api/alerts → vérifier absence alerte member_offboarding
-  });
+  // ✅ create/read/update/delete couvert dans members.test.ts
+  // À ajouter :
+  // - POST /api/access-rights → assigner accès
+  // - POST /api/reviews → créer campagne
+  // - POST /api/members/:id/offboard → vérifier révocation accès
 });
 ```
 
@@ -492,7 +489,7 @@ curl -f https://app.tracix.io || exit 1
 ### 5.1 Hardening HTTP — Configuration actuelle
 
 ```typescript
-// server/src/index.ts — Helmet config en prod
+// server/src/app.ts — Helmet config en prod
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   contentSecurityPolicy: {

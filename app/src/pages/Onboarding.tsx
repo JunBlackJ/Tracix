@@ -472,14 +472,14 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
               <div style={{ border: `2px solid ${BRAND}`, borderRadius: 10, padding: '18px 18px', background: BRAND_MUTED, position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 10, right: 10, background: BRAND, color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, letterSpacing: '0.06em' }}>RECOMMANDÉ</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: BRAND, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Pro</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: FG, marginBottom: 14 }}>29 €<span style={{ fontSize: 12, fontWeight: 400, color: MUTED }}> / mois</span></div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: FG, marginBottom: 14 }}>49 €<span style={{ fontSize: 12, fontWeight: 400, color: MUTED }}> / mois</span></div>
                 {[
                   'Membres & plateformes illimités',
-                  '5 utilisateurs Tracix',
+                  '10 utilisateurs Tracix',
                   '✅ Import Excel / CSV / JSON',
                   '✅ Modules personnalisés',
                   '✅ Rapports PDF avancés',
-                  '✅ Conseiller IA illimité',
+                  '✅ API REST incluse',
                 ].map((f, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, fontSize: 12.5, color: FG }}>
                     <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke={BRAND} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>

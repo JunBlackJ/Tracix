@@ -309,6 +309,41 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
           </div>
         </div>
       </div>
+
+      {/* Méthodologie du score */}
+      <div style={{ background: 'oklch(98.5% 0.004 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '12px', padding: '20px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+          <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="oklch(42% 0.18 280)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: 'oklch(25% 0.012 260)' }}>Comment ce score est calculé</span>
+        </div>
+        <p style={{ fontSize: '12px', color: 'oklch(45% 0.012 260)', lineHeight: 1.6, marginBottom: '14px' }}>
+          Chaque membre commence à <strong>100</strong> (profil entièrement conforme). Des pénalités sont soustraites selon les facteurs de risque détectés.
+          Le score final est borné entre 0 et 100.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px' }}>
+          {[
+            { factor: 'Trop d\'accès Admin', penalty: '−30 pts', detail: `Dépasse le seuil d'admins configuré dans Paramètres → Organisation` },
+            { factor: 'Revues d\'accès dépassées', penalty: '−25 à −45 pts', detail: 'Progressif selon le retard : +5 pts tous les 30 jours supplémentaires (cap 45)' },
+            { factor: 'Départ passé + accès actifs', penalty: '−40 pts', detail: 'Date de départ dans le passé, statut encore actif et accès non révoqués' },
+            { factor: 'Compte partagé avec droits Admin', penalty: '−20 pts', detail: 'Compte de type « partagé » ou « service » avec au moins un accès admin' },
+            { factor: 'Compte partagé sans Admin', penalty: '−10 pts', detail: 'Compte non nominatif, sans droits admin (accès nominatif recommandé)' },
+            { factor: 'Admin sur plateforme sans MFA', penalty: '−15 pts', detail: 'Accès admin sur une plateforme où le MFA n\'est pas activé' },
+            { factor: 'Membre inactif avec accès actifs', penalty: '−25 pts', detail: 'Statut « inactif » ou « suspendu » mais des droits sont encore en place' },
+          ].map(({ factor, penalty, detail }) => (
+            <div key={factor} style={{ background: '#fff', border: '1px solid oklch(90% 0.006 260)', borderRadius: '8px', padding: '10px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'oklch(25% 0.012 260)' }}>{factor}</span>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'oklch(55% 0.22 25)', flexShrink: 0, marginLeft: '8px' }}>{penalty}</span>
+              </div>
+              <p style={{ fontSize: '11px', color: 'oklch(52% 0.012 260)', lineHeight: 1.5, margin: 0 }}>{detail}</p>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: '11px', color: 'oklch(60% 0.012 260)', marginTop: '12px', lineHeight: 1.5 }}>
+          ✦ Le seuil d'admins et le délai de revue sont configurables dans <strong>Paramètres → Organisation</strong>.
+          Le recalcul se déclenche automatiquement à chaque modification d'un droit d'accès.
+        </p>
+      </div>
     </div>
   );
 }

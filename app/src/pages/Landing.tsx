@@ -85,7 +85,7 @@ const PLANS = [
     desc: 'Pour les équipes IT actives',
     highlight: true,
     badge: 'LE PLUS POPULAIRE',
-    features: ['Membres illimités', 'Plateformes illimitées', 'Modules personnalisés', 'Export XLSX', 'Toutes les intégrations', 'Support prioritaire'],
+    features: ['Membres illimités', 'Plateformes illimitées', 'Modules personnalisés', 'Export XLSX', 'API REST incluse', 'Toutes les intégrations', 'Support prioritaire'],
     missing: [],
     cta: 'Démarrer l\'essai',
   },

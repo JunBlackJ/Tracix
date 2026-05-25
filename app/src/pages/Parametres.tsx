@@ -1419,6 +1419,7 @@ const PLANS = [
       'Catégories illimitées',
       'Modules personnalisés illimités',
       'Export XLSX',
+      'API REST incluse',
       'Toutes les intégrations',
       'Support prioritaire',
     ],

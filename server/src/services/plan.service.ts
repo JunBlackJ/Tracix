@@ -31,7 +31,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     platforms: -1,
     customModules: -1,
     categories: -1,
-    seats: 5,
+    seats: 10,
     exportEnabled: true,
     customModulesEnabled: true,
     invitationsEnabled: true,

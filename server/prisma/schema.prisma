@@ -61,8 +61,9 @@ model UserApp {
   last_login_at          DateTime @default(now())
   created_at             DateTime @default(now())
 
-  organization      Organization       @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  userOrganizations UserOrganization[]
+  organization        Organization         @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  userOrganizations   UserOrganization[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }
@@ -404,6 +405,19 @@ model AdminConfig {
   totp_enabled Boolean @default(false)
 
   @@map("admin_config")
+}
+
+model PasswordResetToken {
+  id         String    @id
+  user_id    String
+  token_hash String    @unique
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+
+  user UserApp @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }
 
 model AuditTrail {

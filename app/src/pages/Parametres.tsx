@@ -11,7 +11,7 @@ import {
   ShieldCheck, GitBranch, Import as ImportIcon,
   List, BookOpen, StickyNote, BarChart2, Layers,
   Zap, Star, Crown, Check, ArrowRight, Trash2,
-  KeyRound, QrCode, Unlock,
+  KeyRound, QrCode, Unlock, Eye, EyeOff,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -1802,6 +1802,78 @@ function ResetDataModal({ onClose, onConfirm, loading }: { onClose: () => void; 
   );
 }
 
+function ChangePasswordForm() {
+  const [form, setForm] = useState({ current: '', next: '', confirm: '' });
+  const [show, setShow] = useState({ current: false, next: false });
+  const [loading, setLoading] = useState(false);
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (form.next.length < 8) { toast.error('Le mot de passe doit faire au moins 8 caractères'); return; }
+    if (form.next !== form.confirm) { toast.error('Les mots de passe ne correspondent pas'); return; }
+    setLoading(true);
+    try {
+      await api.auth.changePassword(form.current, form.next);
+      toast.success('Mot de passe modifié');
+      setForm({ current: '', next: '', confirm: '' });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3 max-w-sm">
+      {/* Mot de passe actuel */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Mot de passe actuel</label>
+        <div className="relative">
+          <input type={show.current ? 'text' : 'password'} value={form.current} onChange={set('current')}
+            required autoComplete="current-password"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 pr-10 text-sm outline-none focus:border-[#534AB7]" />
+          <button type="button" onClick={() => setShow((s) => ({ ...s, current: !s.current }))}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            {show.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+      {/* Nouveau mot de passe */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Nouveau mot de passe</label>
+        <div className="relative">
+          <input type={show.next ? 'text' : 'password'} value={form.next} onChange={set('next')}
+            required autoComplete="new-password" minLength={8}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 pr-10 text-sm outline-none focus:border-[#534AB7]" />
+          <button type="button" onClick={() => setShow((s) => ({ ...s, next: !s.next }))}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            {show.next ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+        {form.next.length > 0 && form.next.length < 8 && (
+          <p className="text-[11px] text-amber-600 mt-1">Au moins 8 caractères</p>
+        )}
+      </div>
+      {/* Confirmation */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Confirmer le nouveau mot de passe</label>
+        <input type="password" value={form.confirm} onChange={set('confirm')}
+          required autoComplete="new-password"
+          className={`w-full border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#534AB7] ${form.confirm && form.confirm !== form.next ? 'border-red-300' : 'border-gray-200'}`} />
+        {form.confirm && form.confirm !== form.next && (
+          <p className="text-[11px] text-red-500 mt-1">Les mots de passe ne correspondent pas</p>
+        )}
+      </div>
+      <button type="submit" disabled={loading || !form.current || !form.next || form.next !== form.confirm}
+        className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#534AB7] text-white rounded-xl text-sm font-medium hover:bg-[#3C3489] disabled:opacity-50 transition-colors">
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {loading ? 'Enregistrement…' : 'Modifier le mot de passe'}
+      </button>
+    </form>
+  );
+}
+
 function MfaSection() {
   const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
   const [setupData, setSetupData] = useState<{ secret: string; qr: string } | null>(null);
@@ -1981,8 +2053,17 @@ function SecuriteSection() {
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
         <h2 className="text-lg font-semibold text-gray-900">Sécurité</h2>
 
-        {/* MFA */}
+        {/* Changer le mot de passe */}
         <div>
+          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <Lock className="w-4 h-4 text-[#534AB7]" />
+            Changer le mot de passe
+          </h3>
+          <ChangePasswordForm />
+        </div>
+
+        {/* MFA */}
+        <div className="border-t border-gray-100 pt-4">
           <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
             <KeyRound className="w-4 h-4 text-[#534AB7]" />
             Authentification à deux facteurs (MFA)

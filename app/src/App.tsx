@@ -22,6 +22,7 @@ import { CustomModulePage } from '@/pages/CustomModulePage';
 import { Revues } from '@/pages/Revues';
 import { OAuthCallback } from '@/pages/OAuthCallback';
 import { Rejoindre } from '@/pages/Rejoindre';
+import { ResetPassword } from '@/pages/ResetPassword';
 import { Admin } from '@/pages/Admin';
 import { Onboarding } from '@/pages/Onboarding';
 import { useStore } from '@/hooks/useStore';
@@ -62,6 +63,7 @@ function App() {
         <Routes>
           <Route path="/oauth/callback" element={<OAuthCallback onLoginWithToken={store.loginWithToken} />} />
           <Route path="/rejoindre/:token" element={<Rejoindre onLoginWithToken={store.loginWithToken} />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="*" element={<Landing onLogin={store.login} onLoginWithMfa={store.loginWithMfa} onRegister={store.register} />} />
         </Routes>
       </BrowserRouter>

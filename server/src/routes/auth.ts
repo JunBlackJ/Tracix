@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { JsonValue } from '@prisma/client/runtime/library';
@@ -7,6 +8,7 @@ import prisma from '../prisma/client';
 import { requireAuth, generateToken } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
+import { sendPasswordResetEmail } from '../services/email.service';
 import { generateAlerts } from '../services/alert.service';
 import { recomputeAllRiskScores } from '../services/risk.service';
 import { config } from '../config';
@@ -956,6 +958,128 @@ router.delete('/mfa', requireAuth, async (req: Request, res: Response): Promise<
   });
 
   res.json({ message: 'MFA désactivé avec succès.' });
+});
+
+// POST /api/auth/change-password
+router.post('/change-password', requireAuth, async (req, res) => {
+  const { current_password, new_password } = req.body as { current_password?: string; new_password?: string };
+  if (!current_password || !new_password) {
+    res.status(400).json({ error: 'Champs requis manquants' }); return;
+  }
+  if (new_password.length < 8) {
+    res.status(400).json({ error: 'Le nouveau mot de passe doit faire au moins 8 caractères' }); return;
+  }
+
+  const user = await prisma.userApp.findUnique({ where: { id: req.user!.userId } });
+  if (!user) { res.status(404).json({ error: 'Utilisateur introuvable' }); return; }
+  if (!user.password_hash) {
+    res.status(400).json({ error: 'Ce compte utilise OAuth — pas de mot de passe à changer' }); return;
+  }
+
+  const valid = await bcrypt.compare(current_password, user.password_hash);
+  if (!valid) { res.status(401).json({ error: 'Mot de passe actuel incorrect' }); return; }
+
+  const hash = await bcrypt.hash(new_password, 10);
+  await prisma.userApp.update({ where: { id: user.id }, data: { password_hash: hash } });
+
+  await createAuditEntry({
+    organizationId: user.organization_id,
+    actor: user.email,
+    action: 'auth.change_password',
+    targetType: 'user',
+    targetId: user.id,
+    targetLabel: user.full_name,
+    oldValue: {},
+    newValue: {},
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ ok: true });
+});
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', authLimiter, async (req, res) => {
+  const { email } = req.body as { email?: string };
+  // Réponse identique que l'email existe ou non (anti-énumération)
+  if (!email) { res.json({ ok: true }); return; }
+
+  const user = await prisma.userApp.findUnique({ where: { email: email.toLowerCase().trim() } });
+  if (!user || !user.password_hash) { res.json({ ok: true }); return; }
+
+  // Invalider les tokens précédents non utilisés
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma as any).passwordResetToken.updateMany({
+    where: { user_id: user.id, used_at: null },
+    data: { used_at: new Date() },
+  });
+
+  // Générer un token sécurisé
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma as any).passwordResetToken.create({
+    data: {
+      id: crypto.randomUUID(),
+      user_id: user.id,
+      token_hash: tokenHash,
+      expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 min
+    },
+  });
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const resetUrl = `${frontendUrl}/reset-password?token=${rawToken}`;
+
+  await sendPasswordResetEmail({
+    to: user.email,
+    full_name: user.full_name,
+    reset_url: resetUrl,
+  });
+
+  res.json({ ok: true });
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', authLimiter, async (req, res) => {
+  const { token, new_password } = req.body as { token?: string; new_password?: string };
+  if (!token || !new_password) {
+    res.status(400).json({ error: 'Token et nouveau mot de passe requis' }); return;
+  }
+  if (new_password.length < 8) {
+    res.status(400).json({ error: 'Le mot de passe doit faire au moins 8 caractères' }); return;
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const resetToken = await (prisma as any).passwordResetToken.findUnique({
+    where: { token_hash: tokenHash },
+    include: { user: true },
+  }) as { id: string; user_id: string; used_at: Date | null; expires_at: Date; user: { id: string; organization_id: string; email: string; full_name: string } } | null;
+
+  if (!resetToken || resetToken.used_at || resetToken.expires_at < new Date()) {
+    res.status(400).json({ error: 'Lien invalide ou expiré' }); return;
+  }
+
+  const hash = await bcrypt.hash(new_password, 10);
+  await prisma.userApp.update({ where: { id: resetToken.user_id }, data: { password_hash: hash } });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma as any).passwordResetToken.update({ where: { id: resetToken.id }, data: { used_at: new Date() } });
+
+  await createAuditEntry({
+    organizationId: resetToken.user.organization_id,
+    actor: resetToken.user.email,
+    action: 'auth.reset_password',
+    targetType: 'user',
+    targetId: resetToken.user.id,
+    targetLabel: resetToken.user.full_name,
+    oldValue: {},
+    newValue: {},
+    ipAddress: '',
+    userAgent: '',
+  });
+
+  res.json({ ok: true });
 });
 
 export default router;

@@ -805,6 +805,10 @@ function LoginForm({ onLogin, onLoginWithMfa }: {
   // MFA step
   const [mfaUserId, setMfaUserId] = useState<string | null>(null);
   const [totp, setTotp] = useState('');
+  // Forgot password
+  const [forgotStep, setForgotStep] = useState<'idle' | 'form' | 'sent'>('idle');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -886,6 +890,64 @@ function LoginForm({ onLogin, onLoginWithMfa }: {
     );
   }
 
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      await api.auth.forgotPassword(forgotEmail);
+      setForgotStep('sent');
+    } catch {
+      // always show sent state to avoid enumeration
+      setForgotStep('sent');
+    } finally { setForgotLoading(false); }
+  };
+
+  // ── Forgot password view ──
+  if (forgotStep === 'form') {
+    return (
+      <div className="space-y-4">
+        <button type="button" onClick={() => setForgotStep('idle')}
+          className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors">
+          <ArrowRight className="w-3 h-3 rotate-180" /> Retour à la connexion
+        </button>
+        <p className="text-sm text-white/70">Entrez votre email et nous vous enverrons un lien de réinitialisation.</p>
+        <form onSubmit={handleForgot} className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-white/40 mb-1.5">Email</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+              <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)}
+                required autoFocus
+                className="w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
+                placeholder="vous@entreprise.com" />
+            </div>
+          </div>
+          <button type="submit" disabled={forgotLoading}
+            className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+            style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
+            {forgotLoading ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Envoi…</> : <>Envoyer le lien <ArrowRight className="w-4 h-4" /></>}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  if (forgotStep === 'sent') {
+    return (
+      <div className="space-y-4 text-center">
+        <div className="w-12 h-12 rounded-full bg-green-500/15 flex items-center justify-center mx-auto">
+          <CheckCircle className="w-6 h-6 text-green-400" />
+        </div>
+        <p className="text-sm text-white/70">Si un compte existe pour <span className="text-white font-medium">{forgotEmail}</span>, un email de réinitialisation a été envoyé.</p>
+        <p className="text-xs text-white/35">Le lien est valable 30 minutes. Vérifiez vos spams.</p>
+        <button type="button" onClick={() => { setForgotStep('idle'); setForgotEmail(''); }}
+          className="text-xs text-[#8B82D4] hover:text-white transition-colors">
+          ← Retour à la connexion
+        </button>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleCredentials} className="space-y-3.5">
       {error && (
@@ -904,7 +966,13 @@ function LoginForm({ onLogin, onLoginWithMfa }: {
         </div>
       </div>
       <div>
-        <label className="block text-xs font-semibold text-white/40 mb-1.5">Mot de passe</label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-semibold text-white/40">Mot de passe</label>
+          <button type="button" onClick={() => { setForgotEmail(email); setForgotStep('form'); }}
+            className="text-xs text-white/30 hover:text-[#8B82D4] transition-colors">
+            Mot de passe oublié ?
+          </button>
+        </div>
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
           <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}

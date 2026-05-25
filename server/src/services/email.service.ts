@@ -121,3 +121,59 @@ export async function sendAlertEmail(opts: {
   }
   console.error('[Email] Échec après 3 tentatives:', lastError);
 }
+
+export async function sendPasswordResetEmail(opts: {
+  to: string;
+  full_name: string;
+  reset_url: string;
+}): Promise<void> {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('[Email] RESEND_API_KEY non configuré — email non envoyé');
+    return;
+  }
+  const subject = '[Tracix] Réinitialisation de votre mot de passe';
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#F8FAFC;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;padding:32px 16px;">
+  <tr><td align="center">
+    <table width="520" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+      <tr>
+        <td style="background:linear-gradient(135deg,#534AB7,#3C3489);padding:24px 32px;">
+          <p style="margin:0;color:#fff;font-size:20px;font-weight:bold;">Tracix</p>
+          <p style="margin:4px 0 0;color:rgba(255,255,255,0.65);font-size:13px;">Réinitialisation du mot de passe</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:32px;">
+          <p style="margin:0 0 16px;font-size:15px;color:#111827;">Bonjour ${opts.full_name},</p>
+          <p style="margin:0 0 24px;font-size:14px;color:#4B5563;line-height:1.6;">
+            Vous avez demandé la réinitialisation de votre mot de passe Tracix.<br>
+            Cliquez sur le bouton ci-dessous — ce lien est valable <strong>30 minutes</strong>.
+          </p>
+          <a href="${opts.reset_url}" style="display:inline-block;background:#534AB7;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:600;">
+            Réinitialiser mon mot de passe →
+          </a>
+          <p style="margin:24px 0 0;font-size:12px;color:#9CA3AF;">
+            Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.<br>
+            Lien direct : ${opts.reset_url}
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#F9FAFB;padding:14px 32px;border-top:1px solid #E5E7EB;">
+          <p style="margin:0;font-size:11px;color:#9CA3AF;">Tracix — Gouvernance des accès</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+
+  try {
+    await resend.emails.send({ from: FROM, to: opts.to, subject, html });
+    console.log(`[Email] Reset password envoyé → ${opts.to}`);
+  } catch (err) {
+    console.error('[Email] Erreur envoi reset password:', err);
+  }
+}

@@ -1,5 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { TOTP, NobleCryptoPlugin, ScureBase32Plugin, generateSecret as genTotpSecret } from 'otplib';
+import * as QRCode from 'qrcode';
+
+// Singleton TOTP instance with required plugins
+const totp = new TOTP({ crypto: new NobleCryptoPlugin(), base32: new ScureBase32Plugin() });
+function totpVerify(token: string, secret: string): Promise<boolean> {
+  return totp.verify(token, { secret }) as unknown as Promise<boolean>;
+}
+function totpGenerate(secret: string): Promise<string> {
+  return totp.generate({ secret }) as unknown as Promise<string>;
+}
 import prisma from '../prisma/client';
 import { requireSuperAdmin, generateSuperAdminToken } from '../middleware/superadmin';
 import { config } from '../config';
@@ -39,10 +50,94 @@ router.post('/login', adminLimiter, async (req: Request, res: Response) => {
     return;
   }
 
-  // Succès — réinitialiser
+  // Succès — vérifier si MFA est activé
   adminFailedAttempts = 0;
   adminLockedUntil = null;
+
+  const adminConfig = await prisma.adminConfig.findUnique({ where: { id: 'global' } });
+  if (adminConfig?.totp_enabled && adminConfig.totp_secret) {
+    // MFA requis — retourner un challenge (pas de token JWT encore)
+    res.json({ mfa_required: true });
+    return;
+  }
+
   res.json({ token: generateSuperAdminToken() });
+});
+
+// ─── POST /api/admin/login/mfa ─── Validation du code TOTP après email/password
+router.post('/login/mfa', adminLimiter, async (req: Request, res: Response) => {
+  const { totp } = req.body as { totp?: string };
+  if (!totp) { res.status(400).json({ error: 'Code TOTP requis' }); return; }
+
+  const adminConfig = await prisma.adminConfig.findUnique({ where: { id: 'global' } });
+  if (!adminConfig?.totp_enabled || !adminConfig.totp_secret) {
+    res.status(400).json({ error: 'MFA non configuré' }); return;
+  }
+
+  const valid = await totpVerify(totp.replace(/\s/g, ''), adminConfig.totp_secret);
+  if (!valid) {
+    res.status(401).json({ error: 'Code incorrect ou expiré' }); return;
+  }
+
+  res.json({ token: generateSuperAdminToken() });
+});
+
+// ─── GET /api/admin/mfa/status ───
+router.get('/mfa/status', requireSuperAdmin, async (_req: Request, res: Response) => {
+  const adminConfig = await prisma.adminConfig.findUnique({ where: { id: 'global' } });
+  res.json({ enabled: adminConfig?.totp_enabled ?? false });
+});
+
+// ─── POST /api/admin/mfa/setup ─── Génère un nouveau secret TOTP + QR code (sans l'activer)
+router.post('/mfa/setup', requireSuperAdmin, async (_req: Request, res: Response) => {
+  const secret = genTotpSecret();
+  const label = encodeURIComponent(config.superAdminEmail || 'admin@tracix.io');
+  const issuer = 'Tracix%20Admin';
+  const otpauth = `otpauth://totp/${issuer}:${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
+  const qrDataUrl = await QRCode.toDataURL(otpauth);
+
+  // Stocker le secret provisoire (pas encore activé)
+  await prisma.adminConfig.upsert({
+    where: { id: 'global' },
+    create: { id: 'global', totp_secret: secret, totp_enabled: false },
+    update: { totp_secret: secret },
+  });
+
+  res.json({ secret, qr: qrDataUrl });
+});
+
+// ─── POST /api/admin/mfa/enable ─── Confirme avec un code TOTP puis active
+router.post('/mfa/enable', requireSuperAdmin, async (req: Request, res: Response) => {
+  const { totp } = req.body as { totp?: string };
+  if (!totp) { res.status(400).json({ error: 'Code TOTP requis' }); return; }
+
+  const adminConfig = await prisma.adminConfig.findUnique({ where: { id: 'global' } });
+  if (!adminConfig?.totp_secret) {
+    res.status(400).json({ error: 'Aucun secret provisoire. Lancez /mfa/setup d\'abord.' }); return;
+  }
+
+  const valid = await totpVerify(totp.replace(/\s/g, ''), adminConfig.totp_secret);
+  if (!valid) { res.status(401).json({ error: 'Code incorrect — vérifiez votre application authenticator' }); return; }
+
+  await prisma.adminConfig.update({ where: { id: 'global' }, data: { totp_enabled: true } });
+  res.json({ ok: true });
+});
+
+// ─── DELETE /api/admin/mfa ─── Désactive le MFA (code TOTP requis pour confirmer)
+router.delete('/mfa', requireSuperAdmin, async (req: Request, res: Response) => {
+  const { totp } = req.body as { totp?: string };
+  if (!totp) { res.status(400).json({ error: 'Code TOTP requis pour désactiver' }); return; }
+
+  const adminConfig = await prisma.adminConfig.findUnique({ where: { id: 'global' } });
+  if (!adminConfig?.totp_enabled || !adminConfig.totp_secret) {
+    res.status(400).json({ error: 'MFA non activé' }); return;
+  }
+
+  const valid = await totpVerify(totp.replace(/\s/g, ''), adminConfig.totp_secret);
+  if (!valid) { res.status(401).json({ error: 'Code incorrect' }); return; }
+
+  await prisma.adminConfig.update({ where: { id: 'global' }, data: { totp_enabled: false, totp_secret: null } });
+  res.json({ ok: true });
 });
 
 // ─── GET /api/admin/stats ───

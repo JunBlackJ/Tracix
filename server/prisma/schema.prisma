@@ -395,6 +395,15 @@ model RiskSnapshot {
   @@map("risk_snapshots")
 }
 
+// Singleton row (id = "global") to store super-admin MFA config
+model AdminConfig {
+  id          String  @id @default("global")
+  totp_secret String? // null = MFA disabled
+  totp_enabled Boolean @default(false)
+
+  @@map("admin_config")
+}
+
 model AuditTrail {
   id              String   @id
   organization_id String

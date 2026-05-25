@@ -4,6 +4,7 @@ import {
   ChevronRight, Save, Loader2, RefreshCw, Crown, Star,
   Zap, Search, Calendar, AlertTriangle, Trash2, PauseCircle,
   PlayCircle, BarChart2, Activity, Eye, ArrowLeft, X,
+  KeyRound, QrCode, CheckCircle2, Lock, Unlock,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -68,19 +69,40 @@ const PLAN_COLORS = ['#6B7280', '#534AB7', '#D97706'];
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [totp, setTotp] = useState('');
+  const [step, setStep] = useState<'credentials' | 'mfa'>('credentials');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const data = await adminReq<{ token: string }>('/admin/login', {
+      const data = await adminReq<{ token?: string; mfa_required?: boolean }>('/admin/login', {
         method: 'POST', body: JSON.stringify({ email, password }),
+      });
+      if (data.mfa_required) {
+        setStep('mfa');
+      } else if (data.token) {
+        setToken(data.token);
+        onLogin();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur de connexion');
+    } finally { setLoading(false); }
+  };
+
+  const handleMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const data = await adminReq<{ token: string }>('/admin/login/mfa', {
+        method: 'POST', body: JSON.stringify({ totp }),
       });
       setToken(data.token);
       onLogin();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur de connexion');
+      toast.error(err instanceof Error ? err.message : 'Code incorrect');
+      setTotp('');
     } finally { setLoading(false); }
   };
 
@@ -94,26 +116,58 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
           </div>
           <p className="text-sm text-white/40">Panneau d'administration</p>
         </div>
-        <form onSubmit={handleLogin} className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-white/60 mb-1.5">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus
-              autoComplete="username" style={{ background: '#1A1730' }}
-              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7]"
-              placeholder="admin@tracix.io" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-white/60 mb-1.5">Mot de passe</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required
-              autoComplete="current-password" style={{ background: '#1A1730' }}
-              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7]" />
-          </div>
-          <button type="submit" disabled={loading}
-            className="w-full py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
-            {loading ? 'Connexion…' : 'Accéder au panneau admin'}
-          </button>
-        </form>
+
+        {step === 'credentials' ? (
+          <form onSubmit={handleCredentials} className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-white/60 mb-1.5">Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus
+                autoComplete="username" style={{ background: '#1A1730' }}
+                className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7]"
+                placeholder="admin@tracix.io" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-white/60 mb-1.5">Mot de passe</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required
+                autoComplete="current-password" style={{ background: '#1A1730' }}
+                className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none focus:border-[#534AB7]" />
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+              {loading ? 'Connexion…' : 'Accéder au panneau admin'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleMfa} className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center gap-3 pb-2">
+              <div className="w-10 h-10 rounded-xl bg-[#534AB7]/20 flex items-center justify-center flex-shrink-0">
+                <KeyRound className="w-5 h-5 text-[#8B82D4]" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Vérification en 2 étapes</p>
+                <p className="text-xs text-white/35">Entrez le code de votre application authenticator</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-white/60 mb-1.5">Code TOTP (6 chiffres)</label>
+              <input type="text" inputMode="numeric" pattern="\d{6}" maxLength={6}
+                value={totp} onChange={(e) => setTotp(e.target.value.replace(/\D/g, ''))}
+                required autoFocus style={{ background: '#1A1730' }}
+                className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white text-center font-mono tracking-[0.4em] placeholder-white/25 outline-none focus:border-[#534AB7]"
+                placeholder="000000" />
+            </div>
+            <button type="submit" disabled={loading || totp.length !== 6}
+              className="w-full py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              {loading ? 'Vérification…' : 'Confirmer'}
+            </button>
+            <button type="button" onClick={() => setStep('credentials')}
+              className="w-full text-xs text-white/30 hover:text-white/60 transition-colors">
+              ← Retour
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -341,10 +395,165 @@ function OrgDetail({ orgId, onBack, onUpdated }: { orgId: string; onBack: () => 
   );
 }
 
+// ─── MFA Setup Panel ───
+function MfaPanel() {
+  const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
+  const [setupData, setSetupData] = useState<{ secret: string; qr: string } | null>(null);
+  const [totpInput, setTotpInput] = useState('');
+  const [disableTotpInput, setDisableTotpInput] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    adminReq<{ enabled: boolean }>('/admin/mfa/status')
+      .then((d) => setMfaEnabled(d.enabled))
+      .catch(() => toast.error('Impossible de charger le statut MFA'));
+  }, []);
+
+  const startSetup = async () => {
+    setLoading(true);
+    try {
+      const data = await adminReq<{ secret: string; qr: string }>('/admin/mfa/setup', { method: 'POST' });
+      setSetupData(data);
+      setTotpInput('');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const confirmEnable = async () => {
+    setLoading(true);
+    try {
+      await adminReq('/admin/mfa/enable', { method: 'POST', body: JSON.stringify({ totp: totpInput }) });
+      setMfaEnabled(true);
+      setSetupData(null);
+      setTotpInput('');
+      toast.success('MFA activé — votre compte est maintenant protégé');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Code incorrect'); setTotpInput(''); }
+    finally { setLoading(false); }
+  };
+
+  const disableMfa = async () => {
+    setLoading(true);
+    try {
+      await adminReq('/admin/mfa', { method: 'DELETE', body: JSON.stringify({ totp: disableTotpInput }) });
+      setMfaEnabled(false);
+      setDisableTotpInput('');
+      toast.success('MFA désactivé');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Code incorrect'); setDisableTotpInput(''); }
+    finally { setLoading(false); }
+  };
+
+  if (mfaEnabled === null) return <div className="flex items-center justify-center py-24"><Loader2 className="w-5 h-5 animate-spin text-white/30" /></div>;
+
+  return (
+    <div className="max-w-lg space-y-5">
+      {/* Status card */}
+      <div className={`flex items-center gap-4 p-5 rounded-2xl border ${mfaEnabled ? 'bg-green-500/5 border-green-500/20' : 'bg-white/5 border-white/8'}`}>
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${mfaEnabled ? 'bg-green-500/15' : 'bg-white/8'}`}>
+          {mfaEnabled ? <Lock className="w-6 h-6 text-green-400" /> : <Unlock className="w-6 h-6 text-white/30" />}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-white">{mfaEnabled ? 'MFA activé' : 'MFA désactivé'}</p>
+          <p className="text-xs text-white/40 mt-0.5">
+            {mfaEnabled
+              ? 'La connexion nécessite un code de votre application authenticator.'
+              : 'Aucune vérification supplémentaire requise à la connexion.'}
+          </p>
+        </div>
+        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${mfaEnabled ? 'bg-green-500/20 text-green-400' : 'bg-white/8 text-white/30'}`}>
+          {mfaEnabled ? 'Actif' : 'Inactif'}
+        </span>
+      </div>
+
+      {/* Enable flow */}
+      {!mfaEnabled && !setupData && (
+        <div className="bg-white/5 border border-white/8 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-white/40" />
+            <p className="text-sm font-semibold text-white/70">Activer le MFA TOTP</p>
+          </div>
+          <p className="text-xs text-white/40 leading-relaxed">
+            Scannez le QR code avec une application authenticator (Google Authenticator, Authy, 1Password…).
+            Un code à 6 chiffres vous sera demandé à chaque connexion.
+          </p>
+          <button onClick={startSetup} disabled={loading}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 transition-colors">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+            {loading ? 'Génération…' : 'Configurer le MFA'}
+          </button>
+        </div>
+      )}
+
+      {/* QR code + confirm step */}
+      {!mfaEnabled && setupData && (
+        <div className="bg-white/5 border border-[#534AB7]/30 rounded-2xl p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-[#8B82D4]" />
+            <p className="text-sm font-semibold text-white">Scannez ce QR code</p>
+          </div>
+          <div className="flex flex-col items-center gap-4">
+            <img src={setupData.qr} alt="QR code MFA" className="w-44 h-44 rounded-xl bg-white p-2" />
+            <div className="w-full">
+              <p className="text-[11px] text-white/30 mb-1 text-center">Ou entrez ce secret manuellement</p>
+              <p className="text-xs font-mono text-white/60 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-center tracking-widest break-all">{setupData.secret}</p>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-white/50 mb-1.5">
+              Confirmez avec un code de votre app
+            </label>
+            <input type="text" inputMode="numeric" pattern="\d{6}" maxLength={6}
+              value={totpInput} onChange={(e) => setTotpInput(e.target.value.replace(/\D/g, ''))}
+              autoFocus style={{ background: '#0E0C1E' }}
+              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white text-center font-mono tracking-[0.4em] outline-none focus:border-[#534AB7]"
+              placeholder="000000" />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => { setSetupData(null); setTotpInput(''); }}
+              className="flex-1 py-2.5 rounded-xl border border-white/15 text-sm text-white/50 hover:bg-white/5">
+              Annuler
+            </button>
+            <button onClick={confirmEnable} disabled={loading || totpInput.length !== 6}
+              className="flex-1 py-2.5 rounded-xl bg-[#534AB7] text-white text-sm font-bold hover:bg-[#3C3489] disabled:opacity-50 flex items-center justify-center gap-2">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              {loading ? 'Activation…' : 'Activer le MFA'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Disable flow */}
+      {mfaEnabled && (
+        <div className="bg-white/5 border border-red-500/15 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Unlock className="w-4 h-4 text-red-400/60" />
+            <p className="text-sm font-semibold text-white/70">Désactiver le MFA</p>
+          </div>
+          <p className="text-xs text-white/35 leading-relaxed">
+            Entrez un code de votre application authenticator pour confirmer la désactivation.
+          </p>
+          <div>
+            <label className="block text-xs font-semibold text-white/50 mb-1.5">Code TOTP</label>
+            <input type="text" inputMode="numeric" pattern="\d{6}" maxLength={6}
+              value={disableTotpInput} onChange={(e) => setDisableTotpInput(e.target.value.replace(/\D/g, ''))}
+              style={{ background: '#0E0C1E' }}
+              className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white text-center font-mono tracking-[0.4em] outline-none focus:border-red-500"
+              placeholder="000000" />
+          </div>
+          <button onClick={disableMfa} disabled={loading || disableTotpInput.length !== 6}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-500/15 text-red-400 text-sm font-bold hover:bg-red-500/25 disabled:opacity-50 transition-colors">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
+            {loading ? 'Désactivation…' : 'Désactiver le MFA'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Admin Panel ───
 export function Admin() {
   const [authed, setAuthed] = useState(false);
-  const [tab, setTab] = useState<'stats' | 'orgs' | 'users' | 'promos' | 'audit'>('stats');
+  const [tab, setTab] = useState<'stats' | 'orgs' | 'users' | 'promos' | 'audit' | 'security'>('stats');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [orgs, setOrgs] = useState<AdminOrg[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -470,11 +679,12 @@ export function Admin() {
         {/* Tabs */}
         <div className="flex gap-1 bg-white/5 rounded-xl p-1 w-fit mb-6 overflow-x-auto">
           {([
-            { id: 'stats',  label: 'Statistiques',  icon: BarChart2 },
-            { id: 'orgs',   label: 'Organisations', icon: Building2 },
-            { id: 'users',  label: 'Utilisateurs',  icon: Users },
-            { id: 'promos', label: 'Codes promo',   icon: Zap },
-            { id: 'audit',  label: 'Journal global', icon: Activity },
+            { id: 'stats',    label: 'Statistiques',  icon: BarChart2 },
+            { id: 'orgs',     label: 'Organisations', icon: Building2 },
+            { id: 'users',    label: 'Utilisateurs',  icon: Users },
+            { id: 'promos',   label: 'Codes promo',   icon: Zap },
+            { id: 'audit',    label: 'Journal global', icon: Activity },
+            { id: 'security', label: 'Sécurité',      icon: KeyRound },
           ] as const).map((t) => (
             <button key={t.id} onClick={() => { setTab(t.id); setSearch(''); setDetailOrgId(null); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${tab === t.id ? 'bg-[#534AB7] text-white' : 'text-white/40 hover:text-white'}`}>
@@ -833,6 +1043,9 @@ export function Admin() {
             </div>
           </div>
         )}
+
+        {/* ─── Sécurité ─── */}
+        {tab === 'security' && <MfaPanel />}
 
         {/* ─── Audit global ─── */}
         {tab === 'audit' && (

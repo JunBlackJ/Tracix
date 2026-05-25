@@ -42,6 +42,11 @@ export function startCronJobs(): void {
         try { await checkPlanExpiryEmail(org.id, org.name); }
         catch (e) { console.error(`[Cron] checkPlanExpiryEmail failed for ${org.id}:`, e); }
       }
+
+      // Data retention — run once globally (not per-org)
+      try { await purgeOldData(); }
+      catch (e) { console.error('[Cron] purgeOldData failed:', e); }
+
       console.log('[Cron] Daily check done.');
     } catch (e) {
       console.error('[Cron] Fatal error during daily check:', e);
@@ -235,6 +240,35 @@ async function checkSubscriptionEmails(orgId: string): Promise<void> {
       },
     });
   }
+}
+
+async function purgeOldData(): Promise<void> {
+  const { auditTrailDays, refreshTokenDays, resolvedAlertsDays } = config.retention;
+  const now = new Date();
+
+  const auditCutoff = new Date(now.getTime() - auditTrailDays * 24 * 60 * 60 * 1000);
+  const refreshCutoff = new Date(now.getTime() - refreshTokenDays * 24 * 60 * 60 * 1000);
+  const alertsCutoff = new Date(now.getTime() - resolvedAlertsDays * 24 * 60 * 60 * 1000);
+
+  const [auditCount, refreshCount, alertsCount] = await Promise.all([
+    prisma.auditTrail.deleteMany({ where: { created_at: { lt: auditCutoff } } }),
+    (prisma as any).refreshToken.deleteMany({
+      where: { OR: [{ expires_at: { lt: refreshCutoff } }, { revoked: true, created_at: { lt: refreshCutoff } }] },
+    }),
+    prisma.alert.deleteMany({ where: { is_resolved: true, created_at: { lt: alertsCutoff } } }),
+  ]);
+
+  console.log(JSON.stringify({
+    event: 'data_retention_purge',
+    audit_trails_deleted: auditCount.count,
+    refresh_tokens_deleted: refreshCount.count,
+    resolved_alerts_deleted: alertsCount.count,
+    cutoffs: {
+      audit_trail: auditCutoff.toISOString(),
+      refresh_token: refreshCutoff.toISOString(),
+      resolved_alerts: alertsCutoff.toISOString(),
+    },
+  }));
 }
 
 async function checkPlanExpiryEmail(orgId: string, orgName: string): Promise<void> {

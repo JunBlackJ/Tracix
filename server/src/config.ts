@@ -15,6 +15,12 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   superAdminEmail: process.env.SUPER_ADMIN_EMAIL || '',
   superAdminPassword: process.env.SUPER_ADMIN_PASSWORD || '',
+  // Data retention — how many days to keep old records before purging
+  retention: {
+    auditTrailDays: parseInt(process.env.RETENTION_AUDIT_DAYS || '365', 10),
+    refreshTokenDays: parseInt(process.env.RETENTION_REFRESH_TOKEN_DAYS || '30', 10),
+    resolvedAlertsDays: parseInt(process.env.RETENTION_RESOLVED_ALERTS_DAYS || '180', 10),
+  },
   email: {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT || '587', 10),

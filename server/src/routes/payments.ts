@@ -16,7 +16,9 @@ const router = Router();
 
 const InitSchema = z.object({
   plan: z.enum(['pro', 'enterprise']),
-  months: z.number().int().min(1).max(12),
+  months: z.number().int().refine((m) => [1, 3, 6, 12, 24, 36].includes(m), {
+    message: 'Durée invalide — valeurs acceptées : 1, 3, 6, 12, 24, 36 mois',
+  }),
 });
 
 // POST /api/payments/initiate — créer une transaction et obtenir l'URL de paiement CinetPay

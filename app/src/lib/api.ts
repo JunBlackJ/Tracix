@@ -152,6 +152,21 @@ export const api = {
     testEmail(): Promise<{ success: boolean; sent_to: string }> {
       return request('/auth/test-email', { method: 'POST' });
     },
+    loginMfa(userId: string, totp: string): Promise<{ token: string; user: UserApp; organization: Organization }> {
+      return request('/auth/login/mfa', { method: 'POST', body: JSON.stringify({ user_id: userId, totp }) });
+    },
+    mfaStatus(): Promise<{ enabled: boolean }> {
+      return request('/auth/mfa/status');
+    },
+    mfaSetup(): Promise<{ secret: string; qr: string }> {
+      return request('/auth/mfa/setup', { method: 'POST' });
+    },
+    mfaEnable(totp: string): Promise<{ ok: boolean }> {
+      return request('/auth/mfa/enable', { method: 'POST', body: JSON.stringify({ totp }) });
+    },
+    mfaDisable(totp: string): Promise<{ ok: boolean }> {
+      return request('/auth/mfa', { method: 'DELETE', body: JSON.stringify({ totp }) });
+    },
   },
 
   members: {

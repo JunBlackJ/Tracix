@@ -11,6 +11,7 @@ import {
   ShieldCheck, GitBranch, Import as ImportIcon,
   List, BookOpen, StickyNote, BarChart2, Layers,
   Zap, Star, Crown, Check, ArrowRight, Trash2,
+  KeyRound, QrCode, Unlock,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -1801,6 +1802,142 @@ function ResetDataModal({ onClose, onConfirm, loading }: { onClose: () => void; 
   );
 }
 
+function MfaSection() {
+  const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
+  const [setupData, setSetupData] = useState<{ secret: string; qr: string } | null>(null);
+  const [totpInput, setTotpInput] = useState('');
+  const [disableInput, setDisableInput] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    api.auth.mfaStatus().then((d) => setMfaEnabled(d.enabled)).catch(() => {});
+  }, []);
+
+  const startSetup = async () => {
+    setLoading(true);
+    try {
+      const data = await api.auth.mfaSetup();
+      setSetupData(data);
+      setTotpInput('');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const confirmEnable = async () => {
+    setLoading(true);
+    try {
+      await api.auth.mfaEnable(totpInput);
+      setMfaEnabled(true);
+      setSetupData(null);
+      setTotpInput('');
+      toast.success('MFA activé — votre compte est maintenant protégé');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Code incorrect'); setTotpInput(''); }
+    finally { setLoading(false); }
+  };
+
+  const disableMfa = async () => {
+    setLoading(true);
+    try {
+      await api.auth.mfaDisable(disableInput);
+      setMfaEnabled(false);
+      setDisableInput('');
+      toast.success('MFA désactivé');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Code incorrect'); setDisableInput(''); }
+    finally { setLoading(false); }
+  };
+
+  if (mfaEnabled === null) return <div className="flex items-center justify-center py-6"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>;
+
+  return (
+    <div className="space-y-4">
+      {/* Statut */}
+      <div className={`flex items-center gap-3 p-4 rounded-xl border ${mfaEnabled ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${mfaEnabled ? 'bg-green-100' : 'bg-gray-100'}`}>
+          {mfaEnabled ? <Lock className="w-4 h-4 text-green-600" /> : <Unlock className="w-4 h-4 text-gray-400" />}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-gray-900">{mfaEnabled ? 'MFA activé' : 'MFA désactivé'}</p>
+          <p className="text-xs text-gray-500">
+            {mfaEnabled ? 'Un code est requis à chaque connexion.' : 'Aucune vérification supplémentaire.'}
+          </p>
+        </div>
+        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${mfaEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+          {mfaEnabled ? 'Actif' : 'Inactif'}
+        </span>
+      </div>
+
+      {/* Flow activation */}
+      {!mfaEnabled && !setupData && (
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Scannez un QR code avec Google Authenticator, Authy ou 1Password pour sécuriser votre compte avec un code à 6 chiffres.
+          </p>
+          <button onClick={startSetup} disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#534AB7] text-white rounded-xl text-sm font-medium hover:bg-[#3C3489] disabled:opacity-50 transition-colors">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+            {loading ? 'Génération…' : 'Configurer le MFA'}
+          </button>
+        </div>
+      )}
+
+      {/* QR code + confirmation */}
+      {!mfaEnabled && setupData && (
+        <div className="space-y-4 p-4 rounded-xl border border-[#534AB7]/20 bg-[#534AB7]/5">
+          <div className="flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-[#534AB7]" />
+            <p className="text-sm font-semibold text-gray-900">Scannez ce QR code</p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <img src={setupData.qr} alt="QR MFA" className="w-36 h-36 rounded-lg border border-gray-200 bg-white p-1.5 flex-shrink-0" />
+            <div className="flex-1 w-full space-y-2">
+              <p className="text-xs text-gray-500">Ou entrez ce secret manuellement :</p>
+              <p className="text-xs font-mono bg-gray-100 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 break-all tracking-wider">{setupData.secret}</p>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Confirmez avec un code de votre app</label>
+            <input type="text" inputMode="numeric" maxLength={6}
+              value={totpInput} onChange={(e) => setTotpInput(e.target.value.replace(/\D/g, ''))}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-center font-mono tracking-[0.4em] outline-none focus:border-[#534AB7]"
+              placeholder="000000" autoFocus />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => { setSetupData(null); setTotpInput(''); }}
+              className="flex-1 py-2 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">
+              Annuler
+            </button>
+            <button onClick={confirmEnable} disabled={loading || totpInput.length !== 6}
+              className="flex-1 py-2 rounded-xl bg-[#534AB7] text-white text-sm font-medium hover:bg-[#3C3489] disabled:opacity-50 flex items-center justify-center gap-2">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              {loading ? 'Activation…' : 'Activer'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Flow désactivation */}
+      {mfaEnabled && (
+        <div className="space-y-3 p-4 rounded-xl border border-red-100 bg-red-50/50">
+          <div className="flex items-center gap-2">
+            <Unlock className="w-4 h-4 text-red-500" />
+            <p className="text-sm font-semibold text-gray-700">Désactiver le MFA</p>
+          </div>
+          <p className="text-xs text-gray-500">Entrez un code de votre app pour confirmer.</p>
+          <input type="text" inputMode="numeric" maxLength={6}
+            value={disableInput} onChange={(e) => setDisableInput(e.target.value.replace(/\D/g, ''))}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-center font-mono tracking-[0.4em] outline-none focus:border-red-400"
+            placeholder="000000" />
+          <button onClick={disableMfa} disabled={loading || disableInput.length !== 6}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
+            {loading ? 'Désactivation…' : 'Désactiver le MFA'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SecuriteSection() {
   const [revoking, setRevoking] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
@@ -1844,7 +1981,16 @@ function SecuriteSection() {
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
         <h2 className="text-lg font-semibold text-gray-900">Sécurité</h2>
 
+        {/* MFA */}
         <div>
+          <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-[#534AB7]" />
+            Authentification à deux facteurs (MFA)
+          </h3>
+          <MfaSection />
+        </div>
+
+        <div className="border-t border-gray-100 pt-4">
           <h3 className="text-sm font-semibold text-gray-800 mb-3">Sessions actives</h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50">
@@ -1866,16 +2012,6 @@ function SecuriteSection() {
             {revoking && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Révoquer toutes les autres sessions
           </button>
-        </div>
-
-        <div className="border-t border-gray-100 pt-4">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">Historique des connexions</h3>
-          <div className="space-y-1 text-xs text-gray-500">
-            <div className="flex items-center justify-between py-1.5">
-              <span>Chrome/macOS</span>
-              <span>Connexion récente</span>
-            </div>
-          </div>
         </div>
 
         <div className="border-t border-gray-100 pt-4">

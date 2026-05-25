@@ -62,7 +62,7 @@ function App() {
         <Routes>
           <Route path="/oauth/callback" element={<OAuthCallback onLoginWithToken={store.loginWithToken} />} />
           <Route path="/rejoindre/:token" element={<Rejoindre onLoginWithToken={store.loginWithToken} />} />
-          <Route path="*" element={<Landing onLogin={store.login} onRegister={store.register} />} />
+          <Route path="*" element={<Landing onLogin={store.login} onLoginWithMfa={store.loginWithMfa} onRegister={store.register} />} />
         </Routes>
       </BrowserRouter>
     );

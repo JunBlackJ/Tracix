@@ -7,12 +7,15 @@ import {
   Shield, ArrowRight, CheckCircle, Users, BarChart2, Bell,
   GitBranch, Lock, Mail, Eye, EyeOff, Menu, X,
   Zap, Star, Crown, TrendingUp, FileText,
-  AlertTriangle, Activity, Database, Building2, ShieldCheck,
+  AlertTriangle, Activity, Database, Building2, ShieldCheck, KeyRound,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
+type LoginResult = { ok: true } | { mfa_required: true; user_id: string } | { ok: false; error?: string };
+
 interface LandingProps {
-  onLogin: (email: string, password: string) => Promise<boolean>;
+  onLogin: (email: string, password: string) => Promise<LoginResult>;
+  onLoginWithMfa: (userId: string, totp: string) => Promise<{ ok: true } | { ok: false; error?: string }>;
   onRegister: (data: { full_name: string; email: string; password: string; organization_name: string }) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -119,7 +122,7 @@ const TESTIMONIALS = [
   },
 ];
 
-export function Landing({ onLogin, onRegister }: LandingProps) {
+export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSsoModal, setShowSsoModal] = useState(false);
@@ -582,6 +585,7 @@ export function Landing({ onLogin, onRegister }: LandingProps) {
         <AuthModal
           defaultTab={modalDefaultTab}
           onLogin={onLogin}
+          onLoginWithMfa={onLoginWithMfa}
           onRegister={onRegister}
           onClose={() => setShowLoginModal(false)}
           onOpenSso={() => { setShowLoginModal(false); setShowSsoModal(true); }}
@@ -630,7 +634,8 @@ function GitHubLogo() {
 
 interface AuthModalProps {
   defaultTab: 'login' | 'register';
-  onLogin: (email: string, password: string) => Promise<boolean>;
+  onLogin: (email: string, password: string) => Promise<LoginResult>;
+  onLoginWithMfa: (userId: string, totp: string) => Promise<{ ok: true } | { ok: false; error?: string }>;
   onRegister: (data: { full_name: string; email: string; password: string; organization_name: string }) => Promise<{ success: boolean; error?: string }>;
   onClose: () => void;
   onOpenSso?: () => void;
@@ -689,7 +694,7 @@ function SsoLoginModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function AuthModal({ defaultTab, onLogin, onRegister, onClose, onOpenSso }: AuthModalProps) {
+function AuthModal({ defaultTab, onLogin, onLoginWithMfa, onRegister, onClose, onOpenSso }: AuthModalProps) {
   const [tab, setTab] = useState<'login' | 'register'>(defaultTab);
 
   return (
@@ -771,7 +776,7 @@ function AuthModal({ defaultTab, onLogin, onRegister, onClose, onOpenSso }: Auth
 
           {/* Forms */}
           {tab === 'login' ? (
-            <LoginForm onLogin={onLogin} />
+            <LoginForm onLogin={onLogin} onLoginWithMfa={onLoginWithMfa} />
           ) : (
             <RegisterForm onRegister={onRegister} />
           )}
@@ -788,20 +793,30 @@ function AuthModal({ defaultTab, onLogin, onRegister, onClose, onOpenSso }: Auth
 
 // ── Formulaire de connexion ──
 
-function LoginForm({ onLogin }: { onLogin: (email: string, password: string) => Promise<boolean> }) {
+function LoginForm({ onLogin, onLoginWithMfa }: {
+  onLogin: (email: string, password: string) => Promise<LoginResult>;
+  onLoginWithMfa: (userId: string, totp: string) => Promise<{ ok: true } | { ok: false; error?: string }>;
+}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // MFA step
+  const [mfaUserId, setMfaUserId] = useState<string | null>(null);
+  const [totp, setTotp] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsSubmitting(true);
     try {
-      const success = await onLogin(email, password);
-      if (!success) setError('Email ou mot de passe incorrect.');
+      const result = await onLogin(email, password);
+      if ('mfa_required' in result) {
+        setMfaUserId(result.user_id);
+      } else if ('ok' in result && !result.ok) {
+        setError((result as { ok: false; error?: string }).error ?? 'Email ou mot de passe incorrect.');
+      }
     } catch {
       setError('Erreur de connexion. Vérifiez vos identifiants.');
     } finally {
@@ -809,8 +824,70 @@ function LoginForm({ onLogin }: { onLogin: (email: string, password: string) => 
     }
   };
 
+  const handleMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaUserId) return;
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const result = await onLoginWithMfa(mfaUserId, totp);
+      if (!result.ok) {
+        setError(result.error ?? 'Code incorrect ou expiré.');
+        setTotp('');
+      }
+    } catch {
+      setError('Code incorrect ou expiré.');
+      setTotp('');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (mfaUserId) {
+    return (
+      <form onSubmit={handleMfa} className="space-y-4">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-[#534AB7]/10 border border-[#534AB7]/20">
+          <KeyRound className="w-5 h-5 text-[#8B82D4] flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-white">Vérification en 2 étapes</p>
+            <p className="text-xs text-white/40">Entrez le code de votre application authenticator</p>
+          </div>
+        </div>
+        {error && (
+          <div className="px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-400 flex items-center gap-2">
+            <X className="w-4 h-4 flex-shrink-0" />{error}
+          </div>
+        )}
+        <div>
+          <label className="block text-xs font-semibold text-white/40 mb-1.5">Code TOTP (6 chiffres)</label>
+          <input
+            type="text" inputMode="numeric" pattern="\d{6}" maxLength={6}
+            value={totp} onChange={(e) => setTotp(e.target.value.replace(/\D/g, ''))}
+            autoFocus
+            className="w-full py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white text-center font-mono tracking-[0.4em] placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
+            placeholder="000000" required
+          />
+        </div>
+        <button type="submit" disabled={isSubmitting || totp.length !== 6}
+          className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+          style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)', boxShadow: '0 0 30px rgba(83,74,183,0.25)' }}
+        >
+          {isSubmitting ? (
+            <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Vérification…</>
+          ) : (
+            <>Confirmer <ArrowRight className="w-4 h-4" /></>
+          )}
+        </button>
+        <button type="button" onClick={() => { setMfaUserId(null); setTotp(''); setError(null); }}
+          className="w-full text-xs text-white/30 hover:text-white/60 transition-colors">
+          ← Retour
+        </button>
+      </form>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-3.5">
+    <form onSubmit={handleCredentials} className="space-y-3.5">
       {error && (
         <div className="px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-400 flex items-center gap-2">
           <X className="w-4 h-4 flex-shrink-0" />

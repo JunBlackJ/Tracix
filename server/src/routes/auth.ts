@@ -11,6 +11,10 @@ import { generateAlerts } from '../services/alert.service';
 import { recomputeAllRiskScores } from '../services/risk.service';
 import { config } from '../config';
 import { authLimiter } from '../middleware/rateLimiter';
+import { TOTP, NobleCryptoPlugin, ScureBase32Plugin, generateSecret as genTotpSecret } from 'otplib';
+import * as QRCode from 'qrcode';
+
+const totp = new TOTP({ crypto: new NobleCryptoPlugin(), base32: new ScureBase32Plugin() });
 
 // Helper — expose organization fields consistently including enabled_modules (Json)
 function serializeOrg(org: {
@@ -121,6 +125,12 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
     where: { id: user.id },
     data: { last_login_at: new Date(), failed_login_attempts: 0, locked_until: null },
   });
+
+  // Si le MFA est activé, ne pas émettre de token — demander le code TOTP
+  if (user.totp_enabled) {
+    res.json({ mfa_required: true, user_id: user.id });
+    return;
+  }
 
   const token = generateToken({
     userId: user.id,
@@ -716,6 +726,236 @@ router.post('/test-email', requireAuth, async (req: Request, res: Response): Pro
     const msg = err instanceof Error ? err.message : 'Erreur inconnue';
     res.status(500).json({ error: `Échec envoi : ${msg}` });
   }
+});
+
+// ─────────────────────────────────────────────────────
+//  MFA TOTP — utilisateurs
+// ─────────────────────────────────────────────────────
+
+// POST /api/auth/login/mfa — validation du code TOTP après login (session non établie)
+router.post('/login/mfa', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  const { user_id, totp: totpCode } = req.body;
+
+  if (!user_id || !totpCode) {
+    res.status(400).json({ error: 'user_id et totp sont requis.' });
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = await (prisma.userApp.findUnique as any)({
+    where: { id: user_id },
+    include: { organization: true },
+  });
+
+  if (!user || !user.totp_enabled || !user.totp_secret) {
+    res.status(401).json({ error: 'MFA non activé ou utilisateur introuvable.' });
+    return;
+  }
+
+  const result = await totp.verify(String(totpCode), { secret: user.totp_secret });
+  const valid = typeof result === 'object' ? result.valid : result;
+
+  if (!valid) {
+    res.status(401).json({ error: 'Code TOTP invalide.' });
+    return;
+  }
+
+  const token = generateToken({
+    userId: user.id,
+    organizationId: user.organization_id,
+    email: user.email,
+    role: user.role,
+  });
+
+  await createAuditEntry({
+    organizationId: user.organization_id,
+    actor: user.email,
+    action: 'auth.login_mfa',
+    targetType: 'user',
+    targetId: user.id,
+    targetLabel: user.full_name,
+    oldValue: {},
+    newValue: { last_login_at: new Date().toISOString() },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      organization_id: user.organization_id,
+      full_name: user.full_name,
+      email: user.email,
+      role: user.role,
+      last_login_at: user.last_login_at,
+      created_at: user.created_at,
+    },
+    organization: serializeOrg(user.organization),
+  });
+});
+
+// GET /api/auth/mfa/status — retourne { enabled: bool }
+router.get('/mfa/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = await (prisma.userApp.findUnique as any)({
+    where: { id: req.user!.userId },
+    select: { totp_enabled: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ error: 'Utilisateur introuvable.' });
+    return;
+  }
+
+  res.json({ enabled: user.totp_enabled ?? false });
+});
+
+// POST /api/auth/mfa/setup — génère un secret provisoire + QR code
+router.post('/mfa/setup', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = await (prisma.userApp.findUnique as any)({
+    where: { id: req.user!.userId },
+    select: { id: true, email: true, totp_enabled: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ error: 'Utilisateur introuvable.' });
+    return;
+  }
+
+  if (user.totp_enabled) {
+    res.status(400).json({ error: 'Le MFA est déjà activé. Désactivez-le d\'abord.' });
+    return;
+  }
+
+  const secret = genTotpSecret();
+  const uri = `otpauth://totp/Tracix:${encodeURIComponent(user.email)}?secret=${secret}&issuer=Tracix&algorithm=SHA1&digits=6&period=30`;
+  const qr = await QRCode.toDataURL(uri);
+
+  // Stocker le secret provisoire (totp_enabled reste false jusqu'à confirmation)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma.userApp.update as any)({
+    where: { id: user.id },
+    data: { totp_secret: secret },
+  });
+
+  res.json({ secret, qr_code: qr, uri });
+});
+
+// POST /api/auth/mfa/enable — confirme avec un code TOTP et active le MFA
+router.post('/mfa/enable', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { totp: totpCode } = req.body;
+
+  if (!totpCode) {
+    res.status(400).json({ error: 'Code TOTP requis.' });
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = await (prisma.userApp.findUnique as any)({
+    where: { id: req.user!.userId },
+    select: { id: true, email: true, full_name: true, organization_id: true, totp_secret: true, totp_enabled: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ error: 'Utilisateur introuvable.' });
+    return;
+  }
+
+  if (user.totp_enabled) {
+    res.status(400).json({ error: 'Le MFA est déjà activé.' });
+    return;
+  }
+
+  if (!user.totp_secret) {
+    res.status(400).json({ error: 'Aucun secret provisoire trouvé. Lancez d\'abord /mfa/setup.' });
+    return;
+  }
+
+  const result = await totp.verify(String(totpCode), { secret: user.totp_secret });
+  const valid = typeof result === 'object' ? result.valid : result;
+
+  if (!valid) {
+    res.status(401).json({ error: 'Code TOTP invalide.' });
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma.userApp.update as any)({
+    where: { id: user.id },
+    data: { totp_enabled: true },
+  });
+
+  await createAuditEntry({
+    organizationId: user.organization_id,
+    actor: req.user!.email,
+    action: 'auth.mfa_enabled',
+    targetType: 'user',
+    targetId: user.id,
+    targetLabel: user.full_name,
+    oldValue: { totp_enabled: false },
+    newValue: { totp_enabled: true },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ message: 'MFA activé avec succès.' });
+});
+
+// DELETE /api/auth/mfa — désactive le MFA avec confirmation TOTP
+router.delete('/mfa', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { totp: totpCode } = req.body;
+
+  if (!totpCode) {
+    res.status(400).json({ error: 'Code TOTP requis pour désactiver le MFA.' });
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = await (prisma.userApp.findUnique as any)({
+    where: { id: req.user!.userId },
+    select: { id: true, email: true, full_name: true, organization_id: true, totp_secret: true, totp_enabled: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ error: 'Utilisateur introuvable.' });
+    return;
+  }
+
+  if (!user.totp_enabled || !user.totp_secret) {
+    res.status(400).json({ error: 'Le MFA n\'est pas activé.' });
+    return;
+  }
+
+  const result = await totp.verify(String(totpCode), { secret: user.totp_secret });
+  const valid = typeof result === 'object' ? result.valid : result;
+
+  if (!valid) {
+    res.status(401).json({ error: 'Code TOTP invalide.' });
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma.userApp.update as any)({
+    where: { id: user.id },
+    data: { totp_enabled: false, totp_secret: null },
+  });
+
+  await createAuditEntry({
+    organizationId: user.organization_id,
+    actor: req.user!.email,
+    action: 'auth.mfa_disabled',
+    targetType: 'user',
+    targetId: user.id,
+    targetLabel: user.full_name,
+    oldValue: { totp_enabled: true },
+    newValue: { totp_enabled: false },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ message: 'MFA désactivé avec succès.' });
 });
 
 export default router;

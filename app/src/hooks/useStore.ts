@@ -98,17 +98,35 @@ export function useStore() {
   }, [loadAllData]);
 
   // ─── Login ───
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string): Promise<{ ok: true } | { mfa_required: true; user_id: string } | { ok: false; error?: string }> => {
     try {
-      const { token, user: u, organization: org } = await api.auth.login(email, password);
+      const data = await api.auth.login(email, password) as { token?: string; user?: ReturnType<typeof Object>; organization?: ReturnType<typeof Object>; mfa_required?: boolean; user_id?: string };
+      if (data.mfa_required && data.user_id) {
+        return { mfa_required: true, user_id: data.user_id };
+      }
+      const { token, user: u, organization: org } = data as { token: string; user: Parameters<typeof setUser>[0]; organization: Parameters<typeof setOrganization>[0] };
       setToken(token);
       setUser(u);
       setOrganization(org);
       setIsAuthenticated(true);
       await loadAllData();
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : undefined };
+    }
+  }, [loadAllData]);
+
+  const loginWithMfa = useCallback(async (userId: string, totp: string): Promise<{ ok: true } | { ok: false; error?: string }> => {
+    try {
+      const { token, user: u, organization: org } = await api.auth.loginMfa(userId, totp);
+      setToken(token);
+      setUser(u);
+      setOrganization(org);
+      setIsAuthenticated(true);
+      await loadAllData();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : undefined };
     }
   }, [loadAllData]);
 
@@ -365,6 +383,7 @@ export function useStore() {
     isAuthenticated,
     isLoading,
     login,
+    loginWithMfa,
     register,
     loginWithToken,
     logout,

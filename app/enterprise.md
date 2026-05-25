@@ -15,7 +15,7 @@ Ce document couvre la sécurité, la conformité, l'observabilité, la qualité,
 | T3 | Réutilisation d'un refresh révoqué | Token volé + replay | Détecté à `POST /auth/refresh` : `stored.revoked === true` → `updateMany revoked=true` + log |
 | T4 | Brute-force login | Bots, credential stuffing | `authLimiter` 20 req/15 min, verrouillage 15 min après 5 échecs, bcrypt coût 10 |
 | T5 | Takeover compte OAuth | Forgery de callback OAuth (CSRF) | State CSRF : valeur aléatoire 32 octets générée au redirect, stockée dans cookie HttpOnly `__oauth_state` (10 min, `SameSite=Lax`, `Path=/api/auth/oauth`), vérifiée par `crypto.timingSafeEqual` dans chaque callback Google/Microsoft/GitHub — toute divergence → rejet 401. CORS whitelist `FRONTEND_URL` pour les origines cross-site. |
-| T6 | Compromission clé JWT | Fuite env, rotation oubliée | Double clé `JWT_SECRET_CURRENT/PREVIOUS`, kid dans header, rotation sans interruption |
+| T6 | Compromission clé JWT | Fuite env, rotation oubliée | Double clé `JWT_SECRET_CURRENT/PREVIOUS`, `kid` dans header (`"kid": "current"` ou `"previous"`), rotation sans interruption — voir §5.3 |
 | T7 | IDOR multi-tenant | Accès ressource d'une autre org | Toutes les mutations : `findFirst({ id, organization_id: orgId })` avant action |
 | T8 | Compromission API key | Clé trcx_* exposée dans log/repo | SHA-256 haché en DB, préfixe seul visible après création, clé complète retournée une fois |
 | T9 | Injection de formules CSV | Données utilisateur exportées | Cellules commençant par `=+-@\t\r` préfixées `'` à l'export |
@@ -50,6 +50,7 @@ Ce document couvre la sécurité, la conformité, l'observabilité, la qualité,
 - Le frontend envoie `credentials: 'include'` sur toutes les requêtes ; le cookie est transmis automatiquement par le navigateur.
 - Politique recommandée : forcer re-authentification après 30j d'inactivité (implémentée via `purgeOldData()` — purge des refresh tokens expirés ou révoqués depuis > 30j)
 - Déconnexion : révoque TOUS les refresh tokens de l'utilisateur + efface le cookie (`Max-Age=0`)
+- Sessions concurrentes : pas de limite stricte par utilisateur. Chaque refresh token est individuel (IP + user-agent loggués à la création). La family revocation (T3) invalide toutes les sessions si une réutilisation suspecte est détectée. Politique recommandée si besoin de restriction : conserver max N tokens actifs par user (à implémenter dans `issueTokenPair`).
 
 **API Keys**
 - Rotation recommandée tous les 90 jours
@@ -73,11 +74,9 @@ Ce document couvre la sécurité, la conformité, l'observabilité, la qualité,
 | Signing secrets webhooks | `webhook_endpoints.signing_secret` | Admin org via API | Régénérer manuellement si exposé |
 | Clés API `trcx_*` | DB (hash SHA-256 uniquement) | Admin org | Tous les 90j recommandé |
 
-Les changements de rôles utilisateur sont systématiquement loggués dans `audit_trails` avec `action = 'user.role_change'`, `old_value.role` et `new_value.role`. La route `PATCH /api/organizations/members/:userId/role` est réservée aux rôles `admin` et `owner`.
-
 **Règle absolue** : aucun secret ne transite dans les logs applicatifs. Voir §5.2.
 
-**En production** : utiliser un secrets manager (AWS Secrets Manager, HashiCorp Vault, Doppler). Le code lit `process.env.*` — compatible sans modification.
+**En production (Railway)** : les secrets sont injectés comme variables d'environnement Railway (Settings → Variables). Aucun fichier `server/.env` n'est présent sur les instances de production. Compatible sans modification de code.
 
 ### 1.4 RBAC — Matrice des permissions (active)
 
@@ -107,6 +106,8 @@ Le middleware `requirePermission(key)` est câblé sur 8 fichiers de routes (`me
 | `organization.settings` | ✅ | ✅ | — | — | — | — |
 | `billing.manage` | ✅ | — | — | — | — | — |
 | `members.invite` | ✅ | ✅ | — | — | — | — |
+
+**Traçabilité des changements de rôle** : tout appel à `PATCH /api/organizations/members/:userId/role` écrit une entrée `audit_trails` avec `action = 'user.role_change'`, `old_value.role` et `new_value.role`. L'acceptation d'invitation (`invitation.accept`) logue également le rôle assigné. Conforme SOC 2 CC6.3.
 
 ### 1.5 Flow d'investigation de session compromise
 
@@ -198,21 +199,30 @@ La purge automatique est implémentée dans `server/src/services/cron.service.ts
 
 ### 2.3 Droit à l'oubli & suppression d'organisation
 
-**Suppression d'organisation (RGPD Art. 17) :**
+**Suppression d'organisation (RGPD Art. 17) — endpoint opérationnel :**
+
+`DELETE /api/organizations/me` (authentifié, rôle `admin` ou `owner`)
 
 ```
-1. Hard-delete de toutes les données liées (Prisma onDelete: Cascade sur toutes les relations)
-   → DELETE FROM organizations WHERE id = ':orgId' suffit grâce aux cascades
+Flux :
+1. Requête : DELETE /api/organizations/me  { "password": "..." }
+   → Confirmation du mot de passe obligatoire pour les comptes email/password
+   → JWT seul accepté pour les comptes OAuth
 
-2. Données non cascadées à traiter manuellement :
-   → audit_trails : anonymiser actor (remplacer email par '[supprimé]') plutôt que supprimer
-     (les logs d'audit ont une valeur légale indépendante de l'org)
-   → refresh_tokens : supprimés par cascade sur users → organization
+2. Avant suppression : entrée audit_trails action='gdpr.delete_request'
+   (horodatage, IP, email du demandeur)
 
-3. Délai légal : exécution dans les 30 jours suivant la demande (RGPD)
+3. Hard-delete : prisma.organization.delete — onDelete: Cascade couvre toutes les tables liées
+   (users, members, access_rights, alerts, refresh_tokens, audit_trails, etc.)
 
-4. Confirmation : email de confirmation au propriétaire + entrée audit super-admin
+4. Réponse : 200 { message: "Organisation et toutes ses données supprimées conformément à l'Art. 17 RGPD." }
 ```
+
+**Délai légal** : la suppression est immédiate (pas de délai de 30j en attente). Le délai RGPD s'applique à l'obligation de traitement côté support — si une demande arrive par email à `support@tracix.io`, l'admin dispose de 30j pour exécuter l'endpoint.
+
+**Données non cascadées** :
+- `audit_trails` : supprimés par cascade. Si le client souhaite conserver les logs à des fins légales indépendantes, les exporter avant la suppression (endpoint `GET /api/audit-trail` avec export CSV).
+- `refresh_tokens` : supprimés par cascade via `users → organization`.
 
 **Suppression d'un utilisateur individuel :**
 - `DELETE FROM users WHERE id = ':userId'` → cascade vers `refresh_tokens`, `password_reset_tokens`
@@ -413,8 +423,10 @@ describe('member lifecycle', () => {
 
 ### 4.3 Pipeline CI/CD
 
+Le pipeline est actif sur le repo (`/.github/workflows/ci.yml`). Il se déclenche sur chaque push et pull request vers `master` et `develop`. Toute PR doit passer les trois jobs pour être mergeable.
+
 ```yaml
-# Pipeline recommandé (GitHub Actions)
+# Pipeline actif (GitHub Actions) — .github/workflows/ci.yml
 
 on: [push, pull_request]
 
@@ -533,6 +545,8 @@ X-Content-Type-Options: nosniff
 Strict-Transport-Security: max-age=15552000; includeSubDomains
 ```
 
+**Exception `'unsafe-inline'` sur `styleSrc`** : requise par Tailwind/shadcn-ui (classes inline injectées à l'hydratation). Exception consciente et acceptée. Révision planifiée : Q4 2026 (migration vers CSS-in-JS statique ou nonce-based CSP).
+
 ### 5.2 Politique "no sensitive data in logs"
 
 **Ne jamais logger :**
@@ -585,6 +599,15 @@ Résultat : rotation complète sans déconnecter aucun utilisateur.
 ```
 
 **Fréquence recommandée** : tous les 90 jours, ou immédiatement sur incident.
+
+**Format des tokens en production** (`generateToken` dans `middleware/auth.ts`) :
+```json
+{
+  "header": { "alg": "HS256", "typ": "JWT", "kid": "current" },
+  "payload": { "userId": "user_xxx", "organizationId": "org_xxx", "email": "alice@acme.com", "role": "admin", "iat": 1710000000, "exp": 1710003600 }
+}
+```
+Pendant une rotation, les tokens signés avec l'ancienne clé ont `"kid": "current"` (valeur au moment de leur création) — `requireAuth` essaie `JWT_SECRET_CURRENT` puis `JWT_SECRET_PREVIOUS` sans inspecter le `kid`. Le `kid` sert à l'observabilité (distinguer les tokens pré/post-rotation dans les logs).
 
 ### 5.4 CSV Formula Escaping — Impact et documentation utilisateur
 

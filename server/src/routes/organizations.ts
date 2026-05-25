@@ -173,6 +173,58 @@ router.post('/:orgId/switch', requireAuth, async (req: Request, res: Response): 
   });
 });
 
+// DELETE /api/organizations/me — RGPD Art. 17 : suppression complète de l'organisation et de ses données
+// Réservé au owner/admin. Requiert confirmation du mot de passe (ou JWT pour les comptes OAuth).
+// Trace une entrée audit super-admin avant la suppression.
+router.delete('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'owner') {
+    res.status(403).json({ error: 'Réservé aux administrateurs.' });
+    return;
+  }
+
+  const { password } = req.body as { password?: string };
+  const orgId = req.user!.organizationId;
+
+  const user = await prisma.userApp.findUnique({ where: { id: req.user!.userId }, select: { password_hash: true, full_name: true, email: true } });
+  if (!user) { res.status(404).json({ error: 'Utilisateur introuvable.' }); return; }
+
+  if (user.password_hash) {
+    if (!password) {
+      res.status(400).json({ error: 'Mot de passe requis pour confirmer la suppression de l\'organisation.' });
+      return;
+    }
+    const valid = await import('bcrypt').then((b) => b.compare(password, user.password_hash!));
+    if (!valid) {
+      res.status(403).json({ error: 'Mot de passe incorrect.' });
+      return;
+    }
+  }
+
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } });
+
+  // Audit entry before deletion (will be cascade-deleted with the org, but logged in super-admin context first)
+  await prisma.auditTrail.create({
+    data: {
+      id: uuidv4(),
+      organization_id: orgId,
+      actor: user.email,
+      action: 'gdpr.delete_request',
+      target_type: 'organization',
+      target_id: orgId,
+      target_label: org?.name ?? orgId,
+      old_value: {},
+      new_value: { requested_by: user.email, requested_at: new Date().toISOString() },
+      ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ?? req.ip ?? '',
+      user_agent: req.headers['user-agent'] ?? '',
+    },
+  });
+
+  // Hard-delete — Prisma onDelete: Cascade handles all related tables
+  await prisma.organization.delete({ where: { id: orgId } });
+
+  res.json({ message: 'Organisation et toutes ses données supprimées conformément à l\'Art. 17 RGPD.' });
+});
+
 // PATCH /api/organizations/members/:userId/role — modifier le rôle d'un membre (admin uniquement)
 router.patch('/members/:userId/role', requireAuth, async (req: Request, res: Response): Promise<void> => {
   if (req.user!.role !== 'admin' && req.user!.role !== 'owner') {

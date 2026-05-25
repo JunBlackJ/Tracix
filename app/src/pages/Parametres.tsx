@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   User, Building2, Users, Link2, Shield, Save, Bell,
   AlertTriangle, CheckCircle2, Lock, Smartphone, Tag,
@@ -33,7 +34,12 @@ interface ParametresProps {
 type Section = 'profil' | 'organisation' | 'plan' | 'modules' | 'custom-modules' | 'membres' | 'categories' | 'sso' | 'integrations' | 'securite';
 
 export function Parametres({ user, organization, categories, customModules, onCategoryAdded, onCategoryRemoved, onOrganizationUpdated, onCustomModuleCreated, onCustomModuleRemoved, onThresholdSaved }: ParametresProps) {
-  const [section, setSection] = useState<Section>('profil');
+  const [searchParams] = useSearchParams();
+  const [section, setSection] = useState<Section>(() => {
+    const s = searchParams.get('section');
+    const valid: Section[] = ['profil', 'organisation', 'plan', 'modules', 'custom-modules', 'membres', 'categories', 'sso', 'integrations', 'securite'];
+    return (valid.includes(s as Section) ? s : 'profil') as Section;
+  });
 
   const sections: { id: Section; label: string; icon: React.ElementType; badge?: string }[] = [
     { id: 'profil', label: 'Profil', icon: User },

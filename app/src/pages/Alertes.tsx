@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Search, X, Sparkles, Loader2, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import type { Alert, Platform, Member, System, NetworkFlow, Subscription } from '@/types';
 import { api } from '@/lib/api';
@@ -473,9 +474,10 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+          <Link to="/parametres?section=organisation"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }}>
             Configurer les règles
-          </button>
+          </Link>
           {unresolvedIds.length > 0 && (
             <button onClick={() => onResolveAll(unresolvedIds)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>

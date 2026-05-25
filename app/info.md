@@ -82,7 +82,7 @@ Tracix est une plateforme SaaS de gouvernance des accès IT (IAM / PAM) permetta
 
 ---
 
-## Base de données — Schéma Prisma (22 tables)
+## Base de données — Schéma Prisma (23 tables)
 
 | Table | Description |
 |---|---|

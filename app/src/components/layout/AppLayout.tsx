@@ -368,6 +368,17 @@ export function AppLayout({
               style={{ background: '#534AB7/10', color: '#534AB7', backgroundColor: 'hsl(246 43% 57% / 0.1)' }}>
               {organization.plan}
             </span>
+            <Link to="/alertes"
+              className="relative p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              title="Alertes">
+              <Bell className="w-4 h-4 text-gray-500" />
+              {unresolvedAlerts > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full text-[9px] font-bold text-white leading-none"
+                  style={{ background: 'oklch(55% 0.22 25)' }}>
+                  {unresolvedAlerts > 99 ? '99+' : unresolvedAlerts}
+                </span>
+              )}
+            </Link>
             <Link to="/parametres"
               className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
               title="Paramètres">

@@ -144,11 +144,12 @@ function CreateCampaignModal({ platforms, members, onClose, onCreated }: {
 }
 
 // ─── Pending decisions table ───
-function PendingDecisionsTable({ items, members, platforms, onDecide }: {
+function PendingDecisionsTable({ items, members, platforms, onDecide, onBulk }: {
   items: ReviewItem[];
   members: Member[];
   platforms: Platform[];
   onDecide: (item: ReviewItem, decision: 'confirmed' | 'revoked') => void;
+  onBulk?: (campaignId: string, decision: 'confirmed' | 'revoked') => void;
 }) {
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const platformById = useMemo(() => new Map(platforms.map((p) => [p.id, p])), [platforms]);
@@ -160,6 +161,9 @@ function PendingDecisionsTable({ items, members, platforms, onDecide }: {
     req:   { variant: 'low',  label: 'Faible' },
   };
 
+  // Group pending items by campaign for bulk actions
+  const campaignIds = onBulk ? [...new Set(items.map((i) => i.campaign_id))] : [];
+
   if (items.length === 0) {
     return (
       <div className="text-center py-10 text-[13px] text-gray-400">
@@ -169,6 +173,24 @@ function PendingDecisionsTable({ items, members, platforms, onDecide }: {
   }
 
   return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {onBulk && campaignIds.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
+          <span style={{ fontSize: '11.5px', color: 'oklch(52% 0.012 260)' }}>{items.length} décision{items.length > 1 ? 's' : ''} en attente — Actions groupées :</span>
+          {campaignIds.map((cId) => (
+            <div key={cId} style={{ display: 'flex', gap: '6px' }}>
+              <button onClick={() => onBulk(cId, 'confirmed')}
+                style={{ background: 'oklch(62% 0.16 155 / 0.12)', color: 'oklch(62% 0.16 155)', border: '1px solid oklch(62% 0.16 155 / 0.3)', fontSize: '11.5px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>
+                Tout maintenir
+              </button>
+              <button onClick={() => onBulk(cId, 'revoked')}
+                style={{ background: 'transparent', color: 'oklch(55% 0.22 25)', border: '1px solid oklch(55% 0.22 25 / 0.3)', fontSize: '11.5px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>
+                Tout révoquer
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     <div style={{ border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', overflow: 'hidden', background: 'oklch(100% 0 0)' }}>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -231,11 +253,12 @@ function PendingDecisionsTable({ items, members, platforms, onDecide }: {
         </table>
       </div>
     </div>
+    </div>
   );
 }
 
 // ─── Campaign card ───
-function CampaignCard({ campaign, onView }: { campaign: ReviewCampaign; onView: () => void }) {
+function CampaignCard({ campaign, onView, onComplete }: { campaign: ReviewCampaign; onView: () => void; onComplete?: () => void }) {
   const progress = campaign.totalItems > 0 ? Math.round((campaign.completedItems / campaign.totalItems) * 100) : 0;
   const isLate = campaign.due_date && campaign.status === 'active' && new Date(campaign.due_date) < new Date();
   const isDone = campaign.status === 'completed';
@@ -310,12 +333,22 @@ function CampaignCard({ campaign, onView }: { campaign: ReviewCampaign; onView: 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
           {deadlineText && <div style={{ fontSize: '11.5px', fontWeight: 600 }} className={deadlineClass}>{deadlineText}</div>}
         </div>
-        <button onClick={onView}
-          style={{ background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', padding: '5px 10px', borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, cursor: 'pointer', transition: 'background 0.12s, color 0.12s, border-color 0.12s', whiteSpace: 'nowrap' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.color = 'oklch(42% 0.18 280)'; e.currentTarget.style.borderColor = 'oklch(42% 0.18 280)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'oklch(52% 0.012 260)'; e.currentTarget.style.borderColor = 'oklch(90% 0.006 260)'; }}>
-          Voir les décisions
-        </button>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button onClick={onView}
+            style={{ background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', padding: '5px 10px', borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, cursor: 'pointer', transition: 'background 0.12s, color 0.12s, border-color 0.12s', whiteSpace: 'nowrap' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.color = 'oklch(42% 0.18 280)'; e.currentTarget.style.borderColor = 'oklch(42% 0.18 280)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'oklch(52% 0.012 260)'; e.currentTarget.style.borderColor = 'oklch(90% 0.006 260)'; }}>
+            Voir les décisions
+          </button>
+          {!isDone && onComplete && (
+            <button onClick={onComplete}
+              style={{ background: 'transparent', color: 'oklch(62% 0.16 155)', border: '1px solid oklch(62% 0.16 155 / 0.4)', padding: '5px 10px', borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, cursor: 'pointer', transition: 'background 0.12s', whiteSpace: 'nowrap' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'oklch(62% 0.16 155 / 0.1)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+              Clôturer
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -352,6 +385,35 @@ export function Revues({ members, platforms }: RevuesProps) {
       toast.success(decision === 'confirmed' ? 'Droit maintenu' : 'Droit révoqué');
     } catch {
       toast.error('Erreur lors de la décision');
+    }
+  };
+
+  const handleBulk = async (campaignId: string, decision: 'confirmed' | 'revoked') => {
+    const itemIds = allItems.filter((i) => i.campaign_id === campaignId && i.decision === 'pending').map((i) => i.id);
+    if (itemIds.length === 0) return;
+    try {
+      const result = await api.reviews.bulk(campaignId, { itemIds, decision });
+      // Refresh items for this campaign
+      const updated = await api.reviews.get(campaignId);
+      setAllItems((prev) => {
+        const others = prev.filter((i) => i.campaign_id !== campaignId);
+        return [...others, ...updated.items];
+      });
+      setCampaigns((prev) => prev.map((c) => c.id === campaignId ? { ...c, completedItems: c.completedItems + result.processed, pendingItems: result.remaining } : c));
+      toast.success(`${result.processed} décision${result.processed > 1 ? 's' : ''} enregistrée${result.processed > 1 ? 's' : ''}`);
+    } catch {
+      toast.error('Erreur lors du traitement groupé');
+    }
+  };
+
+  const handleComplete = async (campaignId: string) => {
+    try {
+      await api.reviews.complete(campaignId);
+      setCampaigns((prev) => prev.map((c) => c.id === campaignId ? { ...c, status: 'completed', completed_at: new Date().toISOString() } : c));
+      setAllItems((prev) => prev.filter((i) => i.campaign_id !== campaignId));
+      toast.success('Campagne clôturée');
+    } catch {
+      toast.error('Erreur lors de la clôture');
     }
   };
 
@@ -455,7 +517,10 @@ export function Revues({ members, platforms }: RevuesProps) {
                   {/* 3-column campaign grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px' }}>
                     {campaigns.map((c) => (
-                      <CampaignCard key={c.id} campaign={c} onView={() => {}} />
+                      <CampaignCard key={c.id} campaign={c}
+                        onView={() => setTab('my-decisions')}
+                        onComplete={c.status === 'active' ? () => handleComplete(c.id) : undefined}
+                      />
                     ))}
                   </div>
 
@@ -470,6 +535,7 @@ export function Revues({ members, platforms }: RevuesProps) {
                       members={members}
                       platforms={platforms}
                       onDecide={handleDecide}
+                      onBulk={handleBulk}
                     />
                   </div>
                 </>
@@ -532,6 +598,7 @@ export function Revues({ members, platforms }: RevuesProps) {
               members={members}
               platforms={platforms}
               onDecide={handleDecide}
+              onBulk={handleBulk}
             />
           )}
         </div>

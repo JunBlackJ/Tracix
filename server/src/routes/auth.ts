@@ -840,7 +840,7 @@ router.post('/mfa/setup', requireAuth, async (req: Request, res: Response): Prom
     data: { totp_secret: secret },
   });
 
-  res.json({ secret, qr_code: qr, uri });
+  res.json({ secret, qr, uri });
 });
 
 // POST /api/auth/mfa/enable — confirme avec un code TOTP et active le MFA

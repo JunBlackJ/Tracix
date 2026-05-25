@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
 import { recomputeAllRiskScores } from '../services/risk.service';
@@ -19,7 +20,7 @@ const AnalyzeSchema = z.object({
   rawRows: z.array(z.array(z.string())).min(1).max(50),
 });
 
-router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
+router.post('/analyze', requirePermission('import.write'), async (req: Request, res: Response): Promise<void> => {
   const awsRegion = process.env.AWS_REGION;
   const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
@@ -181,7 +182,7 @@ const BatchSchema = z.object({
 });
 
 // POST /api/import/batch — import members + platforms + access rights in one transaction
-router.post('/batch', async (req: Request, res: Response): Promise<void> => {
+router.post('/batch', requirePermission('import.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { members: inMembers, platforms: inPlatforms, access: inAccess } = BatchSchema.parse(req.body);
 
@@ -350,7 +351,7 @@ const BatchPlatformsSchema = z.object({
   })).max(500),
 });
 
-router.post('/batch-platforms', async (req: Request, res: Response): Promise<void> => {
+router.post('/batch-platforms', requirePermission('import.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { platforms: inPlatforms } = BatchPlatformsSchema.parse(req.body);
 
@@ -414,7 +415,7 @@ const BatchSubscriptionsSchema = z.object({
   })).max(500),
 });
 
-router.post('/batch-subscriptions', async (req: Request, res: Response): Promise<void> => {
+router.post('/batch-subscriptions', requirePermission('import.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { subscriptions: inSubs } = BatchSubscriptionsSchema.parse(req.body);
 
@@ -468,7 +469,7 @@ const BatchMembersSchema = z.object({
   })).max(500),
 });
 
-router.post('/batch-members', async (req: Request, res: Response): Promise<void> => {
+router.post('/batch-members', requirePermission('import.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { members: inMembers } = BatchMembersSchema.parse(req.body);
 
@@ -552,7 +553,7 @@ const BatchSystemsSchema = z.object({
   })).max(500),
 });
 
-router.post('/batch-systems', async (req: Request, res: Response): Promise<void> => {
+router.post('/batch-systems', requirePermission('import.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { systems: inSystems } = BatchSystemsSchema.parse(req.body);
 
@@ -598,7 +599,7 @@ const BatchNetworkFlowsSchema = z.object({
   })).max(500),
 });
 
-router.post('/batch-network-flows', async (req: Request, res: Response): Promise<void> => {
+router.post('/batch-network-flows', requirePermission('import.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { flows: inFlows } = BatchNetworkFlowsSchema.parse(req.body);
 

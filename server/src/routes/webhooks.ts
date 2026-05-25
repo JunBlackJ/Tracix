@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 
 const router = Router();
@@ -18,7 +19,7 @@ const WebhookSchema = z.object({
 });
 
 // GET /api/webhooks
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('webhooks.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const webhooks = await (prisma as any).webhookEndpoint.findMany({
     where: { organization_id: orgId },
@@ -28,7 +29,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/webhooks
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requirePermission('webhooks.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const body = WebhookSchema.parse(req.body);
 
@@ -64,7 +65,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // PUT /api/webhooks/:id
-router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+router.put('/:id', requirePermission('webhooks.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await (prisma as any).webhookEndpoint.findFirst({
@@ -99,7 +100,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // DELETE /api/webhooks/:id
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requirePermission('webhooks.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await (prisma as any).webhookEndpoint.findFirst({
@@ -129,7 +130,7 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/webhooks/:id/test
-router.post('/:id/test', async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/test', requirePermission('webhooks.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const webhook = await (prisma as any).webhookEndpoint.findFirst({

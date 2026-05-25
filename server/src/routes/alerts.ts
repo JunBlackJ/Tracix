@@ -3,6 +3,7 @@ import { z } from 'zod';
 import AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { generateAlerts } from '../services/alert.service';
 
@@ -28,7 +29,7 @@ const ALERT_TYPE_LABELS: Record<string, string> = {
 };
 
 // GET /api/alerts
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('alerts.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { is_resolved, severity, type, source_module } = req.query;
 
@@ -47,7 +48,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/alerts/:id
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', requirePermission('alerts.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const alert = await prisma.alert.findFirst({
     where: { id: req.params.id, organization_id: orgId },
@@ -62,7 +63,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // PATCH /api/alerts/resolve-all  — must be before /:id/resolve to avoid :id matching "resolve-all"
-router.patch('/resolve-all', async (req: Request, res: Response): Promise<void> => {
+router.patch('/resolve-all', requirePermission('alerts.resolve'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const body = z.object({ ids: z.array(z.string()) }).parse(req.body);
 
@@ -110,7 +111,7 @@ router.patch('/resolve-all', async (req: Request, res: Response): Promise<void> 
 });
 
 // PATCH /api/alerts/:id/resolve
-router.patch('/:id/resolve', async (req: Request, res: Response): Promise<void> => {
+router.patch('/:id/resolve', requirePermission('alerts.resolve'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await prisma.alert.findFirst({
@@ -148,7 +149,7 @@ router.patch('/:id/resolve', async (req: Request, res: Response): Promise<void> 
 });
 
 // POST /api/alerts/:id/advice — AI advice for an alert
-router.post('/:id/advice', async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/advice', requirePermission('alerts.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const alert = await prisma.alert.findFirst({
@@ -214,7 +215,7 @@ Donne un conseil pratique, court (3-5 phrases max), en français, pour résoudre
 });
 
 // POST /api/alerts/generate — trigger alert engine
-router.post('/generate', async (req: Request, res: Response): Promise<void> => {
+router.post('/generate', requirePermission('alerts.generate'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   await generateAlerts(orgId);
   const alerts = await prisma.alert.findMany({

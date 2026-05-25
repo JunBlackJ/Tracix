@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 
 const router = Router();
@@ -243,7 +244,7 @@ async function runSync(connectorId: string, orgId: string, provider: string, con
 }
 
 // GET /api/connectors
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('connectors.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const connectors = await (prisma as any).connector.findMany({
     where: { organization_id: orgId },
@@ -253,7 +254,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/connectors — upsert on organization_id + provider
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requirePermission('connectors.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const body = ConnectorSchema.parse(req.body);
 
@@ -291,7 +292,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // DELETE /api/connectors/:id
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requirePermission('connectors.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await (prisma as any).connector.findFirst({
@@ -321,7 +322,7 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/connectors/:id/sync — fire-and-forget
-router.post('/:id/sync', async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/sync', requirePermission('connectors.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const connector = await (prisma as any).connector.findFirst({

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { updateMemberRiskScore } from '../services/risk.service';
 
@@ -26,7 +27,7 @@ const UpdateLevelSchema = z.object({
 });
 
 // GET /api/access-rights
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('access_rights.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { member_id, platform_id, level } = req.query;
 
@@ -48,7 +49,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/access-rights/:id
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', requirePermission('access_rights.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const ar = await prisma.accessRight.findFirst({
     where: { id: req.params.id, organization_id: orgId },
@@ -67,7 +68,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/access-rights
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requirePermission('access_rights.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const body = AccessRightSchema.parse(req.body);
 
@@ -116,7 +117,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // PUT /api/access-rights/:id
-router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+router.put('/:id', requirePermission('access_rights.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await prisma.accessRight.findFirst({
@@ -157,7 +158,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // PUT /api/access-rights/:id/level — update access level with audit
-router.put('/:id/level', async (req: Request, res: Response): Promise<void> => {
+router.put('/:id/level', requirePermission('access_rights.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const body = UpdateLevelSchema.parse(req.body);
 
@@ -203,7 +204,7 @@ router.put('/:id/level', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/access-rights/:id/revoke — revoke access
-router.post('/:id/revoke', async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/revoke', requirePermission('access_rights.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { comment } = z.object({ comment: z.string().optional() }).parse(req.body);
 
@@ -249,7 +250,7 @@ router.post('/:id/revoke', async (req: Request, res: Response): Promise<void> =>
 });
 
 // DELETE /api/access-rights/:id
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requirePermission('access_rights.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await prisma.accessRight.findFirst({

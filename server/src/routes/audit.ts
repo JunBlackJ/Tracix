@@ -1,12 +1,13 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 
 const router = Router();
 router.use(requireAuth);
 
 // GET /api/audit-trail
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('audit.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { actor, action, target_type, target_id, page, limit } = req.query;
 
@@ -41,7 +42,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/audit-trail/:id
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', requirePermission('audit.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const entry = await prisma.auditTrail.findFirst({
     where: { id: req.params.id, organization_id: orgId },

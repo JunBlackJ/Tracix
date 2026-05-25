@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 
 // ─── Extend Express Request for API key auth ───
@@ -26,7 +27,7 @@ const ApiKeyCreateSchema = z.object({
 });
 
 // GET /api/keys
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('api_keys.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const keys = await (prisma as any).apiKey.findMany({
     where: { organization_id: orgId, revoked: false },
@@ -46,7 +47,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/keys — creates and returns full key ONCE
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requirePermission('api_keys.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const body = ApiKeyCreateSchema.parse(req.body);
 
@@ -84,7 +85,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // DELETE /api/keys/:id — revoke
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requirePermission('api_keys.manage'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await (prisma as any).apiKey.findFirst({

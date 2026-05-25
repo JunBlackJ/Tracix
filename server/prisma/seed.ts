@@ -4,6 +4,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
 
 const prisma = new PrismaClient();
 
@@ -406,6 +407,65 @@ async function main() {
     ],
   });
   console.log('✓ Audit Trail: 8 entries created');
+
+  // ─── RBAC seed ───
+  const PERMISSIONS_DEF: { key: string; description: string }[] = [
+    { key: 'members.read',        description: 'Lire la liste des membres' },
+    { key: 'members.write',       description: 'Créer / modifier / supprimer des membres' },
+    { key: 'platforms.read',      description: 'Lire les plateformes' },
+    { key: 'platforms.write',     description: 'Créer / modifier / supprimer des plateformes' },
+    { key: 'access_rights.read',  description: 'Lire les habilitations' },
+    { key: 'access_rights.write', description: 'Créer / modifier / révoquer des habilitations' },
+    { key: 'alerts.read',         description: 'Lire les alertes' },
+    { key: 'alerts.resolve',      description: 'Résoudre des alertes' },
+    { key: 'alerts.generate',     description: "Déclencher une génération d'alertes" },
+    { key: 'audit.read',          description: "Lire le journal d'audit" },
+    { key: 'reports.export',      description: 'Exporter des rapports' },
+    { key: 'settings.write',      description: "Modifier les paramètres de l'organisation" },
+    { key: 'connectors.manage',   description: 'Gérer les connecteurs (sync identités)' },
+    { key: 'webhooks.manage',     description: 'Gérer les webhooks' },
+    { key: 'api_keys.manage',     description: 'Créer / révoquer des clés API' },
+    { key: 'reviews.manage',      description: "Créer et conduire des campagnes de revue" },
+    { key: 'import.write',        description: 'Importer des données en masse' },
+    { key: 'subscriptions.write', description: 'Créer / modifier / supprimer des abonnements' },
+  ];
+
+  const ALL_PERMS = PERMISSIONS_DEF.map((p) => p.key);
+
+  const ROLES_DEF: { name: string; description: string; permissions: string[] }[] = [
+    { name: 'owner',            description: 'Propriétaire — accès total',                            permissions: ALL_PERMS },
+    { name: 'admin',            description: 'Administrateur — accès total',                          permissions: ALL_PERMS },
+    { name: 'security_manager', description: 'Responsable sécurité — gestion des accès et alertes',   permissions: ['members.read','members.write','platforms.read','access_rights.read','access_rights.write','alerts.read','alerts.resolve','alerts.generate','audit.read','reports.export','import.write'] },
+    { name: 'reviewer',         description: "Relecteur — conduit des campagnes de revue d'accès",    permissions: ['members.read','platforms.read','access_rights.read','alerts.read','alerts.resolve','audit.read','reviews.manage'] },
+    { name: 'auditor',          description: 'Auditeur — lecture seule + export',                      permissions: ['members.read','platforms.read','access_rights.read','alerts.read','audit.read','reports.export'] },
+    { name: 'editor',           description: 'Éditeur — lecture + écriture standard',                 permissions: ['members.read','members.write','platforms.read','platforms.write','access_rights.read','access_rights.write','subscriptions.write','alerts.read','alerts.resolve','audit.read','reviews.manage','import.write'] },
+    { name: 'viewer',           description: 'Lecteur — accès en lecture seule',                      permissions: ['members.read','platforms.read','access_rights.read','alerts.read','audit.read','reports.export'] },
+  ];
+
+  for (const perm of PERMISSIONS_DEF) {
+    await (prisma as any).permission.upsert({
+      where: { key: perm.key },
+      update: { description: perm.description },
+      create: { id: uuidv4(), ...perm },
+    });
+  }
+
+  const permRows: { id: string; key: string }[] = await (prisma as any).permission.findMany({ select: { id: true, key: true } });
+  const permMap = new Map(permRows.map((p: { id: string; key: string }) => [p.key, p.id]));
+
+  for (const roleDef of ROLES_DEF) {
+    const roleRow = await (prisma as any).role.upsert({
+      where: { name: roleDef.name },
+      update: { description: roleDef.description },
+      create: { id: uuidv4(), name: roleDef.name, description: roleDef.description },
+    });
+    await (prisma as any).rolePermission.deleteMany({ where: { role_id: roleRow.id } });
+    for (const permKey of roleDef.permissions) {
+      const permId = permMap.get(permKey);
+      if (permId) await (prisma as any).rolePermission.create({ data: { role_id: roleRow.id, permission_id: permId } });
+    }
+  }
+  console.log(`✓ RBAC: ${ROLES_DEF.length} roles, ${PERMISSIONS_DEF.length} permissions seeded`);
 
   console.log('\n✅ Seed complete!');
   console.log('   Login: colombe@smartwave.io / demo1234');

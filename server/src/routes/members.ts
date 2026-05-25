@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { updateMemberRiskScore, recomputeAllRiskScores } from '../services/risk.service';
 import { getLimits, checkLimit } from '../services/plan.service';
@@ -23,7 +24,7 @@ const MemberSchema = z.object({
 });
 
 // GET /api/members
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('members.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { search, status, team, account_type } = req.query;
 
@@ -49,7 +50,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/members/:id
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', requirePermission('members.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const member = await prisma.member.findFirst({
     where: { id: req.params.id, organization_id: orgId },
@@ -69,7 +70,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/members/recompute-all — recompute risk scores for all members in org
-router.post('/recompute-all', async (req: Request, res: Response): Promise<void> => {
+router.post('/recompute-all', requirePermission('members.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   await recomputeAllRiskScores(orgId);
   const members = await prisma.member.findMany({
@@ -80,7 +81,7 @@ router.post('/recompute-all', async (req: Request, res: Response): Promise<void>
 });
 
 // GET /api/members/:id/risk
-router.get('/:id/risk', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/risk', requirePermission('members.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const member = await prisma.member.findFirst({
     where: { id: req.params.id, organization_id: orgId },
@@ -98,7 +99,7 @@ router.get('/:id/risk', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/members
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requirePermission('members.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const body = MemberSchema.parse(req.body);
 
@@ -140,7 +141,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // PUT /api/members/:id
-router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+router.put('/:id', requirePermission('members.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await prisma.member.findFirst({
@@ -178,7 +179,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/members/:id/offboard — déclencher l'offboarding manuellement
-router.post('/:id/offboard', async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/offboard', requirePermission('members.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const member = await prisma.member.findFirst({
@@ -223,7 +224,7 @@ router.post('/:id/offboard', async (req: Request, res: Response): Promise<void> 
 });
 
 // DELETE /api/members/:id
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requirePermission('members.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await prisma.member.findFirst({

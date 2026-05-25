@@ -66,12 +66,15 @@ const MAX_ATTEMPTS = 5;         // tentatives avant verrouillage
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 // ─── Helper: issue access token + refresh token pair ───
+// Writes the refresh token into an HttpOnly cookie (path=/api/auth) and returns
+// only the short-lived access token for the JSON response body.
 async function issueTokenPair(
   userId: string,
   organizationId: string,
   email: string,
   role: string,
   req?: Request,
+  res?: Response,
 ) {
   const token = generateToken({ userId, organizationId, email, role });
   const { raw, hash, expiresAt } = await generateRefreshToken(userId);
@@ -86,7 +89,25 @@ async function issueTokenPair(
       ip_address: req ? getClientIp(req) : '',
     },
   });
+  if (res) setRefreshCookie(res, raw, expiresAt);
   return { token, refreshToken: raw, refreshExpiresAt: expiresAt };
+}
+
+const REFRESH_COOKIE = '__rt';
+const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function setRefreshCookie(res: Response, token: string, expiresAt: Date): void {
+  res.cookie(REFRESH_COOKIE, token, {
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: 'strict',
+    expires: expiresAt,
+    path: '/api/auth',
+  });
+}
+
+function clearRefreshCookie(res: Response): void {
+  res.clearCookie(REFRESH_COOKIE, { httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'strict', path: '/api/auth' });
 }
 
 const PLATFORM_NAMES: Record<string, { name: string; category: string; auth_method: string }> = {
@@ -169,8 +190,8 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
     return;
   }
 
-  const { token, refreshToken, refreshExpiresAt } = await issueTokenPair(
-    user.id, user.organization_id, user.email, user.role, req
+  const { token } = await issueTokenPair(
+    user.id, user.organization_id, user.email, user.role, req, res
   );
 
   await createAuditEntry({
@@ -188,8 +209,6 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
 
   res.json({
     token,
-    refreshToken,
-    refreshExpiresAt,
     user: {
       id: user.id,
       organization_id: user.organization_id,
@@ -236,8 +255,8 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
     include: { organization: true },
   });
 
-  const { token, refreshToken, refreshExpiresAt } = await issueTokenPair(
-    user.id, user.organization_id, user.email, user.role, req
+  const { token } = await issueTokenPair(
+    user.id, user.organization_id, user.email, user.role, req, res
   );
 
   await createAuditEntry({
@@ -255,8 +274,6 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
 
   res.status(201).json({
     token,
-    refreshToken,
-    refreshExpiresAt,
     user: {
       id: user.id,
       organization_id: user.organization_id,
@@ -293,12 +310,15 @@ router.post('/logout', requireAuth, async (req: Request, res: Response): Promise
       userAgent: req.headers['user-agent'] ?? '',
     });
   }
+  clearRefreshCookie(res);
   res.json({ message: 'Logged out successfully' });
 });
 
 // POST /api/auth/refresh — rotation de refresh token
+// Reads the refresh token from the HttpOnly cookie (__rt). Falls back to req.body.refreshToken
+// for backward compatibility during the transition period.
 router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
-  const { refreshToken: rawToken } = req.body;
+  const rawToken: unknown = req.cookies?.[REFRESH_COOKIE] ?? req.body?.refreshToken;
   if (!rawToken || typeof rawToken !== 'string') {
     res.status(400).json({ error: 'refreshToken requis' });
     return;
@@ -349,14 +369,12 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
     data: { revoked: true },
   });
 
-  const { token, refreshToken: newRefreshToken, refreshExpiresAt } = await issueTokenPair(
-    user.id, user.organization_id, user.email, user.role, req
+  const { token } = await issueTokenPair(
+    user.id, user.organization_id, user.email, user.role, req, res
   );
 
   res.json({
     token,
-    refreshToken: newRefreshToken,
-    refreshExpiresAt,
     user: {
       id: user.id,
       organization_id: user.organization_id,
@@ -669,16 +687,18 @@ async function handleOAuthUser(
     });
   }
 
-  const { token, refreshToken } = await issueTokenPair(
+  const { token } = await issueTokenPair(
     user.id,
     user.organization_id,
     user.email,
     user.role,
+    req,
+    res,
   );
 
-  // Redirect to frontend callback with both tokens
+  // Redirect to frontend callback — refresh token is in the HttpOnly cookie, only access token in URL
   res.redirect(
-    `${FRONTEND}/oauth/callback?token=${encodeURIComponent(token)}&refreshToken=${encodeURIComponent(refreshToken)}`,
+    `${FRONTEND}/oauth/callback?token=${encodeURIComponent(token)}`,
   );
 }
 
@@ -915,8 +935,8 @@ router.post('/login/mfa', authLimiter, async (req: Request, res: Response): Prom
     return;
   }
 
-  const { token, refreshToken, refreshExpiresAt } = await issueTokenPair(
-    user.id, user.organization_id, user.email, user.role, req
+  const { token } = await issueTokenPair(
+    user.id, user.organization_id, user.email, user.role, req, res
   );
 
   await createAuditEntry({
@@ -934,8 +954,6 @@ router.post('/login/mfa', authLimiter, async (req: Request, res: Response): Prom
 
   res.json({
     token,
-    refreshToken,
-    refreshExpiresAt,
     user: {
       id: user.id,
       organization_id: user.organization_id,

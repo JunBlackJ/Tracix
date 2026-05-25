@@ -11,9 +11,9 @@ import type {
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
 const TOKEN_KEY = 'tracix_token';
-const REFRESH_TOKEN_KEY = 'tracix_refresh_token';
 
-// ─── Token helpers ───
+// ─── Access token helpers (localStorage) ───
+// The refresh token is stored in an HttpOnly cookie set by the server — never touched by JS.
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -26,23 +26,11 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
-}
-
-export function setRefreshToken(t: string): void {
-  localStorage.setItem(REFRESH_TOKEN_KEY, t);
-}
-
-export function clearRefreshToken(): void {
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-}
-
-/** Store both access token and refresh token together */
-export function setTokenPair(token: string, refreshToken: string): void {
-  setToken(token);
-  setRefreshToken(refreshToken);
-}
+// Keep these as no-ops for any call sites that still reference them (safe to remove later)
+export function getRefreshToken(): string | null { return null; }
+export function setRefreshToken(_t: string): void { /* cookie-managed */ }
+export function clearRefreshToken(): void { /* cleared by server on logout */ }
+export function setTokenPair(token: string, _refreshToken?: string): void { setToken(token); }
 
 // ─── Risk snapshot ───
 export interface RiskSnapshot {
@@ -98,6 +86,7 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
     response = await fetch(`${BASE_URL}${path}`, {
       ...options,
       headers,
+      credentials: 'include',
       signal: controller.signal,
     });
   } catch (err) {
@@ -109,20 +98,16 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
     clearTimeout(timeoutId);
   }
 
-  // Auto-refresh on 401: attempt once with a new access token
+  // Auto-refresh on 401: the HttpOnly cookie is sent automatically by the browser.
+  // Just call /auth/refresh — if it succeeds, update the access token and retry once.
   if (response.status === 401 && !isRetry) {
-    const storedRefreshToken = getRefreshToken();
-    if (storedRefreshToken) {
-      try {
-        const refreshData = await api.auth.refresh();
-        setTokenPair(refreshData.token, refreshData.refreshToken);
-        // Retry the original request once with the new token
-        return request<T>(path, options, true);
-      } catch {
-        clearToken();
-        clearRefreshToken();
-        throw new Error('Session expirée. Veuillez vous reconnecter.');
-      }
+    try {
+      const refreshData = await api.auth.refresh();
+      setToken(refreshData.token);
+      return request<T>(path, options, true);
+    } catch {
+      clearToken();
+      throw new Error('Session expirée. Veuillez vous reconnecter.');
     }
   }
 
@@ -197,13 +182,13 @@ export interface ApiKeyCreated extends ApiKeyInfo {
 // ─── API object ───
 export const api = {
   auth: {
-    login(email: string, password: string): Promise<{ token: string; refreshToken: string; user: UserApp; organization: Organization }> {
+    login(email: string, password: string): Promise<{ token: string; user: UserApp; organization: Organization }> {
       return request('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
     },
-    register(data: { full_name: string; email: string; password: string; organization_name: string }): Promise<{ token: string; refreshToken: string; user: UserApp; organization: Organization }> {
+    register(data: { full_name: string; email: string; password: string; organization_name: string }): Promise<{ token: string; user: UserApp; organization: Organization }> {
       return request('/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -215,11 +200,9 @@ export const api = {
     me(): Promise<{ user: UserApp; organization: Organization }> {
       return request('/auth/me');
     },
-    refresh(): Promise<{ token: string; refreshToken: string; user: UserApp; organization: Organization }> {
-      return request('/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refreshToken: getRefreshToken() }),
-      });
+    refresh(): Promise<{ token: string; user: UserApp; organization: Organization }> {
+      // The HttpOnly cookie is sent automatically — no body needed
+      return request('/auth/refresh', { method: 'POST' });
     },
     updateOrganization(data: { name?: string; max_admin_per_platform?: number; access_review_delay_days?: number; subscription_alert_days?: number; enabled_modules?: ModuleId[]; plan?: string; alert_email_enabled?: boolean; alert_email_address?: string; alert_email_frequency?: string }): Promise<Organization> {
       return request('/auth/organization', { method: 'PUT', body: JSON.stringify(data) });
@@ -236,7 +219,7 @@ export const api = {
     testEmail(): Promise<{ success: boolean; sent_to: string }> {
       return request('/auth/test-email', { method: 'POST' });
     },
-    loginMfa(userId: string, totp: string): Promise<{ token: string; refreshToken: string; user: UserApp; organization: Organization }> {
+    loginMfa(userId: string, totp: string): Promise<{ token: string; user: UserApp; organization: Organization }> {
       return request('/auth/login/mfa', { method: 'POST', body: JSON.stringify({ user_id: userId, totp }) });
     },
     mfaStatus(): Promise<{ enabled: boolean }> {

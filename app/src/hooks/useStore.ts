@@ -279,6 +279,11 @@ export function useStore() {
     });
   }, []);
 
+  // ─── Remove a platform from local state ───
+  const removePlatform = useCallback((id: string) => {
+    setPlatforms((prev) => prev.filter((p) => p.id !== id));
+  }, []);
+
   // ─── Add or update a single network flow in local state ───
   const upsertNetworkFlow = useCallback((f: NetworkFlow) => {
     setNetworkFlows((prev) => {
@@ -371,6 +376,7 @@ export function useStore() {
     createOrganization,
     upsertSystem,
     upsertPlatform,
+    removePlatform,
     upsertNetworkFlow,
   };
 }

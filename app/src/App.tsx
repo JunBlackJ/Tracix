@@ -162,6 +162,8 @@ function App() {
                 accessRights={store.accessRights}
                 categories={store.categories.filter((c) => c.type === 'platform')}
                 onPlatformCreated={store.upsertPlatform}
+                onPlatformUpdated={store.upsertPlatform}
+                onPlatformDeleted={store.removePlatform}
               />
             }
           />
@@ -175,6 +177,8 @@ function App() {
                 accessRights={store.accessRights}
                 categories={store.categories.filter((c) => c.type === 'platform')}
                 onPlatformCreated={store.upsertPlatform}
+                onPlatformUpdated={store.upsertPlatform}
+                onPlatformDeleted={store.removePlatform}
               />
             }
           />

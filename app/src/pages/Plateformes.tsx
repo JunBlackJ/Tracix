@@ -5,8 +5,9 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Plus, ArrowLeft, ShieldCheck, Eye, EyeOff, Globe,
+  Plus, ArrowLeft, Eye, EyeOff, Globe,
   AlertTriangle, CheckCircle2, XCircle, X, Save, Loader2, Server,
+  Pencil, Trash2,
 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
@@ -22,13 +23,26 @@ interface PlateformesProps {
   accessRights: AccessRight[];
   categories?: Category[];
   onPlatformCreated?: (p: Platform) => void;
+  onPlatformUpdated?: (p: Platform) => void;
+  onPlatformDeleted?: (id: string) => void;
 }
 
-export function Plateformes({ platforms, members, alerts, accessRights, categories = [], onPlatformCreated }: PlateformesProps) {
+export function Plateformes({ platforms, members, alerts, accessRights, categories = [], onPlatformCreated, onPlatformUpdated, onPlatformDeleted }: PlateformesProps) {
   const { id } = useParams<{ id: string }>();
   const [showForm, setShowForm] = useState(false);
+  const [editingPlatform, setEditingPlatform] = useState<Platform | null>(null);
 
-  if (id) return <PlateformeDetail platformId={id} platforms={platforms} members={members} alerts={alerts} accessRights={accessRights} />;
+  if (id) return (
+    <PlateformeDetail
+      platformId={id}
+      platforms={platforms}
+      members={members}
+      alerts={alerts}
+      accessRights={accessRights}
+      onEdit={(p) => setEditingPlatform(p)}
+      onDeleted={onPlatformDeleted}
+    />
+  );
 
   return (
     <>
@@ -39,6 +53,8 @@ export function Plateformes({ platforms, members, alerts, accessRights, categori
         accessRights={accessRights}
         categories={categories}
         onNew={() => setShowForm(true)}
+        onEdit={(p) => setEditingPlatform(p)}
+        onDeleted={onPlatformDeleted}
       />
       {showForm && (
         <PlatformFormModal
@@ -46,6 +62,16 @@ export function Plateformes({ platforms, members, alerts, accessRights, categori
           onSaved={(p) => {
             setShowForm(false);
             onPlatformCreated?.(p);
+          }}
+        />
+      )}
+      {editingPlatform && (
+        <PlatformFormModal
+          platform={editingPlatform}
+          onClose={() => setEditingPlatform(null)}
+          onSaved={(p) => {
+            setEditingPlatform(null);
+            onPlatformUpdated?.(p);
           }}
         />
       )}
@@ -88,9 +114,25 @@ function timeSince(dateStr: string): string {
   return `${Math.floor(hrs / 24)}j`;
 }
 
-function PlateformesList({ platforms, members: _members, alerts: _alerts, accessRights, categories = [], onNew }: PlateformesProps & { onNew: () => void }) {
+function PlateformesList({ platforms, members: _members, alerts: _alerts, accessRights, categories = [], onNew, onEdit, onDeleted }: PlateformesProps & { onNew: () => void; onEdit: (p: Platform) => void; onDeleted?: (id: string) => void }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Toutes');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (e: React.MouseEvent, platformId: string) => {
+    e.stopPropagation();
+    if (!confirm('Supprimer cette plateforme ? Les droits d\'accès associés seront également supprimés.')) return;
+    setDeletingId(platformId);
+    try {
+      await api.platforms.delete(platformId);
+      toast.success('Plateforme supprimée');
+      onDeleted?.(platformId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   // Build tabs from real platform categories — only show categories that have at least one platform
   const usedCategories = [...new Set(
@@ -210,7 +252,27 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
                       : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(62% 0.16 155 / 0.1)', color: 'oklch(62% 0.16 155)' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />Actif</span>
                     }
                   </div>
-                  <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: isErr ? 'oklch(55% 0.22 25)' : 'oklch(62% 0.16 155)', boxShadow: isErr ? '0 0 0 2px oklch(55% 0.22 25 / 0.2)' : '0 0 0 2px oklch(62% 0.16 155 / 0.2)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEdit(p); }}
+                      title="Modifier"
+                      style={{ padding: '5px', borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'oklch(52% 0.012 260)', display: 'flex', alignItems: 'center' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'oklch(94% 0.006 260)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(e, p.id)}
+                      title="Supprimer"
+                      disabled={deletingId === p.id}
+                      style={{ padding: '5px', borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'oklch(55% 0.22 25)', display: 'flex', alignItems: 'center' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'oklch(55% 0.22 25 / 0.08)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {deletingId === p.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -247,13 +309,30 @@ interface PlateformeDetailProps {
   members: Member[];
   alerts: Alert[];
   accessRights: AccessRight[];
+  onEdit?: (p: Platform) => void;
+  onDeleted?: (id: string) => void;
 }
 
-function PlateformeDetail({ platformId, platforms, members, alerts, accessRights }: PlateformeDetailProps) {
+function PlateformeDetail({ platformId, platforms, members, alerts, accessRights, onEdit, onDeleted }: PlateformeDetailProps) {
   const navigate = useNavigate();
   const [showUrl, setShowUrl] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const platform = platforms.find((p) => p.id === platformId);
   if (!platform) return <div>Plateforme non trouvée</div>;
+
+  const handleDelete = async () => {
+    if (!confirm(`Supprimer "${platform.name}" ? Les droits d'accès associés seront également supprimés.`)) return;
+    setDeleting(true);
+    try {
+      await api.platforms.delete(platform.id);
+      toast.success('Plateforme supprimée');
+      onDeleted?.(platform.id);
+      navigate('/plateformes');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+      setDeleting(false);
+    }
+  };
 
   const access = accessRights.filter((a) => a.platform_id === platformId);
   const platformAlerts = alerts.filter((a) => a.source_id === platformId && !a.is_resolved);
@@ -280,6 +359,22 @@ function PlateformeDetail({ platformId, platforms, members, alerts, accessRights
                 <p className="text-sm text-gray-500 mt-1">{platform.category} · {platform.access_type} · {platform.environment}</p>
               </div>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onEdit?.(platform)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Modifier
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-red-200 rounded-lg hover:bg-red-50 transition-colors text-red-600 disabled:opacity-60"
+            >
+              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              Supprimer
+            </button>
           </div>
         </div>
 
@@ -391,25 +486,27 @@ function PlateformeDetail({ platformId, platforms, members, alerts, accessRights
 // ─── Modal création plateforme ───
 
 interface PlatformFormModalProps {
+  platform?: Platform;
   onClose: () => void;
   onSaved: (p: Platform) => void;
 }
 
-function PlatformFormModal({ onClose, onSaved }: PlatformFormModalProps) {
+function PlatformFormModal({ platform, onClose, onSaved }: PlatformFormModalProps) {
+  const isEdit = !!platform;
   const [form, setForm] = useState({
-    name: '',
-    category: '',
-    access_type: '',
-    url: '',
-    auth_method: '',
-    has_mfa: false,
-    environment: 'production' as 'production' | 'staging' | 'dev',
-    responsible: '',
-    target_population: '',
-    sla: '',
-    status: 'actif' as 'actif' | 'inactif' | 'déprécié',
-    last_check_date: '',
-    notes: '',
+    name: platform?.name ?? '',
+    category: platform?.category ?? '',
+    access_type: platform?.access_type ?? '',
+    url: platform?.url ?? '',
+    auth_method: platform?.auth_method ?? '',
+    has_mfa: platform?.has_mfa ?? false,
+    environment: (platform?.environment ?? 'production') as 'production' | 'staging' | 'dev',
+    responsible: platform?.responsible ?? '',
+    target_population: platform?.target_population ?? '',
+    sla: platform?.sla ?? '',
+    status: (platform?.status ?? 'actif') as 'actif' | 'inactif' | 'déprécié',
+    last_check_date: platform?.last_check_date ?? '',
+    notes: platform?.notes ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
@@ -426,11 +523,13 @@ function PlatformFormModal({ onClose, onSaved }: PlatformFormModalProps) {
     if (!validate()) return;
     setSaving(true);
     try {
-      const saved = await api.platforms.create(form);
-      toast.success('Plateforme créée avec succès');
+      const saved = isEdit
+        ? await api.platforms.update(platform!.id, form)
+        : await api.platforms.create(form);
+      toast.success(isEdit ? 'Plateforme mise à jour' : 'Plateforme créée avec succès');
       onSaved(saved);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de la création');
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
     } finally {
       setSaving(false);
     }
@@ -452,7 +551,7 @@ function PlatformFormModal({ onClose, onSaved }: PlatformFormModalProps) {
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h2 className="text-lg font-bold text-gray-900">Nouvelle plateforme</h2>
+          <h2 className="text-lg font-bold text-gray-900">{isEdit ? 'Modifier la plateforme' : 'Nouvelle plateforme'}</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-4 h-4 text-gray-400" />
           </button>
@@ -546,7 +645,7 @@ function PlatformFormModal({ onClose, onSaved }: PlatformFormModalProps) {
               className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors disabled:opacity-60"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? 'Création…' : 'Créer la plateforme'}
+              {saving ? 'Sauvegarde…' : isEdit ? 'Enregistrer les modifications' : 'Créer la plateforme'}
             </button>
           </div>
         </form>

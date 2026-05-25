@@ -87,6 +87,19 @@
   to   { transform: rotate(360deg); }
 }
 
+/* ─── Print / PDF ─── */
+@media print {
+  /* Masquer la sidebar, topbar et éléments interactifs */
+  aside, header, button, nav { display: none !important; }
+  /* Forcer fond blanc et texte noir */
+  body, main { background: #fff !important; color: #000 !important; }
+  /* Pleine largeur sans marges de layout */
+  .lg\:ml-\[240px\] { margin-left: 0 !important; }
+  main { padding: 20px !important; }
+  /* Éviter les coupures de page dans les cartes */
+  [style*="border-radius: 10px"], [style*="borderRadius: '10px'"] { page-break-inside: avoid; }
+}
+
 /* Fix autofill chrome/safari sur fond sombre (panneau admin) */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,

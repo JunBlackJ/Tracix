@@ -25,6 +25,17 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// ─── Risk snapshot ───
+export interface RiskSnapshot {
+  date: string;
+  avg_score: number;
+  count_critical: number;
+  count_high: number;
+  count_medium: number;
+  count_low: number;
+  member_count: number;
+}
+
 // ─── Dashboard stats ───
 export interface DashboardStats {
   totalMembers: number;
@@ -519,6 +530,12 @@ export const api = {
     },
     deleteConfig(): Promise<{ success: boolean }> {
       return request('/saml/config', { method: 'DELETE' });
+    },
+  },
+
+  riskSnapshots: {
+    list(days?: number): Promise<RiskSnapshot[]> {
+      return request(`/risk-snapshots${days ? `?days=${days}` : ''}`);
     },
   },
 

@@ -35,6 +35,7 @@ model Organization {
   subscriptions Subscription[]
   alerts        Alert[]
   auditTrails   AuditTrail[]
+  riskSnapshots RiskSnapshot[]
   categories    Category[]
   customModules    CustomModule[]
   reviewCampaigns  ReviewCampaign[]
@@ -374,6 +375,24 @@ model SamlConfig {
   organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
 
   @@map("saml_configs")
+}
+
+model RiskSnapshot {
+  id              String   @id
+  organization_id String
+  date            String   // YYYY-MM-DD
+  avg_score       Float
+  count_critical  Int      @default(0)
+  count_high      Int      @default(0)
+  count_medium    Int      @default(0)
+  count_low       Int      @default(0)
+  member_count    Int      @default(0)
+  created_at      DateTime @default(now())
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@unique([organization_id, date])
+  @@map("risk_snapshots")
 }
 
 model AuditTrail {

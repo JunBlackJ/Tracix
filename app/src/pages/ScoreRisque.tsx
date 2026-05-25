@@ -2,10 +2,11 @@
 // Page Score de risque — Analyse globale
 // ═══════════════════════════════════════════
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getRiskColor } from '@/types';
 import type { Member, Platform, AccessRight } from '@/types';
+import { api, type RiskSnapshot } from '@/lib/api';
 
 interface ScoreRisqueProps {
   members: Member[];
@@ -67,37 +68,114 @@ function KpiCard({ label, value, delta, deltaDir, color, svgPath }: { label: str
   );
 }
 
-// ─── Sparkline SVG ───
-function Sparkline({ points, color }: { points: [number, number][]; color: string }) {
-  const w = 600; const h = 120;
-  const pStr = points.map(([x, y]) => `${x},${y}`).join(' ');
-  const areaPath = `M${pStr.split(' ').join(' L')} L${points[points.length-1][0]},${h} L${points[0][0]},${h} Z`;
-  const [lx, ly] = points[points.length - 1];
+// ─── Sparkline — évolution réelle depuis les snapshots ───
+function Sparkline({ snapshots, period }: { snapshots: RiskSnapshot[]; period: 7 | 30 | 90 }) {
+  const W = 560; const H = 110; const PAD_LEFT = 28; const PAD_BOTTOM = 18;
+  const innerW = W - PAD_LEFT; const innerH = H - PAD_BOTTOM;
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - period);
+  const pts = snapshots.filter((s) => s.date >= cutoff.toISOString().split('T')[0]);
+
+  if (pts.length < 2) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '140px', color: 'oklch(62% 0.012 260)', fontSize: '13px' }}>
+        Pas encore assez de données — le graphique se remplira au fil des jours.
+      </div>
+    );
+  }
+
+  const minScore = Math.max(0, Math.min(...pts.map((p) => p.avg_score)) - 5);
+  const maxScore = Math.min(100, Math.max(...pts.map((p) => p.avg_score)) + 5);
+  const range = maxScore - minScore || 1;
+
+  const toX = (i: number) => PAD_LEFT + Math.round((i / (pts.length - 1)) * innerW);
+  const toY = (v: number) => Math.round(innerH - ((v - minScore) / range) * innerH);
+
+  const polyPts = pts.map((p, i) => `${toX(i)},${toY(p.avg_score)}`).join(' ');
+  const areaD = `M${toX(0)},${toY(pts[0].avg_score)} ` +
+    pts.slice(1).map((p, i) => `L${toX(i + 1)},${toY(p.avg_score)}`).join(' ') +
+    ` L${toX(pts.length - 1)},${innerH} L${toX(0)},${innerH} Z`;
+
+  const color = 'oklch(42% 0.18 280)';
+  const last = pts[pts.length - 1];
+
+  const yLabels = [maxScore, (maxScore + minScore) / 2, minScore].map(Math.round);
+
   return (
-    <div style={{ padding: '20px', position: 'relative', width: '100%', height: '140px' }}>
-      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height: '120px', overflow: 'visible' }}>
+    <div style={{ padding: '16px 20px 8px' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '130px', overflow: 'visible' }}>
         <defs>
-          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+          <linearGradient id="snapGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.2" />
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <line x1="0" y1="0" x2={w} y2="0" stroke="oklch(90% 0.006 260)" strokeWidth="1" />
-        <line x1="0" y1="30" x2={w} y2="30" stroke="oklch(90% 0.006 260)" strokeWidth="1" strokeDasharray="4 4" />
-        <line x1="0" y1="60" x2={w} y2="60" stroke="oklch(90% 0.006 260)" strokeWidth="1" strokeDasharray="4 4" />
-        <line x1="0" y1="90" x2={w} y2="90" stroke="oklch(90% 0.006 260)" strokeWidth="1" strokeDasharray="4 4" />
-        <line x1="0" y1={h} x2={w} y2={h} stroke="oklch(90% 0.006 260)" strokeWidth="1" />
-        <path d={areaPath} fill="url(#areaGrad)" />
-        <polyline points={pStr} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={lx} cy={ly} r="4" fill={color} />
-        <text x="6" y="4"  fontSize="10" fontFamily="'JetBrains Mono',ui-monospace,Menlo,monospace" fill="oklch(52% 0.012 260)">80</text>
-        <text x="6" y="34" fontSize="10" fontFamily="'JetBrains Mono',ui-monospace,Menlo,monospace" fill="oklch(52% 0.012 260)">70</text>
-        <text x="6" y="64" fontSize="10" fontFamily="'JetBrains Mono',ui-monospace,Menlo,monospace" fill="oklch(52% 0.012 260)">60</text>
-        <text x="6" y="94" fontSize="10" fontFamily="'JetBrains Mono',ui-monospace,Menlo,monospace" fill="oklch(52% 0.012 260)">50</text>
-        <text x="0"   y="118" fontSize="10" fontFamily="'JetBrains Mono',ui-monospace,Menlo,monospace" fill="oklch(52% 0.012 260)" textAnchor="start">24 Avr</text>
-        <text x={w/2} y="118" fontSize="10" fontFamily="'JetBrains Mono',ui-monospace,Menlo,monospace" fill="oklch(52% 0.012 260)" textAnchor="middle">09 Mai</text>
-        <text x={w}   y="118" fontSize="10" fontFamily="'JetBrains Mono',ui-monospace,Menlo,monospace" fill="oklch(52% 0.012 260)" textAnchor="end">24 Mai</text>
+        {yLabels.map((v, i) => {
+          const y = toY(v);
+          return (
+            <g key={i}>
+              <line x1={PAD_LEFT} y1={y} x2={W} y2={y} stroke="oklch(90% 0.006 260)" strokeWidth="1" strokeDasharray={i === 0 ? '' : '3 3'} />
+              <text x={PAD_LEFT - 4} y={y + 4} fontSize="9" fontFamily="'JetBrains Mono',ui-monospace,monospace" fill="oklch(55% 0.012 260)" textAnchor="end">{v}</text>
+            </g>
+          );
+        })}
+        <line x1={PAD_LEFT} y1={innerH} x2={W} y2={innerH} stroke="oklch(90% 0.006 260)" strokeWidth="1" />
+        <path d={areaD} fill="url(#snapGrad)" />
+        <polyline points={polyPts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={toX(pts.length - 1)} cy={toY(last.avg_score)} r="4" fill={color} />
+        <text x={toX(0)} y={H} fontSize="9" fontFamily="'JetBrains Mono',ui-monospace,monospace" fill="oklch(55% 0.012 260)" textAnchor="start">{pts[0].date.slice(5)}</text>
+        <text x={W} y={H} fontSize="9" fontFamily="'JetBrains Mono',ui-monospace,monospace" fill="oklch(55% 0.012 260)" textAnchor="end">{last.date.slice(5)}</text>
       </svg>
+    </div>
+  );
+}
+
+// ─── Histogram — distribution réelle des scores ───
+const BANDS = [
+  { label: '0–39',   sublabel: 'Critique', color: 'oklch(55% 0.22 25)',   bg: 'oklch(55% 0.22 25 / 0.12)'  },
+  { label: '40–59',  sublabel: 'Élevé',    color: 'oklch(62% 0.18 52)',   bg: 'oklch(62% 0.18 52 / 0.12)'  },
+  { label: '60–79',  sublabel: 'Modéré',   color: 'oklch(70% 0.14 88)',   bg: 'oklch(70% 0.14 88 / 0.12)'  },
+  { label: '80–100', sublabel: 'Conforme', color: 'oklch(62% 0.16 155)',  bg: 'oklch(62% 0.16 155 / 0.12)' },
+];
+
+function Histogram({ members }: { members: { risk_score: number }[] }) {
+  const counts = [
+    members.filter((m) => m.risk_score <= 39).length,
+    members.filter((m) => m.risk_score >= 40 && m.risk_score <= 59).length,
+    members.filter((m) => m.risk_score >= 60 && m.risk_score <= 79).length,
+    members.filter((m) => m.risk_score >= 80).length,
+  ];
+  const total = members.length || 1;
+  const max = Math.max(...counts, 1);
+
+  return (
+    <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      {BANDS.map((band, i) => {
+        const count = counts[i];
+        const pct = Math.round((count / total) * 100);
+        const barW = Math.round((count / max) * 100);
+        return (
+          <div key={band.label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '72px', flexShrink: 0 }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: band.color }}>{band.sublabel}</div>
+              <div style={{ fontSize: '10px', color: 'oklch(62% 0.012 260)', fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{band.label}</div>
+            </div>
+            <div style={{ flex: 1, height: '22px', background: 'oklch(94% 0.004 260)', borderRadius: '6px', overflow: 'hidden', position: 'relative' }}>
+              <div style={{ position: 'absolute', inset: 0, width: `${barW}%`, background: band.color, borderRadius: '6px', opacity: 0.85, transition: 'width 0.5s ease' }} />
+              {count > 0 && (
+                <span style={{ position: 'absolute', left: `${Math.min(barW + 1, 70)}%`, top: '50%', transform: 'translateY(-50%)', fontSize: '11px', fontWeight: 600, color: barW > 50 ? '#fff' : band.color, fontFamily: "'JetBrains Mono',ui-monospace,monospace", whiteSpace: 'nowrap' }}>
+                  {count} membre{count > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <div style={{ width: '36px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: band.color, fontFamily: "'JetBrains Mono',ui-monospace,monospace", flexShrink: 0 }}>{pct}%</div>
+          </div>
+        );
+      })}
+      {members.length === 0 && (
+        <p style={{ textAlign: 'center', color: 'oklch(62% 0.012 260)', fontSize: '13px', padding: '16px 0' }}>Aucun membre évalué</p>
+      )}
     </div>
   );
 }
@@ -131,8 +209,14 @@ function Gauge({ score, color }: { score: number; color: string }) {
 
 export function ScoreRisque({ members, platforms, accessRights }: ScoreRisqueProps) {
   const navigate = useNavigate();
-  const [period, setPeriod] = useState<'7j' | '30j' | '90j'>('30j');
-  const [chartView, setChartView] = useState<'global' | 'facteurs'>('global');
+  const [riskFilter, setRiskFilter] = useState<'all' | 'crit' | 'high' | 'med' | 'low'>('all');
+  const [period, setPeriod] = useState<7 | 30 | 90>(30);
+  const [snapshots, setSnapshots] = useState<RiskSnapshot[]>([]);
+  const [chartView, setChartView] = useState<'evolution' | 'facteurs'>('evolution');
+
+  useEffect(() => {
+    api.riskSnapshots.list(90).then(setSnapshots).catch(() => {});
+  }, []);
 
   const critiques   = members.filter((m) => m.risk_score <= 39).length;
   const elevated    = members.filter((m) => m.risk_score >= 40 && m.risk_score <= 59).length;
@@ -141,13 +225,11 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
   const sorted      = [...members].sort((a, b) => a.risk_score - b.risk_score);
   const median      = sorted.length > 0 ? sorted[Math.floor(sorted.length / 2)].risk_score : 0;
 
-  // Build sparkline from members' scores (simulated trend with noise)
-  const sparkPoints: [number, number][] = Array.from({ length: 30 }, (_, i) => {
-    const x = Math.round((i / 29) * 600);
-    const baseY = 120 - ((avgScore - 50) / 30) * 120;
-    const noise = Math.sin(i * 0.8) * 8 + Math.cos(i * 0.3) * 5;
-    return [x, Math.max(5, Math.min(115, Math.round(baseY + noise + (i / 29) * -20)))];
-  });
+  const filteredTop = riskFilter === 'all' ? sorted
+    : riskFilter === 'crit' ? sorted.filter((m) => m.risk_score <= 39)
+    : riskFilter === 'high' ? sorted.filter((m) => m.risk_score >= 40 && m.risk_score <= 59)
+    : riskFilter === 'med'  ? sorted.filter((m) => m.risk_score >= 60 && m.risk_score <= 79)
+    : sorted.filter((m) => m.risk_score >= 80);
 
   // Risk factors from actual data
   const adminCount    = accessRights.filter((a) => a.level === 'admin').length;
@@ -167,12 +249,6 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
     { name: 'Habilitations expirées actives', desc: `${expiredRights} habilitation${expiredRights !== 1 ? 's' : ''} dont la date d'échéance est dépassée`, score: Math.min(99, Math.round(expiredRights * 1.7)), color: 'oklch(70% 0.14 88)' },
   ];
 
-  const PERIODS: { id: '7j' | '30j' | '90j'; label: string }[] = [
-    { id: '7j', label: '7 j' },
-    { id: '30j', label: '30 j' },
-    { id: '90j', label: '90 j' },
-  ];
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Topbar row */}
@@ -182,17 +258,19 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
           <div style={{ fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>Analyse globale · {members.length} membres évalués</div>
         </div>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          {PERIODS.map(({ id, label }) => {
-            const isActive = period === id;
-            return (
-              <button key={id} onClick={() => setPeriod(id)}
-                style={{ padding: '5px 12px', fontSize: '11.5px', fontWeight: 500, borderRadius: '7px', border: `1px solid ${isActive ? 'oklch(42% 0.18 280)' : 'oklch(90% 0.006 260)'}`, background: isActive ? 'oklch(42% 0.18 280 / 0.12)' : 'transparent', color: isActive ? 'oklch(42% 0.18 280)' : 'oklch(52% 0.012 260)', cursor: 'pointer' }}>
-                {label}
-              </button>
-            );
-          })}
-          <button style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', marginLeft: '6px' }}>
-            Rapport PDF
+          {([7, 30, 90] as const).map((d) => (
+            <button key={d} onClick={() => setPeriod(d)}
+              style={{ padding: '5px 12px', fontSize: '11.5px', fontWeight: 500, borderRadius: '7px', cursor: 'pointer',
+                border: `1px solid ${period === d ? 'oklch(42% 0.18 280)' : 'oklch(90% 0.006 260)'}`,
+                background: period === d ? 'oklch(42% 0.18 280 / 0.12)' : 'transparent',
+                color: period === d ? 'oklch(42% 0.18 280)' : 'oklch(52% 0.012 260)' }}>
+              {d} j
+            </button>
+          ))}
+          <button onClick={() => window.print()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', marginLeft: '6px' }}>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Imprimer / PDF
           </button>
         </div>
       </div>
@@ -207,41 +285,34 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
 
       {/* Row 2/3 + 1/3 */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
-        {/* Sparkline card */}
+        {/* Evolution / Facteurs card */}
         <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: '10px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600 }}>Évolution du score moyen</span>
-            <span style={{ fontSize: '11px', color: 'oklch(52% 0.012 260)' }}>— 30 derniers jours</span>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-              {(['global', 'facteurs'] as const).map((v) => {
+            <span style={{ fontSize: '13px', fontWeight: 600 }}>
+              {chartView === 'evolution' ? 'Évolution du score moyen' : 'Distribution des scores'}
+            </span>
+            <span style={{ fontSize: '11px', color: 'oklch(52% 0.012 260)' }}>
+              {chartView === 'evolution' ? `— ${period} derniers jours` : `— ${members.length} membres évalués`}
+            </span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
+              {(['evolution', 'facteurs'] as const).map((v) => {
                 const active = chartView === v;
                 return (
                   <button key={v} onClick={() => setChartView(v)}
-                    style={{ padding: '5px 10px', fontSize: '11.5px', fontWeight: 500, borderRadius: '7px', cursor: 'pointer',
+                    style={{ padding: '4px 10px', fontSize: '11.5px', fontWeight: 500, borderRadius: '7px', cursor: 'pointer',
                       border: `1px solid ${active ? 'oklch(42% 0.18 280)' : 'oklch(90% 0.006 260)'}`,
                       background: active ? 'oklch(42% 0.18 280 / 0.12)' : 'transparent',
                       color: active ? 'oklch(42% 0.18 280)' : 'oklch(52% 0.012 260)' }}>
-                    {v === 'global' ? 'Score global' : 'Par facteur'}
+                    {v === 'evolution' ? 'Évolution' : 'Distribution'}
                   </button>
                 );
               })}
             </div>
           </div>
-          {chartView === 'global' ? (
-            <Sparkline points={sparkPoints} color="oklch(70% 0.14 88)" />
-          ) : (
-            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {factors.map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '160px', fontSize: '12px', color: 'oklch(35% 0.012 260)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }}>{f.name}</div>
-                  <div style={{ flex: 1, height: '8px', background: 'oklch(90% 0.006 260)', borderRadius: '999px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: '999px', background: f.color, width: `${f.score}%`, transition: 'width 0.4s' }} />
-                  </div>
-                  <span style={{ width: '32px', textAlign: 'right', fontSize: '13px', fontWeight: 700, fontFamily: "'JetBrains Mono',ui-monospace,monospace", color: f.color, flexShrink: 0 }}>{f.score}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {chartView === 'evolution'
+            ? <Sparkline snapshots={snapshots} period={period} />
+            : <Histogram members={members} />
+          }
         </div>
 
         {/* Gauge */}
@@ -281,8 +352,23 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
 
         {/* Top 10 members table */}
         <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: '10px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600 }}>Top 10 membres à risque</span>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600 }}>Membres à risque</span>
+            {([
+              { id: 'all',  label: 'Tous',     color: 'oklch(42% 0.18 280)' },
+              { id: 'crit', label: 'Critique',  color: 'oklch(55% 0.22 25)' },
+              { id: 'high', label: 'Élevé',     color: 'oklch(62% 0.18 52)' },
+              { id: 'med',  label: 'Modéré',    color: 'oklch(70% 0.14 88)' },
+              { id: 'low',  label: 'Conforme',  color: 'oklch(62% 0.16 155)' },
+            ] as const).map(({ id, label, color }) => {
+              const active = riskFilter === id;
+              return (
+                <button key={id} onClick={() => setRiskFilter(id)}
+                  style={{ padding: '3px 10px', fontSize: '11px', fontWeight: 500, borderRadius: '999px', cursor: 'pointer', border: `1px solid ${active ? color : 'oklch(90% 0.006 260)'}`, background: active ? `${color.replace(')', ' / 0.12)')}` : 'transparent', color: active ? color : 'oklch(52% 0.012 260)' }}>
+                  {label}
+                </button>
+              );
+            })}
             <button onClick={() => navigate('/membres')}
               style={{ marginLeft: 'auto', padding: '5px 10px', fontSize: '11.5px', fontWeight: 500, borderRadius: '7px', border: '1px solid oklch(90% 0.006 260)', background: 'transparent', color: 'oklch(52% 0.012 260)', cursor: 'pointer' }}>
               Voir tous →
@@ -298,7 +384,7 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
                 </tr>
               </thead>
               <tbody>
-                {sorted.slice(0, 10).map((m) => {
+                {filteredTop.slice(0, 10).map((m) => {
                   const variant = riskPillVariant(m.risk_score);
                   const facteur = m.risk_factors[0]?.label ?? '—';
                   return (
@@ -326,8 +412,8 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
                     </tr>
                   );
                 })}
-                {sorted.length === 0 && (
-                  <tr><td colSpan={4} style={{ padding: '48px 20px', textAlign: 'center', color: 'oklch(52% 0.012 260)', fontSize: '13px' }}>Aucun membre</td></tr>
+                {filteredTop.length === 0 && (
+                  <tr><td colSpan={4} style={{ padding: '48px 20px', textAlign: 'center', color: 'oklch(52% 0.012 260)', fontSize: '13px' }}>Aucun membre dans cette catégorie</td></tr>
                 )}
               </tbody>
             </table>

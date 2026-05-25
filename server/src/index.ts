@@ -27,6 +27,7 @@ import reviewsRoutes from './routes/reviews';
 import reportsRoutes from './routes/reports';
 import samlRoutes from './routes/saml';
 import adminRoutes from './routes/admin';
+import riskSnapshotsRoutes from './routes/risk-snapshots';
 
 const app = express();
 
@@ -79,6 +80,7 @@ app.use('/api/reviews', reviewsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/saml', samlRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/risk-snapshots', riskSnapshotsRoutes);
 
 // ─── 404 handler ───
 app.use((_req, res) => {

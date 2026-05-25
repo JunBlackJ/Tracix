@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { generateAlerts } from './alert.service';
+import { takeRiskSnapshot } from './snapshot.service';
 import { sendAlertEmail } from './email.service';
 import { config } from '../config';
 
@@ -18,6 +19,9 @@ export function startCronJobs(): void {
 
         try { await generateAlerts(org.id); }
         catch (e) { console.error(`[Cron] generateAlerts failed for ${org.id}:`, e); }
+
+        try { await takeRiskSnapshot(org.id); }
+        catch (e) { console.error(`[Cron] takeRiskSnapshot failed for ${org.id}:`, e); }
 
         try { await checkSubscriptionEmails(org.id); }
         catch (e) { console.error(`[Cron] checkSubscriptionEmails failed for ${org.id}:`, e); }

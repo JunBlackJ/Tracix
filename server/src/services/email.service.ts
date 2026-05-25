@@ -1,6 +1,11 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy-init: skip construction at import time so tests without RESEND_API_KEY don't crash.
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 const FROM = process.env.RESEND_FROM || 'Tracix <onboarding@resend.dev>';
 
 const SEVERITY_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -107,7 +112,7 @@ export async function sendAlertEmail(opts: {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await resend.emails.send({ from: FROM, to: opts.to, subject, html });
+      await getResend().emails.send({ from: FROM, to: opts.to, subject, html });
       console.log(`[Email] Alertes envoyées (${opts.alerts.length}) → ${opts.to}`);
       return;
     } catch (err) {
@@ -171,7 +176,7 @@ export async function sendPasswordResetEmail(opts: {
 </body></html>`;
 
   try {
-    await resend.emails.send({ from: FROM, to: opts.to, subject, html });
+    await getResend().emails.send({ from: FROM, to: opts.to, subject, html });
     console.log(`[Email] Reset password envoyé → ${opts.to}`);
   } catch (err) {
     console.error('[Email] Erreur envoi reset password:', err);

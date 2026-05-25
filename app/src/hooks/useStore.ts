@@ -8,7 +8,7 @@ import type {
   System, NetworkFlow, Subscription, Alert, AuditTrail,
   AccessLevel, Category, CustomModule,
 } from '@/types';
-import { api, getToken, setToken, clearToken } from '@/lib/api';
+import { api, getToken, setToken, setTokenPair, clearToken, clearRefreshToken } from '@/lib/api';
 
 export interface OrgEntry { org: Organization; role: string; }
 
@@ -104,8 +104,9 @@ export function useStore() {
       if (data.mfa_required && data.user_id) {
         return { mfa_required: true, user_id: data.user_id };
       }
-      const { token, user: u, organization: org } = data as { token: string; user: Parameters<typeof setUser>[0]; organization: Parameters<typeof setOrganization>[0] };
-      setToken(token);
+      const { token, user: u, organization: org } = data as { token: string; refreshToken?: string; user: Parameters<typeof setUser>[0]; organization: Parameters<typeof setOrganization>[0] };
+      const rt = (data as { refreshToken?: string }).refreshToken;
+      if (rt) { setTokenPair(token, rt); } else { setToken(token); }
       setUser(u);
       setOrganization(org);
       setIsAuthenticated(true);
@@ -118,8 +119,8 @@ export function useStore() {
 
   const loginWithMfa = useCallback(async (userId: string, totp: string): Promise<{ ok: true } | { ok: false; error?: string }> => {
     try {
-      const { token, user: u, organization: org } = await api.auth.loginMfa(userId, totp);
-      setToken(token);
+      const { token, refreshToken: rt, user: u, organization: org } = await api.auth.loginMfa(userId, totp);
+      if (rt) { setTokenPair(token, rt); } else { setToken(token); }
       setUser(u);
       setOrganization(org);
       setIsAuthenticated(true);
@@ -133,8 +134,8 @@ export function useStore() {
   // ─── Register ───
   const register = useCallback(async (data: { full_name: string; email: string; password: string; organization_name: string }): Promise<{ success: boolean; error?: string }> => {
     try {
-      const { token, user: u, organization: org } = await api.auth.register(data);
-      setToken(token);
+      const { token, refreshToken: rt, user: u, organization: org } = await api.auth.register(data);
+      if (rt) { setTokenPair(token, rt); } else { setToken(token); }
       setUser(u);
       setOrganization(org);
       setIsAuthenticated(true);
@@ -170,6 +171,7 @@ export function useStore() {
       // ignore errors during logout
     } finally {
       clearToken();
+      clearRefreshToken();
       setIsAuthenticated(false);
       setUser(null);
       setOrganization(null);

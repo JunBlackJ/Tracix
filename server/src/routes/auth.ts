@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { JsonValue } from '@prisma/client/runtime/library';
 import prisma from '../prisma/client';
-import { requireAuth, generateToken } from '../middleware/auth';
+import { requireAuth, generateToken, generateRefreshToken } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
 import { sendPasswordResetEmail } from '../services/email.service';
@@ -64,6 +64,33 @@ const RegisterSchema = z.object({
 
 const MAX_ATTEMPTS = 5;         // tentatives avant verrouillage
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+// ─── Helper: issue access token + refresh token pair ───
+async function issueTokenPair(userId: string, organizationId: string, email: string, role: string) {
+  const token = generateToken({ userId, organizationId, email, role });
+  const { raw, hash, expiresAt } = await generateRefreshToken(userId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma as any).refreshToken.create({
+    data: {
+      id: uuidv4(),
+      user_id: userId,
+      token_hash: hash,
+      expires_at: expiresAt,
+    },
+  });
+  return { token, refreshToken: raw, refreshExpiresAt: expiresAt };
+}
+
+const PLATFORM_NAMES: Record<string, { name: string; category: string; auth_method: string }> = {
+  aws:    { name: 'AWS IAM',                category: 'cloud',          auth_method: 'iam' },
+  azure:  { name: 'Azure Active Directory', category: 'cloud',          auth_method: 'oauth' },
+  github: { name: 'GitHub',                 category: 'devtools',       auth_method: 'oauth' },
+  google: { name: 'Google Workspace',       category: 'productivity',   auth_method: 'oauth' },
+  okta:   { name: 'Okta',                   category: 'iam',            auth_method: 'saml' },
+  slack:  { name: 'Slack',                  category: 'communication',  auth_method: 'oauth' },
+  jira:   { name: 'Jira / Confluence',      category: 'project',        auth_method: 'saml' },
+  other:  { name: 'Plateforme personnalisée', category: 'other',        auth_method: 'other' },
+};
 
 // POST /api/auth/login
 router.post('/login', authLimiter, async (req: Request, res: Response): Promise<void> => {
@@ -134,12 +161,9 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
     return;
   }
 
-  const token = generateToken({
-    userId: user.id,
-    organizationId: user.organization_id,
-    email: user.email,
-    role: user.role,
-  });
+  const { token, refreshToken, refreshExpiresAt } = await issueTokenPair(
+    user.id, user.organization_id, user.email, user.role
+  );
 
   await createAuditEntry({
     organizationId: user.organization_id,
@@ -156,6 +180,8 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
 
   res.json({
     token,
+    refreshToken,
+    refreshExpiresAt,
     user: {
       id: user.id,
       organization_id: user.organization_id,
@@ -202,12 +228,9 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
     include: { organization: true },
   });
 
-  const token = generateToken({
-    userId: user.id,
-    organizationId: user.organization_id,
-    email: user.email,
-    role: user.role,
-  });
+  const { token, refreshToken, refreshExpiresAt } = await issueTokenPair(
+    user.id, user.organization_id, user.email, user.role
+  );
 
   await createAuditEntry({
     organizationId: org.id,
@@ -224,6 +247,8 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
 
   res.status(201).json({
     token,
+    refreshToken,
+    refreshExpiresAt,
     user: {
       id: user.id,
       organization_id: user.organization_id,
@@ -240,6 +265,13 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
 // POST /api/auth/logout
 router.post('/logout', requireAuth, async (req: Request, res: Response): Promise<void> => {
   if (req.user) {
+    // Révoquer tous les refresh tokens de l'utilisateur
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma as any).refreshToken.updateMany({
+      where: { user_id: req.user.userId, revoked: false },
+      data: { revoked: true },
+    });
+
     await createAuditEntry({
       organizationId: req.user.organizationId,
       actor: req.user.email,
@@ -254,6 +286,64 @@ router.post('/logout', requireAuth, async (req: Request, res: Response): Promise
     });
   }
   res.json({ message: 'Logged out successfully' });
+});
+
+// POST /api/auth/refresh — rotation de refresh token
+router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+  const { refreshToken: rawToken } = req.body;
+  if (!rawToken || typeof rawToken !== 'string') {
+    res.status(400).json({ error: 'refreshToken requis' });
+    return;
+  }
+
+  const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const stored = await (prisma as any).refreshToken.findUnique({
+    where: { token_hash: hash },
+  }) as { id: string; user_id: string; expires_at: Date; revoked: boolean } | null;
+
+  if (!stored || stored.revoked || stored.expires_at < new Date()) {
+    res.status(401).json({ error: 'Refresh token invalide ou expiré' });
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = await (prisma.userApp.findUnique as any)({
+    where: { id: stored.user_id },
+    include: { organization: true },
+  });
+
+  if (!user) {
+    res.status(401).json({ error: 'Utilisateur introuvable' });
+    return;
+  }
+
+  // Révoquer l'ancien token (rotation)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma as any).refreshToken.update({
+    where: { id: stored.id },
+    data: { revoked: true },
+  });
+
+  const { token, refreshToken: newRefreshToken, refreshExpiresAt } = await issueTokenPair(
+    user.id, user.organization_id, user.email, user.role
+  );
+
+  res.json({
+    token,
+    refreshToken: newRefreshToken,
+    refreshExpiresAt,
+    user: {
+      id: user.id,
+      organization_id: user.organization_id,
+      full_name: user.full_name,
+      email: user.email,
+      role: user.role,
+      last_login_at: user.last_login_at,
+      created_at: user.created_at,
+    },
+    organization: serializeOrg(user.organization),
+  });
 });
 
 // GET /api/auth/me
@@ -366,7 +456,7 @@ router.put('/organization', requireAuth, async (req: Request, res: Response): Pr
 // POST /api/auth/onboarding — save onboarding data and mark org as completed
 router.post('/onboarding', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
-  const { org_name, sector, size, objective, alert_email, alert_email_enabled } = req.body;
+  const { org_name, sector, size, objective, alert_email, alert_email_enabled, platforms } = req.body;
 
   const updated = await prisma.organization.update({
     where: { id: orgId },
@@ -378,6 +468,32 @@ router.post('/onboarding', requireAuth, async (req: Request, res: Response): Pro
     },
   });
 
+  // Créer les plateformes sélectionnées en respectant la limite du plan Free (3 max)
+  let platformsCreated = 0;
+  if (Array.isArray(platforms) && platforms.length > 0) {
+    const limits = getLimits(updated.plan);
+    const existingCount = await prisma.platform.count({ where: { organization_id: orgId } });
+    const available = limits.platforms === -1 ? platforms.length : Math.max(0, limits.platforms - existingCount);
+    const toCreate = (platforms as string[])
+      .filter((key) => key in PLATFORM_NAMES)
+      .slice(0, available);
+
+    if (toCreate.length > 0) {
+      const platformData = toCreate.map((key) => ({
+        id: uuidv4(),
+        organization_id: orgId,
+        name: PLATFORM_NAMES[key].name,
+        category: PLATFORM_NAMES[key].category,
+        auth_method: PLATFORM_NAMES[key].auth_method,
+      }));
+      const result = await prisma.platform.createMany({
+        data: platformData,
+        skipDuplicates: true,
+      });
+      platformsCreated = result.count;
+    }
+  }
+
   await createAuditEntry({
     organizationId: orgId,
     actor: req.user!.email,
@@ -386,12 +502,12 @@ router.post('/onboarding', requireAuth, async (req: Request, res: Response): Pro
     targetId: orgId,
     targetLabel: updated.name,
     oldValue: {},
-    newValue: { sector, size, objective },
+    newValue: { sector, size, objective, platformsCreated },
     ipAddress: getClientIp(req),
     userAgent: req.headers['user-agent'] ?? '',
   });
 
-  res.json(serializeOrg(updated));
+  res.json({ ...serializeOrg(updated), platformsCreated });
 });
 
 // POST /api/auth/promo — validate a promo code and upgrade org to pro
@@ -762,12 +878,9 @@ router.post('/login/mfa', authLimiter, async (req: Request, res: Response): Prom
     return;
   }
 
-  const token = generateToken({
-    userId: user.id,
-    organizationId: user.organization_id,
-    email: user.email,
-    role: user.role,
-  });
+  const { token, refreshToken, refreshExpiresAt } = await issueTokenPair(
+    user.id, user.organization_id, user.email, user.role
+  );
 
   await createAuditEntry({
     organizationId: user.organization_id,
@@ -784,6 +897,8 @@ router.post('/login/mfa', authLimiter, async (req: Request, res: Response): Prom
 
   res.json({
     token,
+    refreshToken,
+    refreshExpiresAt,
     user: {
       id: user.id,
       organization_id: user.organization_id,

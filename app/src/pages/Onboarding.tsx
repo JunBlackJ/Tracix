@@ -76,6 +76,7 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoError, setPromoError] = useState('');
+  const [platformsCreatedCount, setPlatformsCreatedCount] = useState(0);
 
   const goTo = (idx: number) => setCurrent(idx);
   const goNext = () => { if (current < TOTAL) setCurrent(c => c + 1); };
@@ -105,16 +106,18 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
   const save = async () => {
     setSaving(true);
     try {
-      const updatedOrg = await api.auth.completeOnboarding({
+      const result = await api.auth.completeOnboarding({
         org_name: orgName || undefined,
         sector,
         size,
         objective,
         alert_email: alertEmail || undefined,
         alert_email_enabled: Object.values(alertChecks).some(Boolean),
+        platforms: Array.from(selectedPlatforms),
       });
-      onComplete(updatedOrg);
-      navigate('/dashboard');
+      setPlatformsCreatedCount(result.platformsCreated ?? 0);
+      onComplete(result);
+      goNext();
     } catch {
       toast.error('Erreur lors de la sauvegarde');
       setSaving(false);
@@ -557,6 +560,12 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
               <p style={{ fontSize: 14, color: MUTED, maxWidth: 400, lineHeight: 1.65 }}>
                 Votre espace est configuré. Voici quelques raccourcis pour démarrer rapidement.
               </p>
+              {platformsCreatedCount > 0 && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'oklch(62% 0.16 155 / 0.1)', color: 'oklch(45% 0.16 155)', fontSize: 13, fontWeight: 500, padding: '6px 14px', borderRadius: 999, border: '1px solid oklch(62% 0.16 155 / 0.25)' }}>
+                  <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  {platformsCreatedCount} plateforme{platformsCreatedCount > 1 ? 's' : ''} ajoutée{platformsCreatedCount > 1 ? 's' : ''} à votre inventaire
+                </div>
+              )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[

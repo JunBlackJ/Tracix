@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { config } from '../config';
 import prisma from '../prisma/client';
 
@@ -52,5 +53,12 @@ export async function requireRole(roles: string[]) {
 }
 
 export function generateToken(payload: JwtPayload): string {
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: '24h' });
+  return jwt.sign(payload, config.jwtSecret, { expiresIn: '1h' });
+}
+
+export async function generateRefreshToken(userId: string): Promise<{ raw: string; hash: string; expiresAt: Date }> {
+  const raw = crypto.randomBytes(32).toString('hex');
+  const hash = crypto.createHash('sha256').update(raw).digest('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+  return { raw, hash, expiresAt };
 }

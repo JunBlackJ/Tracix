@@ -11,6 +11,7 @@ import type {
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
 const TOKEN_KEY = 'tracix_token';
+const REFRESH_TOKEN_KEY = 'tracix_refresh_token';
 
 // ─── Token helpers ───
 export function getToken(): string | null {
@@ -23,6 +24,24 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+}
+
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function setRefreshToken(t: string): void {
+  localStorage.setItem(REFRESH_TOKEN_KEY, t);
+}
+
+export function clearRefreshToken(): void {
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+/** Store both access token and refresh token together */
+export function setTokenPair(token: string, refreshToken: string): void {
+  setToken(token);
+  setRefreshToken(refreshToken);
 }
 
 // ─── Risk snapshot ───
@@ -59,7 +78,7 @@ export interface DashboardStats {
 }
 
 // ─── Core request function ───
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -88,6 +107,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error('Impossible de contacter le serveur — vérifiez votre connexion.');
   } finally {
     clearTimeout(timeoutId);
+  }
+
+  // Auto-refresh on 401: attempt once with a new access token
+  if (response.status === 401 && !isRetry) {
+    const storedRefreshToken = getRefreshToken();
+    if (storedRefreshToken) {
+      try {
+        const refreshData = await api.auth.refresh();
+        setTokenPair(refreshData.token, refreshData.refreshToken);
+        // Retry the original request once with the new token
+        return request<T>(path, options, true);
+      } catch {
+        clearToken();
+        clearRefreshToken();
+        throw new Error('Session expirée. Veuillez vous reconnecter.');
+      }
+    }
   }
 
   if (!response.ok) {
@@ -119,13 +155,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // ─── API object ───
 export const api = {
   auth: {
-    login(email: string, password: string): Promise<{ token: string; user: UserApp; organization: Organization }> {
+    login(email: string, password: string): Promise<{ token: string; refreshToken: string; user: UserApp; organization: Organization }> {
       return request('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
     },
-    register(data: { full_name: string; email: string; password: string; organization_name: string }): Promise<{ token: string; user: UserApp; organization: Organization }> {
+    register(data: { full_name: string; email: string; password: string; organization_name: string }): Promise<{ token: string; refreshToken: string; user: UserApp; organization: Organization }> {
       return request('/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -137,13 +173,19 @@ export const api = {
     me(): Promise<{ user: UserApp; organization: Organization }> {
       return request('/auth/me');
     },
+    refresh(): Promise<{ token: string; refreshToken: string; user: UserApp; organization: Organization }> {
+      return request('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: getRefreshToken() }),
+      });
+    },
     updateOrganization(data: { name?: string; max_admin_per_platform?: number; access_review_delay_days?: number; subscription_alert_days?: number; enabled_modules?: ModuleId[]; plan?: string; alert_email_enabled?: boolean; alert_email_address?: string; alert_email_frequency?: string }): Promise<Organization> {
       return request('/auth/organization', { method: 'PUT', body: JSON.stringify(data) });
     },
     oauthUrl(provider: 'google' | 'microsoft' | 'github'): string {
       return `${BASE_URL}/auth/oauth/${provider}`;
     },
-    completeOnboarding(data: { org_name?: string; sector?: string; size?: string; objective?: string; alert_email?: string; alert_email_enabled?: boolean }): Promise<Organization> {
+    completeOnboarding(data: { org_name?: string; sector?: string; size?: string; objective?: string; alert_email?: string; alert_email_enabled?: boolean; platforms?: string[] }): Promise<Organization & { platformsCreated: number }> {
       return request('/auth/onboarding', { method: 'POST', body: JSON.stringify(data) });
     },
     applyPromo(code: string): Promise<Organization & { message: string }> {
@@ -152,7 +194,7 @@ export const api = {
     testEmail(): Promise<{ success: boolean; sent_to: string }> {
       return request('/auth/test-email', { method: 'POST' });
     },
-    loginMfa(userId: string, totp: string): Promise<{ token: string; user: UserApp; organization: Organization }> {
+    loginMfa(userId: string, totp: string): Promise<{ token: string; refreshToken: string; user: UserApp; organization: Organization }> {
       return request('/auth/login/mfa', { method: 'POST', body: JSON.stringify({ user_id: userId, totp }) });
     },
     mfaStatus(): Promise<{ enabled: boolean }> {

@@ -64,6 +64,7 @@ model UserApp {
   organization        Organization         @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   userOrganizations   UserOrganization[]
   passwordResetTokens PasswordResetToken[]
+  refreshTokens       RefreshToken[]
 
   @@map("users")
 }
@@ -418,6 +419,19 @@ model PasswordResetToken {
   user UserApp @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("password_reset_tokens")
+}
+
+model RefreshToken {
+  id         String   @id
+  user_id    String
+  token_hash String   @unique
+  expires_at DateTime
+  revoked    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user UserApp @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
 }
 
 model AuditTrail {

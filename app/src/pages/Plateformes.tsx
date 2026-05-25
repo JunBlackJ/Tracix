@@ -117,6 +117,7 @@ function timeSince(dateStr: string): string {
 function PlateformesList({ platforms, members: _members, alerts: _alerts, accessRights, categories = [], onNew, onEdit, onDeleted }: PlateformesProps & { onNew: () => void; onEdit: (p: Platform) => void; onDeleted?: (id: string) => void }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Toutes');
+  const [editMode, setEditMode] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDelete = async (e: React.MouseEvent, platformId: string) => {
@@ -188,6 +189,11 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
           <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{platforms.length} plateformes connectées</div>
         </div>
         <div style={{ flex: 1 }} />
+        <button
+          onClick={() => setEditMode((v) => !v)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${editMode ? 'oklch(42% 0.18 280)' : 'oklch(82% 0.008 260)'}`, background: editMode ? 'oklch(42% 0.18 280 / 0.08)' : 'transparent', color: editMode ? 'oklch(42% 0.18 280)' : 'oklch(40% 0.012 260)' }}>
+          <Pencil className="w-3.5 h-3.5" /> {editMode ? 'Terminer' : 'Modifier les plateformes'}
+        </button>
         <button onClick={onNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
           <Plus className="w-3.5 h-3.5" /> Connecter une plateforme
         </button>
@@ -252,27 +258,31 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
                       : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: 'oklch(62% 0.16 155 / 0.1)', color: 'oklch(62% 0.16 155)' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />Actif</span>
                     }
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onEdit(p); }}
-                      title="Modifier"
-                      style={{ padding: '5px', borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'oklch(52% 0.012 260)', display: 'flex', alignItems: 'center' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'oklch(94% 0.006 260)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={(e) => handleDelete(e, p.id)}
-                      title="Supprimer"
-                      disabled={deletingId === p.id}
-                      style={{ padding: '5px', borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'oklch(55% 0.22 25)', display: 'flex', alignItems: 'center' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'oklch(55% 0.22 25 / 0.08)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      {deletingId === p.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                    </button>
-                  </div>
+                  {editMode ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onEdit(p); }}
+                        title="Modifier"
+                        style={{ padding: '5px', borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'oklch(52% 0.012 260)', display: 'flex', alignItems: 'center' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'oklch(94% 0.006 260)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(e, p.id)}
+                        title="Supprimer"
+                        disabled={deletingId === p.id}
+                        style={{ padding: '5px', borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'oklch(55% 0.22 25)', display: 'flex', alignItems: 'center' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'oklch(55% 0.22 25 / 0.08)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        {deletingId === p.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: isErr ? 'oklch(55% 0.22 25)' : 'oklch(62% 0.16 155)', boxShadow: isErr ? '0 0 0 2px oklch(55% 0.22 25 / 0.2)' : '0 0 0 2px oklch(62% 0.16 155 / 0.2)' }} />
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

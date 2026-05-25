@@ -73,6 +73,8 @@ Ce document couvre la sécurité, la conformité, l'observabilité, la qualité,
 | Signing secrets webhooks | `webhook_endpoints.signing_secret` | Admin org via API | Régénérer manuellement si exposé |
 | Clés API `trcx_*` | DB (hash SHA-256 uniquement) | Admin org | Tous les 90j recommandé |
 
+Les changements de rôles utilisateur sont systématiquement loggués dans `audit_trails` avec `action = 'user.role_change'`, `old_value.role` et `new_value.role`. La route `PATCH /api/organizations/members/:userId/role` est réservée aux rôles `admin` et `owner`.
+
 **Règle absolue** : aucun secret ne transite dans les logs applicatifs. Voir §5.2.
 
 **En production** : utiliser un secrets manager (AWS Secrets Manager, HashiCorp Vault, Doppler). Le code lit `process.env.*` — compatible sans modification.
@@ -161,8 +163,8 @@ Le middleware `requirePermission(key)` est câblé sur 8 fichiers de routes (`me
 - Le super-admin (`/api/admin`) est le seul endpoint sans filtre `organization_id` — protégé par `requireSuperAdmin` (JWT séparé + optionnellement TOTP)
 - Le switch d'organisation (`POST /api/organizations/:id/switch`) vérifie que l'utilisateur est bien membre de l'org cible avant d'émettre un nouveau token
 
-**Vérification automatisée recommandée :**
-- Ajouter un test d'intégration "cross-tenant" : créer deux orgs, vérifier qu'un token org A ne peut pas lire/modifier les ressources org B sur toutes les routes mutantes.
+**Vérification automatisée :**
+- `server/tests/crossTenant.test.ts` (6 tests) : crée deux orgs isolées, vérifie qu'un token org A retourne 404 (pas 403) sur les membres, alertes et audit trail de org B — GET, PUT et DELETE couverts.
 
 ### 2.2 Politique de rétention des données
 
@@ -173,8 +175,8 @@ La purge automatique est implémentée dans `server/src/services/cron.service.ts
 | `audit_trails` | 365 j | `RETENTION_AUDIT_DAYS` (défaut: 365) | `purgeOldData()` — quotidien |
 | `alerts` résolues | 180 j | `RETENTION_RESOLVED_ALERTS_DAYS` (défaut: 180) | `purgeOldData()` — quotidien |
 | `refresh_tokens` révoqués/expirés | 30 j | `RETENTION_REFRESH_TOKEN_DAYS` (défaut: 30) | `purgeOldData()` — quotidien |
-| `risk_snapshots` | 24 mois | — | À ajouter dans `purgeOldData()` |
-| `password_reset_tokens` | 24h après expiration | — | À ajouter dans `purgeOldData()` |
+| `risk_snapshots` | 24 mois (730 j) | `RETENTION_RISK_SNAPSHOT_DAYS` (défaut: 730) | `purgeOldData()` — quotidien |
+| `password_reset_tokens` | 24h après expiration | `RETENTION_PASSWORD_RESET_HOURS` (défaut: 24) | `purgeOldData()` — quotidien |
 | `webhook_endpoints` | Tant que configuré | — | Suppression manuelle |
 | `connectors` | Tant que configuré | — | Suppression manuelle |
 | Logs applicatifs | 90 jours | — | Rotation fichiers / politique hébergeur |
@@ -241,7 +243,8 @@ Ajouter `deleted_at DateTime?` sur `Member` et `UserApp` pour permettre la récu
 | Taux 4xx auth (401/403) | > 5% sur 5 min | Logs routes auth |
 | Latence moyenne P95 | > 500 ms | APM / logs |
 | Latence DB P95 | > 100 ms | Prisma query events |
-| Tentatives login échouées | > 20/min par IP | `authLimiter` + logs |
+| Tentatives login échouées | > 20/min par IP | `authLimiter` (10 req/15 min) + logs |
+| Tentatives refresh excessives | > 30/15 min par IP | `refreshLimiter` sur `POST /auth/refresh` |
 | Refresh token révoqué réutilisé | Toute occurrence | Log `[Security] family revocation triggered` |
 | Volume webhooks sortants | Pic > 10× baseline | Compteur `webhook_endpoints.last_status_code` |
 | Erreurs connecteurs sync | > 3 échecs consécutifs | `connectors.last_sync_status = 'error'` |
@@ -375,10 +378,14 @@ pg_restore --dbname=$STAGING_DATABASE_URL tracix_backup.dump
 // - advisory lock : si lock non obtenu, job skippé
 ```
 
-`access.test.ts`, `alerts.test.ts` :
+`crossTenant.test.ts` (6 tests — **implémenté**) :
+- Token org A → 404 sur GET/PUT/DELETE membre org B
+- Token org A → alertes org B absentes de la liste
+- Token org A → audit trail org B absent de la liste
+
+`access.test.ts`, `alerts.test.ts` (roadmap) :
 ```typescript
 // - RBAC : reviewer peut révoquer (access_rights.revoke), viewer ne peut pas
-// - Cross-tenant : token org A → 404 sur ressources org B (pas 403)
 ```
 
 ### 4.2 Tests d'intégration API (supertest)

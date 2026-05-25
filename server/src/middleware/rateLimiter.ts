@@ -25,3 +25,12 @@ export const adminLimiter = rateLimit({
   message: { error: 'Trop de tentatives, réessayez dans 15 minutes.' },
   skipSuccessfulRequests: true,
 });
+
+export const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de tentatives de rafraîchissement, réessayez dans 15 minutes.' },
+  skipSuccessfulRequests: true,
+});

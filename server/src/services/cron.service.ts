@@ -244,18 +244,24 @@ async function checkSubscriptionEmails(orgId: string): Promise<void> {
 
 async function purgeOldData(): Promise<void> {
   const { auditTrailDays, refreshTokenDays, resolvedAlertsDays } = config.retention;
+  const riskSnapshotDays = parseInt(process.env.RETENTION_RISK_SNAPSHOT_DAYS || '730', 10);
+  const passwordResetHours = parseInt(process.env.RETENTION_PASSWORD_RESET_HOURS || '24', 10);
   const now = new Date();
 
-  const auditCutoff = new Date(now.getTime() - auditTrailDays * 24 * 60 * 60 * 1000);
-  const refreshCutoff = new Date(now.getTime() - refreshTokenDays * 24 * 60 * 60 * 1000);
-  const alertsCutoff = new Date(now.getTime() - resolvedAlertsDays * 24 * 60 * 60 * 1000);
+  const auditCutoff    = new Date(now.getTime() - auditTrailDays * 24 * 60 * 60 * 1000);
+  const refreshCutoff  = new Date(now.getTime() - refreshTokenDays * 24 * 60 * 60 * 1000);
+  const alertsCutoff   = new Date(now.getTime() - resolvedAlertsDays * 24 * 60 * 60 * 1000);
+  const snapshotCutoff = new Date(now.getTime() - riskSnapshotDays * 24 * 60 * 60 * 1000);
+  const pwResetCutoff  = new Date(now.getTime() - passwordResetHours * 60 * 60 * 1000);
 
-  const [auditCount, refreshCount, alertsCount] = await Promise.all([
+  const [auditCount, refreshCount, alertsCount, snapshotCount, pwResetCount] = await Promise.all([
     prisma.auditTrail.deleteMany({ where: { created_at: { lt: auditCutoff } } }),
     (prisma as any).refreshToken.deleteMany({
       where: { OR: [{ expires_at: { lt: refreshCutoff } }, { revoked: true, created_at: { lt: refreshCutoff } }] },
     }),
     prisma.alert.deleteMany({ where: { is_resolved: true, created_at: { lt: alertsCutoff } } }),
+    prisma.riskSnapshot.deleteMany({ where: { created_at: { lt: snapshotCutoff } } }),
+    (prisma as any).passwordResetToken.deleteMany({ where: { expires_at: { lt: pwResetCutoff } } }),
   ]);
 
   console.log(JSON.stringify({
@@ -263,10 +269,14 @@ async function purgeOldData(): Promise<void> {
     audit_trails_deleted: auditCount.count,
     refresh_tokens_deleted: refreshCount.count,
     resolved_alerts_deleted: alertsCount.count,
+    risk_snapshots_deleted: snapshotCount.count,
+    password_reset_tokens_deleted: pwResetCount.count,
     cutoffs: {
       audit_trail: auditCutoff.toISOString(),
       refresh_token: refreshCutoff.toISOString(),
       resolved_alerts: alertsCutoff.toISOString(),
+      risk_snapshots: snapshotCutoff.toISOString(),
+      password_reset_tokens: pwResetCutoff.toISOString(),
     },
   }));
 }

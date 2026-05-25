@@ -173,6 +173,78 @@ router.post('/:orgId/switch', requireAuth, async (req: Request, res: Response): 
   });
 });
 
+// PATCH /api/organizations/members/:userId/role — modifier le rôle d'un membre (admin uniquement)
+router.patch('/members/:userId/role', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'owner') {
+    res.status(403).json({ error: 'Réservé aux administrateurs.' });
+    return;
+  }
+
+  const { userId } = req.params;
+  const { role } = req.body as { role?: string };
+  const VALID_ROLES = ['owner', 'admin', 'security_manager', 'reviewer', 'auditor', 'editor', 'viewer'];
+
+  if (!role || !VALID_ROLES.includes(role)) {
+    res.status(400).json({ error: `Rôle invalide. Valeurs acceptées : ${VALID_ROLES.join(', ')}` });
+    return;
+  }
+
+  const orgId = req.user!.organizationId;
+
+  // Find the user in this org (main org or membership)
+  const target = await prisma.userApp.findFirst({
+    where: { id: userId, organization_id: orgId },
+    select: { id: true, full_name: true, email: true, role: true },
+  });
+
+  if (!target) {
+    // Check secondary membership
+    const membership = await prisma.userOrganization.findUnique({
+      where: { user_id_organization_id: { user_id: userId, organization_id: orgId } },
+    });
+    if (!membership) { res.status(404).json({ error: 'Utilisateur introuvable dans cette organisation.' }); return; }
+
+    const oldRole = membership.role;
+    await prisma.userOrganization.update({
+      where: { user_id_organization_id: { user_id: userId, organization_id: orgId } },
+      data: { role },
+    });
+    const updatedUser = await prisma.userApp.findUnique({ where: { id: userId }, select: { full_name: true, email: true } });
+    await createAuditEntry({
+      organizationId: orgId,
+      actor: req.user!.email,
+      action: 'user.role_change',
+      targetType: 'user',
+      targetId: userId,
+      targetLabel: updatedUser?.full_name ?? userId,
+      oldValue: { role: oldRole },
+      newValue: { role },
+      ipAddress: getClientIp(req),
+      userAgent: req.headers['user-agent'] ?? '',
+    });
+    res.json({ id: userId, role });
+    return;
+  }
+
+  const oldRole = target.role;
+  await prisma.userApp.update({ where: { id: userId }, data: { role } });
+
+  await createAuditEntry({
+    organizationId: orgId,
+    actor: req.user!.email,
+    action: 'user.role_change',
+    targetType: 'user',
+    targetId: userId,
+    targetLabel: target.full_name,
+    oldValue: { role: oldRole },
+    newValue: { role },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ id: userId, role });
+});
+
 // POST /api/organizations/reset — supprimer toutes les données de l'org (sauf l'org et les utilisateurs)
 router.post('/reset', requireAuth, async (req: Request, res: Response): Promise<void> => {
   // Réservé aux admins uniquement

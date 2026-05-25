@@ -12,7 +12,7 @@ import { sendPasswordResetEmail } from '../services/email.service';
 import { generateAlerts } from '../services/alert.service';
 import { recomputeAllRiskScores } from '../services/risk.service';
 import { config } from '../config';
-import { authLimiter } from '../middleware/rateLimiter';
+import { authLimiter, refreshLimiter } from '../middleware/rateLimiter';
 import { TOTP, NobleCryptoPlugin, ScureBase32Plugin, generateSecret as genTotpSecret } from 'otplib';
 import * as QRCode from 'qrcode';
 
@@ -317,7 +317,7 @@ router.post('/logout', requireAuth, async (req: Request, res: Response): Promise
 // POST /api/auth/refresh — rotation de refresh token
 // Reads the refresh token from the HttpOnly cookie (__rt). Falls back to req.body.refreshToken
 // for backward compatibility during the transition period.
-router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+router.post('/refresh', refreshLimiter, async (req: Request, res: Response): Promise<void> => {
   const rawToken: unknown = req.cookies?.[REFRESH_COOKIE] ?? req.body?.refreshToken;
   if (!rawToken || typeof rawToken !== 'string') {
     res.status(400).json({ error: 'refreshToken requis' });

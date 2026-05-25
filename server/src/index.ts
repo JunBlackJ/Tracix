@@ -28,13 +28,28 @@ import reportsRoutes from './routes/reports';
 import samlRoutes from './routes/saml';
 import adminRoutes from './routes/admin';
 import riskSnapshotsRoutes from './routes/risk-snapshots';
+import connectorsRoutes from './routes/connectors';
+import webhooksRoutes from './routes/webhooks';
+import apiKeysRoutes, { scimRouter } from './routes/api-keys';
 
 const app = express();
 
 // ─── Sécurité HTTP ───
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
-  contentSecurityPolicy: false, // géré côté frontend (Vite)
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  },
 }));
 
 // ─── CORS ───
@@ -81,6 +96,10 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/saml', samlRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/risk-snapshots', riskSnapshotsRoutes);
+app.use('/api/connectors', connectorsRoutes);
+app.use('/api/webhooks', webhooksRoutes);
+app.use('/api/keys', apiKeysRoutes);
+app.use('/api/scim', scimRouter);
 
 // ─── 404 handler ───
 app.use((_req, res) => {

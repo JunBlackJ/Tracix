@@ -29,13 +29,19 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   const token = authHeader.slice(7);
 
-  try {
-    const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
-    req.user = decoded;
-    next();
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired token' });
+  // Try current key first, then previous key if it exists (enables zero-downtime rotation).
+  const secrets = [config.jwtSecret, config.jwtSecretPrevious].filter(Boolean);
+  for (const secret of secrets) {
+    try {
+      const decoded = jwt.verify(token, secret) as JwtPayload;
+      req.user = decoded;
+      next();
+      return;
+    } catch {
+      // try next key
+    }
   }
+  res.status(401).json({ error: 'Invalid or expired token' });
 }
 
 export async function requireRole(roles: string[]) {
@@ -53,7 +59,7 @@ export async function requireRole(roles: string[]) {
 }
 
 export function generateToken(payload: JwtPayload): string {
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: '1h' });
+  return jwt.sign(payload, config.jwtSecret, { expiresIn: '1h', keyid: 'current' });
 }
 
 export async function generateRefreshToken(userId: string): Promise<{ raw: string; hash: string; expiresAt: Date }> {

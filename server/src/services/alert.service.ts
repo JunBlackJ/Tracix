@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import prisma from '../prisma/client';
 import { sendAlertEmail } from './email.service';
 import { config } from '../config';
@@ -415,6 +416,62 @@ export async function generateAlerts(orgId: string, forceRefreshTypes: string[] 
         })),
         frontendUrl: config.frontendUrl,
       }).catch((err) => console.error('[Email] Erreur envoi alertes immédiates:', err));
+    }
+
+    // Trigger webhooks for critical/high alerts (fire-and-forget)
+    triggerWebhooks(orgId, newAlerts.map((a) => ({
+      type: a.type,
+      severity: a.severity,
+      message: a.message,
+      source_label: a.source_label,
+    }))).catch((err) => console.error('[Webhook] Erreur trigger webhooks:', err));
+  }
+}
+
+async function triggerWebhooks(
+  orgId: string,
+  alerts: Array<{ type: string; severity: string; message: string; source_label: string }>,
+): Promise<void> {
+  const criticalAlerts = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high');
+  if (criticalAlerts.length === 0) return;
+
+  const webhooks = await (prisma as any).webhookEndpoint.findMany({
+    where: { organization_id: orgId, active: true },
+  });
+
+  for (const webhook of webhooks) {
+    const events: string[] = webhook.events as string[];
+    if (!events.includes('alert.critical') && !events.includes('alert.all')) continue;
+
+    for (const alert of criticalAlerts) {
+      const payload = {
+        event: 'alert.critical',
+        organization_id: orgId,
+        alert: {
+          type: alert.type,
+          severity: alert.severity,
+          message: alert.message,
+          source_label: alert.source_label,
+          created_at: new Date().toISOString(),
+        },
+      };
+      const body = JSON.stringify(payload);
+      const sig = crypto.createHmac('sha256', webhook.signing_secret || '').update(body).digest('hex');
+
+      fetch(webhook.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tracix-Event': 'alert.critical',
+          'X-Tracix-Signature': `sha256=${sig}`,
+        },
+        body,
+      }).then(async (r) => {
+        await (prisma as any).webhookEndpoint.update({
+          where: { id: webhook.id },
+          data: { last_triggered_at: new Date(), last_status_code: r.status },
+        });
+      }).catch(() => {});
     }
   }
 }

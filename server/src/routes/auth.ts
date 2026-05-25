@@ -66,7 +66,13 @@ const MAX_ATTEMPTS = 5;         // tentatives avant verrouillage
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 // ─── Helper: issue access token + refresh token pair ───
-async function issueTokenPair(userId: string, organizationId: string, email: string, role: string) {
+async function issueTokenPair(
+  userId: string,
+  organizationId: string,
+  email: string,
+  role: string,
+  req?: Request,
+) {
   const token = generateToken({ userId, organizationId, email, role });
   const { raw, hash, expiresAt } = await generateRefreshToken(userId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,6 +82,8 @@ async function issueTokenPair(userId: string, organizationId: string, email: str
       user_id: userId,
       token_hash: hash,
       expires_at: expiresAt,
+      user_agent: req?.headers['user-agent'] ?? '',
+      ip_address: req ? getClientIp(req) : '',
     },
   });
   return { token, refreshToken: raw, refreshExpiresAt: expiresAt };
@@ -162,7 +170,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
   }
 
   const { token, refreshToken, refreshExpiresAt } = await issueTokenPair(
-    user.id, user.organization_id, user.email, user.role
+    user.id, user.organization_id, user.email, user.role, req
   );
 
   await createAuditEntry({
@@ -229,7 +237,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
   });
 
   const { token, refreshToken, refreshExpiresAt } = await issueTokenPair(
-    user.id, user.organization_id, user.email, user.role
+    user.id, user.organization_id, user.email, user.role, req
   );
 
   await createAuditEntry({
@@ -302,8 +310,24 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
     where: { token_hash: hash },
   }) as { id: string; user_id: string; expires_at: Date; revoked: boolean } | null;
 
-  if (!stored || stored.revoked || stored.expires_at < new Date()) {
+  if (!stored) {
     res.status(401).json({ error: 'Refresh token invalide ou expiré' });
+    return;
+  }
+
+  if (stored.revoked) {
+    // Token already revoked — likely stolen and replayed. Revoke entire family.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma as any).refreshToken.updateMany({
+      where: { user_id: stored.user_id, revoked: false },
+      data: { revoked: true },
+    });
+    res.status(401).json({ error: 'Session compromise détectée — toutes les sessions ont été révoquées' });
+    return;
+  }
+
+  if (stored.expires_at < new Date()) {
+    res.status(401).json({ error: 'Refresh token expiré' });
     return;
   }
 
@@ -326,7 +350,7 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
   });
 
   const { token, refreshToken: newRefreshToken, refreshExpiresAt } = await issueTokenPair(
-    user.id, user.organization_id, user.email, user.role
+    user.id, user.organization_id, user.email, user.role, req
   );
 
   res.json({
@@ -645,15 +669,17 @@ async function handleOAuthUser(
     });
   }
 
-  const token = generateToken({
-    userId: user.id,
-    organizationId: user.organization_id,
-    email: user.email,
-    role: user.role,
-  });
+  const { token, refreshToken } = await issueTokenPair(
+    user.id,
+    user.organization_id,
+    user.email,
+    user.role,
+  );
 
-  // Redirect to frontend callback with token
-  res.redirect(`${FRONTEND}/oauth/callback?token=${encodeURIComponent(token)}`);
+  // Redirect to frontend callback with both tokens
+  res.redirect(
+    `${FRONTEND}/oauth/callback?token=${encodeURIComponent(token)}&refreshToken=${encodeURIComponent(refreshToken)}`,
+  );
 }
 
 // ─── Google OAuth ───
@@ -817,8 +843,13 @@ router.get('/oauth/github/callback', async (req: Request, res: Response): Promis
   }
 });
 
-// POST /api/auth/test-email — envoie un email de test à l'adresse configurée
+
+// POST /api/auth/test-email — envoie un email de test à l'adresse configurée (admin only)
 router.post('/test-email', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  if (req.user!.role !== 'admin') {
+    res.status(403).json({ error: 'Accès réservé aux administrateurs.' });
+    return;
+  }
   if (!process.env.RESEND_API_KEY) {
     res.status(503).json({ error: 'RESEND_API_KEY non configuré sur le serveur' });
     return;
@@ -833,12 +864,18 @@ router.post('/test-email', requireAuth, async (req: Request, res: Response): Pro
 
   try {
     const { sendAlertEmail } = await import('../services/email.service');
-    await sendAlertEmail({
-      to,
-      orgName: org?.name ?? 'Tracix',
-      alerts: [{ type: 'no_mfa_on_admin', severity: 'critical', message: 'Ceci est un email de test — configuration Resend opérationnelle ✓', source_label: 'Test' }],
-      frontendUrl: config.frontendUrl,
-    });
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout (5s) — Resend ne répond pas')), 5000),
+    );
+    await Promise.race([
+      sendAlertEmail({
+        to,
+        orgName: org?.name ?? 'Tracix',
+        alerts: [{ type: 'no_mfa_on_admin', severity: 'critical', message: 'Ceci est un email de test — configuration Resend opérationnelle ✓', source_label: 'Test' }],
+        frontendUrl: config.frontendUrl,
+      }),
+      timeout,
+    ]);
     res.json({ success: true, sent_to: to });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erreur inconnue';
@@ -879,7 +916,7 @@ router.post('/login/mfa', authLimiter, async (req: Request, res: Response): Prom
   }
 
   const { token, refreshToken, refreshExpiresAt } = await issueTokenPair(
-    user.id, user.organization_id, user.email, user.role
+    user.id, user.organization_id, user.email, user.role, req
   );
 
   await createAuditEntry({

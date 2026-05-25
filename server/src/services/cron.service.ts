@@ -6,9 +6,19 @@ import { takeRiskSnapshot } from './snapshot.service';
 import { sendAlertEmail } from './email.service';
 import { config } from '../config';
 
+const CRON_LOCK_KEY = 1_337_420; // arbitrary stable integer for pg_try_advisory_lock
+
 // Runs every day at 8:00 AM
 export function startCronJobs(): void {
   cron.schedule('0 8 * * *', async () => {
+    // Acquire a PostgreSQL advisory lock so only one instance runs this job at a time.
+    const [lockRow] = await prisma.$queryRaw<[{ acquired: boolean }]>`
+      SELECT pg_try_advisory_lock(${CRON_LOCK_KEY}) AS acquired
+    `;
+    if (!lockRow.acquired) {
+      console.log('[Cron] Another instance is running — skipping.');
+      return;
+    }
     console.log('[Cron] Daily check starting…');
     try {
       const orgs = await prisma.organization.findMany();
@@ -35,6 +45,8 @@ export function startCronJobs(): void {
       console.log('[Cron] Daily check done.');
     } catch (e) {
       console.error('[Cron] Fatal error during daily check:', e);
+    } finally {
+      await prisma.$queryRaw`SELECT pg_advisory_unlock(${CRON_LOCK_KEY})`;
     }
   });
 

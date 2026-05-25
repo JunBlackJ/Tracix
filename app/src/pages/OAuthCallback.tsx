@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Shield, X } from 'lucide-react';
 
 interface OAuthCallbackProps {
-  onLoginWithToken: (token: string) => Promise<boolean>;
+  onLoginWithToken: (token: string, refreshToken?: string) => Promise<boolean>;
 }
 
 export function OAuthCallback({ onLoginWithToken }: OAuthCallbackProps) {
@@ -13,6 +13,7 @@ export function OAuthCallback({ onLoginWithToken }: OAuthCallbackProps) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
+    const refreshToken = params.get('refreshToken') ?? undefined;
     const err = params.get('error');
 
     if (err) {
@@ -25,7 +26,7 @@ export function OAuthCallback({ onLoginWithToken }: OAuthCallbackProps) {
       return;
     }
 
-    onLoginWithToken(token).then((ok) => {
+    onLoginWithToken(token, refreshToken).then((ok) => {
       if (ok) {
         window.location.href = '/dashboard';
       } else {

@@ -40,6 +40,9 @@ model Organization {
   customModules    CustomModule[]
   reviewCampaigns  ReviewCampaign[]
   samlConfig       SamlConfig?
+  connectors       Connector[]
+  webhookEndpoints WebhookEndpoint[]
+  apiKeys          ApiKey[]
 
   @@map("organizations")
 }
@@ -150,6 +153,9 @@ model AccessRight {
   platform     Platform     @relation(fields: [platform_id], references: [id], onDelete: Cascade)
 
   @@unique([member_id, platform_id])
+  @@index([organization_id, level])
+  @@index([member_id])
+  @@index([platform_id])
   @@map("access_rights")
 }
 
@@ -324,6 +330,8 @@ model Alert {
 
   organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
 
+  @@index([organization_id, is_resolved])
+  @@index([organization_id, severity])
   @@map("alerts")
 }
 
@@ -422,16 +430,127 @@ model PasswordResetToken {
 }
 
 model RefreshToken {
-  id         String   @id
-  user_id    String
-  token_hash String   @unique
-  expires_at DateTime
-  revoked    Boolean  @default(false)
-  created_at DateTime @default(now())
+  id             String   @id
+  user_id        String
+  token_hash     String   @unique
+  expires_at     DateTime
+  revoked        Boolean  @default(false)
+  revoked_reason String   @default("")
+  user_agent     String   @default("")
+  ip_address     String   @default("")
+  last_used_at   DateTime @default(now())
+  created_at     DateTime @default(now())
 
   user UserApp @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
+  @@index([user_id, revoked])
   @@map("refresh_tokens")
+}
+
+// ─── RBAC (préparation enterprise) ───
+// Tables vides intentionnellement — le code applicatif utilise encore les rôles string.
+// Migration vers RBAC fin : connecter user_roles + role_permissions aux middlewares.
+
+model Role {
+  id          String   @id
+  name        String   @unique  // ex: "admin", "security_manager", "reviewer", "auditor", "viewer"
+  description String   @default("")
+  created_at  DateTime @default(now())
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id
+  key         String   @unique  // ex: "members.write", "alerts.resolve", "access_rights.revoke"
+  description String   @default("")
+  created_at  DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  role_id       String
+  permission_id String
+
+  role       Role       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  @@id([role_id, permission_id])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id              String   @id
+  user_id         String
+  organization_id String
+  role_id         String
+  granted_at      DateTime @default(now())
+
+  role Role @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, organization_id, role_id])
+  @@map("user_roles")
+}
+
+model Connector {
+  id               String    @id
+  organization_id  String
+  provider         String    // 'github' | 'okta' | 'microsoft_graph' | 'google_workspace'
+  config           Json      @default("{}")  // token, org, domain selon provider
+  enabled          Boolean   @default(true)
+  last_sync_at     DateTime?
+  last_sync_status String    @default("")    // 'success' | 'error' | ''
+  last_sync_error  String    @default("")
+  synced_count     Int       @default(0)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@unique([organization_id, provider])
+  @@map("connectors")
+}
+
+model WebhookEndpoint {
+  id                String    @id
+  organization_id   String
+  name              String
+  provider          String    // 'slack' | 'teams' | 'discord' | 'pagerduty' | 'custom'
+  url               String
+  events            Json      @default("[\"alert.critical\"]")
+  active            Boolean   @default(true)
+  signing_secret    String    @default("")
+  last_triggered_at DateTime?
+  last_status_code  Int?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@map("webhook_endpoints")
+}
+
+model ApiKey {
+  id              String    @id
+  organization_id String
+  name            String
+  key_hash        String    @unique
+  key_prefix      String
+  scopes          Json      @default("[\"read\"]")
+  last_used_at    DateTime?
+  expires_at      DateTime?
+  revoked         Boolean   @default(false)
+  created_at      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
 }
 
 model AuditTrail {
@@ -450,5 +569,7 @@ model AuditTrail {
 
   organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
 
+  @@index([organization_id, created_at(sort: Desc)])
+  @@index([organization_id, actor])
   @@map("audit_trails")
 }

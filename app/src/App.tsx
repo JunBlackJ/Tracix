@@ -27,6 +27,7 @@ import { Admin } from '@/pages/Admin';
 import { Onboarding } from '@/pages/Onboarding';
 import { useStore } from '@/hooks/useStore';
 import { Toaster } from '@/components/ui/sonner';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 function App() {
   const store = useStore();
@@ -60,12 +61,14 @@ function App() {
   if (!store.isAuthenticated || isOAuthCallback) {
     return (
       <BrowserRouter>
-        <Routes>
-          <Route path="/oauth/callback" element={<OAuthCallback onLoginWithToken={store.loginWithToken} />} />
-          <Route path="/rejoindre/:token" element={<Rejoindre onLoginWithToken={store.loginWithToken} />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="*" element={<Landing onLogin={store.login} onLoginWithMfa={store.loginWithMfa} onRegister={store.register} />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/oauth/callback" element={<OAuthCallback onLoginWithToken={store.loginWithToken} />} />
+            <Route path="/rejoindre/:token" element={<Rejoindre onLoginWithToken={store.loginWithToken} />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="*" element={<Landing onLogin={store.login} onLoginWithMfa={store.loginWithMfa} onRegister={store.register} />} />
+          </Routes>
+        </ErrorBoundary>
       </BrowserRouter>
     );
   }
@@ -100,6 +103,7 @@ function App() {
         onSwitchOrg={store.switchOrganization}
         onCreateOrg={store.createOrganization}
       >
+        <ErrorBoundary>
         <Routes>
           <Route
             path="/dashboard"
@@ -276,6 +280,7 @@ function App() {
           />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </ErrorBoundary>
       </AppLayout>
     </BrowserRouter>
   );

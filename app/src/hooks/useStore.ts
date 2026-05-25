@@ -8,7 +8,7 @@ import type {
   System, NetworkFlow, Subscription, Alert, AuditTrail,
   AccessLevel, Category, CustomModule,
 } from '@/types';
-import { api, getToken, setToken, setTokenPair, clearToken, clearRefreshToken } from '@/lib/api';
+import { api, getToken, setToken, setTokenPair, clearToken, clearRefreshToken, setRefreshToken } from '@/lib/api';
 
 export interface OrgEntry { org: Organization; role: string; }
 
@@ -148,9 +148,9 @@ export function useStore() {
   }, [loadAllData]);
 
   // ─── Login with token (OAuth callback) ───
-  const loginWithToken = useCallback(async (token: string): Promise<boolean> => {
+  const loginWithToken = useCallback(async (token: string, refreshToken?: string): Promise<boolean> => {
     try {
-      setToken(token);
+      if (refreshToken) { setTokenPair(token, refreshToken); } else { setToken(token); }
       const { user: u, organization: org } = await api.auth.me();
       setUser(u);
       setOrganization(org);

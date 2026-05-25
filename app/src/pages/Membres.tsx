@@ -178,8 +178,9 @@ function MembresList({ members, accessRights = [], onNew }: { members: Member[];
   };
 
   const exportCsv = () => {
+    const esc = (v: string) => /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
     const ws = XLSX.utils.json_to_sheet(members.map((m) => ({
-      Nom: m.full_name, Email: m.email, Département: m.team,
+      Nom: esc(m.full_name), Email: esc(m.email), Département: esc(m.team),
       Rôle: ROLE_LABEL[m.account_type], Statut: m.status, 'Score risque': m.risk_score,
     })));
     const wb = XLSX.utils.book_new();

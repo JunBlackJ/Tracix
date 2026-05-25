@@ -13,7 +13,9 @@ import {
   List, BookOpen, StickyNote, BarChart2, Layers,
   Zap, Star, Crown, Check, ArrowRight, Trash2,
   KeyRound, QrCode, Unlock, Eye, EyeOff,
+  Plug, Key, Hash, Copy, RefreshCw, CheckCircle,
 } from 'lucide-react';
+import type { Connector, WebhookEndpoint, ApiKeyInfo, ApiKeyCreated } from '@/lib/api';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { UserApp, Organization, Category, CategoryType, ModuleId, CustomModule, CustomModuleType } from '@/types';
@@ -31,13 +33,13 @@ interface ParametresProps {
   onCustomModuleRemoved: (id: string) => void;
 }
 
-type Section = 'profil' | 'organisation' | 'plan' | 'modules' | 'custom-modules' | 'membres' | 'categories' | 'sso' | 'integrations' | 'securite';
+type Section = 'profil' | 'organisation' | 'plan' | 'modules' | 'custom-modules' | 'membres' | 'categories' | 'sso' | 'integrations' | 'connecteurs' | 'api-keys' | 'securite';
 
 export function Parametres({ user, organization, categories, customModules, onCategoryAdded, onCategoryRemoved, onOrganizationUpdated, onCustomModuleCreated, onCustomModuleRemoved, onThresholdSaved }: ParametresProps) {
   const [searchParams] = useSearchParams();
   const [section, setSection] = useState<Section>(() => {
     const s = searchParams.get('section');
-    const valid: Section[] = ['profil', 'organisation', 'plan', 'modules', 'custom-modules', 'membres', 'categories', 'sso', 'integrations', 'securite'];
+    const valid: Section[] = ['profil', 'organisation', 'plan', 'modules', 'custom-modules', 'membres', 'categories', 'sso', 'integrations', 'connecteurs', 'api-keys', 'securite'];
     return (valid.includes(s as Section) ? s : 'profil') as Section;
   });
 
@@ -51,6 +53,8 @@ export function Parametres({ user, organization, categories, customModules, onCa
     { id: 'categories', label: 'Catégories', icon: Tag },
     { id: 'sso', label: 'SSO / SAML', icon: ShieldCheck },
     { id: 'integrations', label: 'Intégrations', icon: Link2 },
+    { id: 'connecteurs', label: 'Connecteurs', icon: Plug },
+    { id: 'api-keys', label: 'API & SCIM', icon: Key },
     { id: 'securite', label: 'Sécurité', icon: Lock },
   ];
 
@@ -112,6 +116,8 @@ export function Parametres({ user, organization, categories, customModules, onCa
           )}
           {section === 'sso' && <SsoSection organization={organization} />}
           {section === 'integrations' && <IntegrationsSection organization={organization} onUpdated={onOrganizationUpdated} />}
+          {section === 'connecteurs' && <ConnectorsSection />}
+          {section === 'api-keys' && <ApiKeysSection organization={organization} />}
           {section === 'securite' && <SecuriteSection />}
         </div>
       </div>
@@ -1007,23 +1013,863 @@ function IntegrationsSection({ organization, onUpdated }: { organization: Organi
         </div>
       </div>
 
-      {/* Intégrations à venir */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="text-base font-semibold text-gray-900 mb-3">Intégrations à venir</h2>
-        <div className="space-y-2">
-          {[
-            { name: 'Slack', desc: 'Notifications dans un channel Slack' },
-            { name: 'Google Workspace', desc: 'Sync automatique des membres et groupes' },
-            { name: 'Active Directory / LDAP', desc: 'Synchronisation des utilisateurs' },
-          ].map((int) => (
-            <div key={int.name} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 opacity-50">
-              <div>
-                <p className="text-sm font-medium text-gray-700">{int.name}</p>
-                <p className="text-xs text-gray-400">{int.desc}</p>
-              </div>
-              <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">Bientôt</span>
+      {/* Webhooks */}
+      <WebhooksSubSection />
+    </div>
+  );
+}
+
+// ─── Webhooks sub-section (used inside IntegrationsSection) ───
+
+const WEBHOOK_PROVIDERS: { value: string; label: string; bg: string; icon: React.ElementType }[] = [
+  { value: 'slack',      label: 'Slack',      bg: '#4A154B', icon: Hash },
+  { value: 'teams',      label: 'Teams',      bg: '#5264AB', icon: Hash },
+  { value: 'discord',    label: 'Discord',    bg: '#5865F2', icon: Hash },
+  { value: 'pagerduty',  label: 'PagerDuty',  bg: '#25C151', icon: Hash },
+  { value: 'custom',     label: 'Custom',     bg: '#6B7280', icon: Hash },
+];
+
+const WEBHOOK_EVENTS: { value: string; label: string }[] = [
+  { value: 'alert.critical', label: 'Alertes critiques & high' },
+  { value: 'alert.all',      label: 'Toutes les alertes' },
+];
+
+function WebhooksSubSection() {
+  const [webhooks, setWebhooks]     = useState<WebhookEndpoint[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [showForm, setShowForm]     = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const [testing, setTesting]       = useState<string | null>(null);
+  const [removing, setRemoving]     = useState<string | null>(null);
+  const [copiedSecret, setCopiedSecret] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: '',
+    provider: 'slack',
+    url: '',
+    events: ['alert.critical'] as string[],
+    active: true,
+  });
+
+  useEffect(() => {
+    api.webhooks.list()
+      .then(setWebhooks)
+      .catch(() => {/* silently ignore — endpoint may not exist yet */})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.url.trim()) { toast.error('Nom et URL requis'); return; }
+    if (form.events.length === 0) { toast.error('Sélectionnez au moins un événement'); return; }
+    setSaving(true);
+    try {
+      const created = await api.webhooks.create(form);
+      setWebhooks((prev) => [created, ...prev]);
+      setShowForm(false);
+      setForm({ name: '', provider: 'slack', url: '', events: ['alert.critical'], active: true });
+      toast.success('Webhook créé');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur création webhook');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async (id: string) => {
+    setTesting(id);
+    try {
+      const res = await api.webhooks.test(id);
+      toast.success(`Test envoyé — HTTP ${res.status_code}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors du test');
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleToggle = async (hook: WebhookEndpoint) => {
+    try {
+      const updated = await api.webhooks.update(hook.id, { active: !hook.active });
+      setWebhooks((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
+    } catch {
+      toast.error('Erreur mise à jour webhook');
+    }
+  };
+
+  const handleRemove = async (id: string) => {
+    setRemoving(id);
+    try {
+      await api.webhooks.remove(id);
+      setWebhooks((prev) => prev.filter((h) => h.id !== id));
+      toast.success('Webhook supprimé');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur suppression');
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  const copySecret = (id: string, secret: string) => {
+    navigator.clipboard.writeText(secret).then(() => {
+      setCopiedSecret(id);
+      setTimeout(() => setCopiedSecret(null), 2000);
+    });
+  };
+
+  const providerMeta = (p: string) => WEBHOOK_PROVIDERS.find((x) => x.value === p) ?? WEBHOOK_PROVIDERS[WEBHOOK_PROVIDERS.length - 1];
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <Zap className="w-4 h-4 text-[#534AB7]" />
+            Webhooks
+          </h2>
+          <p className="text-xs text-gray-400 mt-0.5">Envoyez les alertes vers vos outils externes.</p>
+        </div>
+        {!showForm && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#534AB7] text-white rounded-lg text-xs font-medium hover:bg-[#3C3489] transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Ajouter
+          </button>
+        )}
+      </div>
+
+      {/* Form */}
+      {showForm && (
+        <form onSubmit={handleCreate} className="border border-[#534AB7]/20 rounded-xl p-4 bg-[#534AB7]/3 mb-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-800">Nouveau webhook</p>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Nom *</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="ex: Alertes Slack IT"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Provider</label>
+            <select
+              value={form.provider}
+              onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7]"
+            >
+              {WEBHOOK_PROVIDERS.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">URL *</label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+              placeholder="https://hooks.slack.com/services/..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Événements</label>
+            <div className="space-y-1.5">
+              {WEBHOOK_EVENTS.map((ev) => (
+                <label key={ev.value} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.events.includes(ev.value)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setForm((f) => ({ ...f, events: [...f.events, ev.value] }));
+                      } else {
+                        setForm((f) => ({ ...f, events: f.events.filter((x) => x !== ev.value) }));
+                      }
+                    }}
+                    className="w-3.5 h-3.5 accent-[#534AB7]"
+                  />
+                  <span className="text-sm text-gray-700">{ev.label}</span>
+                </label>
+              ))}
             </div>
-          ))}
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setForm({ name: '', provider: 'slack', url: '', events: ['alert.critical'], active: true }); }}
+              className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 inline-flex items-center justify-center gap-2 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              {saving ? 'Création…' : 'Créer'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* List */}
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+        </div>
+      ) : webhooks.length === 0 ? (
+        <div className="text-center py-8 text-sm text-gray-400">
+          Aucun webhook configuré
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {webhooks.map((hook) => {
+            const meta = providerMeta(hook.provider);
+            return (
+              <div key={hook.id} className="border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: meta.bg + '22' }}
+                    >
+                      <meta.icon className="w-4 h-4" style={{ color: meta.bg }} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900">{hook.name}</p>
+                        <span
+                          className="text-[10px] font-medium px-1.5 py-0.5 rounded-full text-white"
+                          style={{ backgroundColor: meta.bg }}
+                        >
+                          {meta.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 truncate max-w-xs">{hook.url}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Toggle actif */}
+                    <button
+                      onClick={() => handleToggle(hook)}
+                      className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${hook.active ? 'bg-[#534AB7]' : 'bg-gray-300'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${hook.active ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Events */}
+                <div className="flex flex-wrap gap-1.5">
+                  {hook.events.map((ev) => (
+                    <span key={ev} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
+                      {WEBHOOK_EVENTS.find((e) => e.value === ev)?.label ?? ev}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Signing secret */}
+                {hook.signing_secret && (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span className="font-medium text-gray-600">Secret :</span>
+                    <span className="font-mono bg-gray-50 border border-gray-200 rounded px-2 py-0.5 text-gray-600">
+                      {hook.signing_secret.slice(0, 8)}••••••••
+                    </span>
+                    <button
+                      onClick={() => copySecret(hook.id, hook.signing_secret)}
+                      className="p-0.5 text-gray-400 hover:text-[#534AB7] transition-colors"
+                    >
+                      {copiedSecret === hook.id
+                        ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        : <Copy className="w-3.5 h-3.5" />
+                      }
+                    </button>
+                  </div>
+                )}
+
+                {/* Last triggered */}
+                {hook.last_triggered_at && (
+                  <p className="text-xs text-gray-400">
+                    Dernier déclenchement : {new Date(hook.last_triggered_at).toLocaleString('fr-FR')}
+                    {hook.last_status_code != null && (
+                      <span className={`ml-1.5 font-medium ${hook.last_status_code < 400 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        HTTP {hook.last_status_code}
+                      </span>
+                    )}
+                  </p>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => handleTest(hook.id)}
+                    disabled={testing === hook.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {testing === hook.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                    Tester
+                  </button>
+                  <button
+                    onClick={() => handleRemove(hook.id)}
+                    disabled={removing === hook.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-red-100 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  >
+                    {removing === hook.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    Supprimer
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Connecteurs ───
+
+const CONNECTOR_PROVIDERS: {
+  value: string;
+  label: string;
+  fields: { key: string; label: string; placeholder: string; secret?: boolean }[];
+}[] = [
+  {
+    value: 'github',
+    label: 'GitHub',
+    fields: [
+      { key: 'org',   label: 'Organisation GitHub',  placeholder: 'my-org' },
+      { key: 'token', label: 'Personal Access Token', placeholder: 'ghp_...', secret: true },
+    ],
+  },
+  {
+    value: 'okta',
+    label: 'Okta',
+    fields: [
+      { key: 'domain', label: 'Domaine Okta',  placeholder: 'company.okta.com' },
+      { key: 'token',  label: 'API Token',      placeholder: 'SSWS ...', secret: true },
+    ],
+  },
+  {
+    value: 'microsoft_graph',
+    label: 'Microsoft Graph',
+    fields: [
+      { key: 'tenant_id',     label: 'Tenant ID',     placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx' },
+      { key: 'client_id',     label: 'Client ID',     placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx' },
+      { key: 'client_secret', label: 'Client Secret', placeholder: '••••••••', secret: true },
+    ],
+  },
+  {
+    value: 'google_workspace',
+    label: 'Google Workspace',
+    fields: [
+      { key: 'domain',       label: 'Domaine',       placeholder: 'company.com' },
+      { key: 'access_token', label: 'Access Token',  placeholder: '••••••••', secret: true },
+    ],
+  },
+];
+
+function ConnectorsSection() {
+  const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [openForm, setOpenForm]     = useState<string | null>(null);
+  const [formConfig, setFormConfig] = useState<Record<string, string>>({});
+  const [saving, setSaving]         = useState(false);
+  const [syncing, setSyncing]       = useState<string | null>(null);
+  const [removing, setRemoving]     = useState<string | null>(null);
+
+  useEffect(() => {
+    api.connectors.list()
+      .then(setConnectors)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const connectorFor = (provider: string) =>
+    connectors.find((c) => c.provider === provider);
+
+  const openConfigure = (provider: string) => {
+    const existing = connectorFor(provider);
+    const meta = CONNECTOR_PROVIDERS.find((p) => p.value === provider)!;
+    const defaultConfig: Record<string, string> = {};
+    meta.fields.forEach((f) => { defaultConfig[f.key] = existing?.config[f.key] ?? ''; });
+    setFormConfig(defaultConfig);
+    setOpenForm(provider);
+  };
+
+  const handleSave = async (provider: string) => {
+    setSaving(true);
+    try {
+      const result = await api.connectors.upsert({ provider, config: formConfig, enabled: true });
+      setConnectors((prev) => {
+        const idx = prev.findIndex((c) => c.provider === provider);
+        return idx >= 0 ? prev.map((c, i) => (i === idx ? result : c)) : [result, ...prev];
+      });
+      setOpenForm(null);
+      toast.success('Connecteur configuré');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur configuration');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSync = async (id: string) => {
+    setSyncing(id);
+    try {
+      await api.connectors.sync(id);
+      toast.success('Synchronisation lancée');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur synchronisation');
+    } finally {
+      setSyncing(null);
+    }
+  };
+
+  const handleRemove = async (id: string) => {
+    setRemoving(id);
+    try {
+      await api.connectors.remove(id);
+      setConnectors((prev) => prev.filter((c) => c.id !== id));
+      toast.success('Connecteur supprimé');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur suppression');
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Plug className="w-5 h-5 text-[#534AB7]" />
+            Connecteurs
+          </h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Synchronisez automatiquement vos membres depuis vos outils d'identité.
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {CONNECTOR_PROVIDERS.map((meta) => {
+              const connector = connectorFor(meta.value);
+              const isConfigured = !!connector;
+              const isFormOpen = openForm === meta.value;
+
+              return (
+                <div key={meta.value} className="border border-gray-200 rounded-xl p-4 space-y-3">
+                  {/* Header */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <Plug className="w-4 h-4 text-gray-500" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{meta.label}</p>
+                        <span
+                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                            isConfigured
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-gray-100 text-gray-500'
+                          }`}
+                        >
+                          {isConfigured ? 'Configuré' : 'Non configuré'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {isConfigured && (
+                        <>
+                          <button
+                            onClick={() => handleSync(connector.id)}
+                            disabled={syncing === connector.id}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                          >
+                            {syncing === connector.id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <RefreshCw className="w-3 h-3" />
+                            }
+                            Sync
+                          </button>
+                          <button
+                            onClick={() => handleRemove(connector.id)}
+                            disabled={removing === connector.id}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-red-100 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            {removing === connector.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                            Supprimer
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => isFormOpen ? setOpenForm(null) : openConfigure(meta.value)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#534AB7] text-white rounded-lg text-xs font-medium hover:bg-[#3C3489] transition-colors"
+                      >
+                        {isFormOpen ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                        {isFormOpen ? 'Annuler' : 'Configurer'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sync info */}
+                  {isConfigured && !isFormOpen && (
+                    <div className="flex flex-wrap gap-3 text-xs text-gray-500 border-t border-gray-100 pt-3">
+                      <span>
+                        Dernière sync :{' '}
+                        {connector.last_sync_at
+                          ? new Date(connector.last_sync_at).toLocaleString('fr-FR')
+                          : 'jamais'}
+                      </span>
+                      <span>{connector.synced_count} membres synchronisés</span>
+                      {connector.last_sync_status === 'success' && (
+                        <span className="flex items-center gap-1 text-emerald-600 font-medium">
+                          <CheckCircle className="w-3 h-3" /> Succès
+                        </span>
+                      )}
+                      {connector.last_sync_status === 'error' && (
+                        <span className="flex items-center gap-1 text-red-500 font-medium">
+                          <X className="w-3 h-3" /> Erreur
+                          {connector.last_sync_error && ` — ${connector.last_sync_error}`}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Form */}
+                  {isFormOpen && (
+                    <div className="border-t border-gray-100 pt-3 space-y-3">
+                      {meta.fields.map((field) => (
+                        <div key={field.key}>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">{field.label}</label>
+                          <input
+                            type={field.secret ? 'password' : 'text'}
+                            value={formConfig[field.key] ?? ''}
+                            onChange={(e) => setFormConfig((c) => ({ ...c, [field.key]: e.target.value }))}
+                            placeholder={field.placeholder}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7]"
+                          />
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => handleSave(meta.value)}
+                        disabled={saving}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] disabled:opacity-60 transition-colors"
+                      >
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        {saving ? 'Enregistrement…' : 'Enregistrer'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── API Keys & SCIM ───
+
+const ALL_SCOPES = [
+  { value: 'read',  label: 'Lecture' },
+  { value: 'write', label: 'Écriture' },
+  { value: 'scim',  label: 'SCIM' },
+];
+
+function ApiKeysSection({ organization }: { organization: Organization | null }) {
+  const [keys, setKeys]           = useState<ApiKeyInfo[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [showForm, setShowForm]   = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [revoking, setRevoking]   = useState<string | null>(null);
+  const [newKey, setNewKey]       = useState<ApiKeyCreated | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [form, setForm] = useState<{ name: string; scopes: string[]; expires_at: string }>({
+    name: '',
+    scopes: ['read'],
+    expires_at: '',
+  });
+
+  const apiBaseUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api').replace(/\/api$/, '');
+
+  useEffect(() => {
+    api.apiKeys.list()
+      .then(setKeys)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) { toast.error('Nom requis'); return; }
+    if (form.scopes.length === 0) { toast.error('Sélectionnez au moins un scope'); return; }
+    setSaving(true);
+    try {
+      const created = await api.apiKeys.create({
+        name: form.name.trim(),
+        scopes: form.scopes,
+        ...(form.expires_at ? { expires_at: form.expires_at } : {}),
+      });
+      setKeys((prev) => [created, ...prev]);
+      setNewKey(created);
+      setShowForm(false);
+      setForm({ name: '', scopes: ['read'], expires_at: '' });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur création clé');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRevoke = async (id: string) => {
+    setRevoking(id);
+    try {
+      await api.apiKeys.revoke(id);
+      setKeys((prev) => prev.filter((k) => k.id !== id));
+      toast.success('Clé révoquée');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur révocation');
+    } finally {
+      setRevoking(null);
+    }
+  };
+
+  const copyKey = () => {
+    if (!newKey) return;
+    navigator.clipboard.writeText(newKey.key).then(() => {
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Banner nouvelle clé */}
+      {newKey && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-800">Copiez cette clé maintenant — elle ne sera plus affichée</p>
+              <p className="text-xs text-amber-600 mt-0.5">Après fermeture de cette bannière, la clé complète ne sera plus récupérable.</p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 min-w-0 text-xs font-mono bg-white border border-amber-200 rounded px-2.5 py-1.5 text-amber-900 break-all">
+                  {newKey.key}
+                </code>
+                <button
+                  onClick={copyKey}
+                  className="flex-shrink-0 p-1.5 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors"
+                >
+                  {copiedKey
+                    ? <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    : <Copy className="w-4 h-4 text-amber-600" />
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setNewKey(null)}
+            className="text-xs text-amber-600 hover:text-amber-700 underline"
+          >
+            J'ai copié ma clé, fermer
+          </button>
+        </div>
+      )}
+
+      {/* Clés API */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Key className="w-5 h-5 text-[#534AB7]" />
+              Clés API
+            </h2>
+            <p className="text-sm text-gray-500 mt-0.5">Gérez les accès programmatiques à l'API Tracix.</p>
+          </div>
+          {!showForm && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#534AB7] text-white rounded-lg text-xs font-medium hover:bg-[#3C3489] transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Créer
+            </button>
+          )}
+        </div>
+
+        {/* Form */}
+        {showForm && (
+          <form onSubmit={handleCreate} className="border border-[#534AB7]/20 rounded-xl p-4 bg-[#534AB7]/3 mb-4 space-y-3">
+            <p className="text-sm font-semibold text-gray-800">Nouvelle clé API</p>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Nom *</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="ex: CI/CD Pipeline"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Scopes</label>
+              <div className="flex flex-wrap gap-2">
+                {ALL_SCOPES.map((s) => (
+                  <label key={s.value} className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.scopes.includes(s.value)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setForm((f) => ({ ...f, scopes: [...f.scopes, s.value] }));
+                        } else {
+                          setForm((f) => ({ ...f, scopes: f.scopes.filter((x) => x !== s.value) }));
+                        }
+                      }}
+                      className="w-3.5 h-3.5 accent-[#534AB7]"
+                    />
+                    <span className="text-sm text-gray-700">{s.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Expiration (optionnel)</label>
+              <input
+                type="date"
+                value={form.expires_at}
+                onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#534AB7]/20 focus:border-[#534AB7]"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setShowForm(false); setForm({ name: '', scopes: ['read'], expires_at: '' }); }}
+                className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 inline-flex items-center justify-center gap-2 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
+                {saving ? 'Création…' : 'Créer la clé'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* List */}
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+          </div>
+        ) : keys.length === 0 ? (
+          <div className="text-center py-8 text-sm text-gray-400">
+            Aucune clé API créée
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {keys.map((k) => (
+              <div key={k.id} className="border border-gray-200 rounded-xl p-3 flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-gray-900">{k.name}</p>
+                    <code className="text-xs bg-gray-100 text-gray-600 font-mono px-2 py-0.5 rounded">
+                      {k.key_prefix}•••
+                    </code>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {k.scopes.map((sc) => (
+                      <span key={sc} className="text-[10px] bg-[#534AB7]/10 text-[#534AB7] px-1.5 py-0.5 rounded-full font-medium">
+                        {sc}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-3 mt-1 text-xs text-gray-400">
+                    <span>Créée : {new Date(k.created_at).toLocaleDateString('fr-FR')}</span>
+                    {k.last_used_at && (
+                      <span>Utilisée : {new Date(k.last_used_at).toLocaleDateString('fr-FR')}</span>
+                    )}
+                    {k.expires_at && (
+                      <span>Expire : {new Date(k.expires_at).toLocaleDateString('fr-FR')}</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRevoke(k.id)}
+                  disabled={revoking === k.id}
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 border border-red-100 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                >
+                  {revoking === k.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  Révoquer
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* SCIM Info */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <Users className="w-4 h-4 text-[#534AB7]" />
+            Endpoint SCIM 2.0
+          </h2>
+          <p className="text-xs text-gray-400 mt-0.5">Provisionnez automatiquement les utilisateurs depuis votre IdP.</p>
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-gray-50 gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-gray-500 mb-0.5">Base URL</p>
+              <p className="text-xs text-gray-700 font-mono truncate">{apiBaseUrl}/api/scim/v2</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-gray-500 mb-0.5">Authentification</p>
+              <p className="text-xs text-gray-700">Bearer Token — clé API avec scope <code className="bg-gray-200 px-1 rounded font-mono">scim</code></p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-gray-500 mb-0.5">Ressources supportées</p>
+              <p className="text-xs text-gray-700">Users — create, read, update, deactivate</p>
+            </div>
+          </div>
+          {organization?.id && (
+            <div className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-gray-50 gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-semibold text-gray-500 mb-0.5">Organisation ID</p>
+                <p className="text-xs text-gray-700 font-mono truncate">{organization.id}</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

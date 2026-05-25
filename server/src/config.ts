@@ -5,7 +5,10 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 export const config = {
   port: parseInt(process.env.PORT || '4000', 10),
-  jwtSecret: process.env.JWT_SECRET || 'changeme-use-a-real-secret-in-production',
+  // JWT_SECRET_CURRENT is the active signing key; JWT_SECRET_PREVIOUS is accepted during rotation.
+  // JWT_SECRET kept for backward compat with existing deployments.
+  jwtSecret: process.env.JWT_SECRET_CURRENT || process.env.JWT_SECRET || 'changeme-use-a-real-secret-in-production',
+  jwtSecretPrevious: process.env.JWT_SECRET_PREVIOUS || '',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
   apiUrl: process.env.API_URL || 'http://localhost:4000',
   databaseUrl: process.env.DATABASE_URL || '',

@@ -152,6 +152,48 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
   return response.json() as Promise<T>;
 }
 
+// ─── Connector / Webhook / ApiKey types ───
+export interface Connector {
+  id: string;
+  organization_id: string;
+  provider: string;
+  config: Record<string, string>;
+  enabled: boolean;
+  last_sync_at: string | null;
+  last_sync_status: string;
+  last_sync_error: string;
+  synced_count: number;
+  created_at: string;
+}
+
+export interface WebhookEndpoint {
+  id: string;
+  organization_id: string;
+  name: string;
+  provider: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  signing_secret: string;
+  last_triggered_at: string | null;
+  last_status_code: number | null;
+  created_at: string;
+}
+
+export interface ApiKeyInfo {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+  last_used_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface ApiKeyCreated extends ApiKeyInfo {
+  key: string;
+}
+
 // ─── API object ───
 export const api = {
   auth: {
@@ -617,6 +659,51 @@ export const api = {
       conclusion: string;
     }> {
       return request('/reports/generate', { method: 'POST', body: JSON.stringify(data) });
+    },
+  },
+
+  connectors: {
+    list(): Promise<Connector[]> {
+      return request('/connectors');
+    },
+    upsert(data: { provider: string; config: Record<string, string>; enabled: boolean }): Promise<Connector> {
+      return request('/connectors', { method: 'POST', body: JSON.stringify(data) });
+    },
+    remove(id: string): Promise<void> {
+      return request(`/connectors/${id}`, { method: 'DELETE' });
+    },
+    sync(id: string): Promise<{ accepted: true }> {
+      return request(`/connectors/${id}/sync`, { method: 'POST' });
+    },
+  },
+
+  webhooks: {
+    list(): Promise<WebhookEndpoint[]> {
+      return request('/webhooks');
+    },
+    create(data: { name: string; provider: string; url: string; events: string[]; active: boolean }): Promise<WebhookEndpoint> {
+      return request('/webhooks', { method: 'POST', body: JSON.stringify(data) });
+    },
+    update(id: string, data: Partial<{ name: string; url: string; events: string[]; active: boolean }>): Promise<WebhookEndpoint> {
+      return request(`/webhooks/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
+    remove(id: string): Promise<void> {
+      return request(`/webhooks/${id}`, { method: 'DELETE' });
+    },
+    test(id: string): Promise<{ success: boolean; status_code: number }> {
+      return request(`/webhooks/${id}/test`, { method: 'POST' });
+    },
+  },
+
+  apiKeys: {
+    list(): Promise<ApiKeyInfo[]> {
+      return request('/keys');
+    },
+    create(data: { name: string; scopes: string[]; expires_at?: string }): Promise<ApiKeyCreated> {
+      return request('/keys', { method: 'POST', body: JSON.stringify(data) });
+    },
+    revoke(id: string): Promise<void> {
+      return request(`/keys/${id}`, { method: 'DELETE' });
     },
   },
 };

@@ -72,11 +72,12 @@ export function Journal({ auditTrail: initialTrail }: JournalProps) {
   const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const exportCsv = () => {
+    const escCsv = (v: string) => /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
     const rows = filtered.map(e => [
       new Date(e.created_at).toLocaleString('fr-FR'),
-      e.actor,
-      e.action,
-      e.target_label,
+      escCsv(e.actor),
+      escCsv(e.action),
+      escCsv(e.target_label),
       e.ip_address || '—',
       'Succès',
     ]);

@@ -427,7 +427,7 @@ function AdviceModal({ alert, onClose, onResolve }: { alert: Alert; onClose: () 
   );
 }
 
-type TabFilter = 'all' | 'open' | 'review' | 'closed';
+type TabFilter = 'all' | 'critical' | 'warning' | 'closed';
 
 export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) {
   const [tab, setTab] = useState<TabFilter>('all');
@@ -440,11 +440,12 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
   const openAlerts    = alerts.filter((a) => !a.is_resolved);
   const closedAlerts  = alerts.filter((a) => a.is_resolved);
   const critiques     = alerts.filter((a) => a.severity === 'critical' && !a.is_resolved);
+  const warnings      = alerts.filter((a) => a.severity === 'warning' && !a.is_resolved);
 
   const filtered = alerts.filter((a) => {
-    if (tab === 'open'   && a.is_resolved) return false;
-    if (tab === 'review' && (a.is_resolved || a.severity !== 'warning')) return false;
-    if (tab === 'closed' && !a.is_resolved) return false;
+    if (tab === 'critical' && (a.is_resolved || a.severity !== 'critical')) return false;
+    if (tab === 'warning'  && (a.is_resolved || a.severity !== 'warning'))  return false;
+    if (tab === 'closed'   && !a.is_resolved) return false;
     if (sevFilter !== 'all' && a.severity !== sevFilter) return false;
     if (search && !a.message.toLowerCase().includes(search.toLowerCase()) && !a.source_label.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -453,10 +454,10 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
   const unresolvedIds = openAlerts.map((a) => a.id);
 
   const TABS: { id: TabFilter; label: string; count?: number }[] = [
-    { id: 'all',    label: 'Toutes',    count: alerts.length },
-    { id: 'open',   label: 'Ouvertes',  count: openAlerts.length },
-    { id: 'review', label: 'En cours',  count: alerts.filter((a) => !a.is_resolved && a.severity === 'warning').length },
-    { id: 'closed', label: 'Clôturées' },
+    { id: 'all',      label: 'Toutes',    count: alerts.length },
+    { id: 'critical', label: 'Critiques', count: critiques.length },
+    { id: 'warning',  label: 'Élevées',   count: warnings.length },
+    { id: 'closed',   label: 'Clôturées', count: closedAlerts.length },
   ];
 
   const sel = selectedAlert;

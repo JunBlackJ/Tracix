@@ -17,12 +17,21 @@ interface AlertInput {
   resolved_at: string;
 }
 
-export async function generateAlerts(orgId: string): Promise<void> {
+// forceRefreshTypes : ces types sont résolus avant d'être recréés (pour mettre à jour le message avec les nouveaux seuils)
+export async function generateAlerts(orgId: string, forceRefreshTypes: string[] = []): Promise<void> {
   const org = await prisma.organization.findUnique({ where: { id: orgId } });
   if (!org) return;
 
   const now = new Date();
   const newAlerts: AlertInput[] = [];
+
+  // Résoudre les types forcés (seuil changé) pour forcer la recréation avec le nouveau message
+  if (forceRefreshTypes.length > 0) {
+    await prisma.alert.updateMany({
+      where: { organization_id: orgId, type: { in: forceRefreshTypes }, is_resolved: false },
+      data: { is_resolved: true, resolved_by: 'system', resolved_at: now.toISOString() },
+    });
+  }
 
   // ─── 1. Members with departure_date passed and still active ───
   const departedActiveMembers = await prisma.member.findMany({

@@ -336,7 +336,11 @@ router.put('/organization', requireAuth, async (req: Request, res: Response): Pr
     || access_review_delay_days !== undefined
     || subscription_alert_days !== undefined;
   if (thresholdChanged) {
-    generateAlerts(orgId).catch((err) => console.error('[Alerts] Erreur recalcul après mise à jour seuils:', err));
+    const forceRefresh: string[] = [];
+    if (max_admin_per_platform !== undefined) forceRefresh.push('admin_count_high');
+    if (access_review_delay_days !== undefined) forceRefresh.push('access_review_overdue');
+    if (subscription_alert_days !== undefined) forceRefresh.push('subscription_expiring');
+    generateAlerts(orgId, forceRefresh).catch((err) => console.error('[Alerts] Erreur recalcul après mise à jour seuils:', err));
   }
   // max_admin_per_platform et access_review_delay_days influencent le score de risque
   const riskThresholdChanged = max_admin_per_platform !== undefined || access_review_delay_days !== undefined;

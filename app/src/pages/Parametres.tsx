@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   User, Building2, Users, Link2, Shield, Save, Bell,
   AlertTriangle, CheckCircle2, Lock, Smartphone, Tag,
@@ -2339,6 +2339,7 @@ function UsageBar({ current, max, label }: { current: number; max: number; label
 }
 
 function PlanSection({ organization, onUpdated }: { organization: Organization | null; onUpdated: (o: Organization) => void }) {
+  const navigate = useNavigate();
   const [usage, setUsage] = useState<PlanUsage | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
 
@@ -2475,9 +2476,9 @@ function PlanSection({ organization, onUpdated }: { organization: Organization |
                   </li>
                 ))}
               </ul>
-              {!isCurrent && (
+              {!isCurrent && plan.id !== 'free' && (
                 <button
-                  onClick={() => setShowUpgrade(true)}
+                  onClick={() => navigate('/paiement')}
                   className="w-full py-2 rounded-lg text-sm font-medium border transition-colors hover:opacity-90"
                   style={{ borderColor: plan.color, color: plan.color }}
                 >
@@ -2493,36 +2494,23 @@ function PlanSection({ organization, onUpdated }: { organization: Organization |
         <UpgradeModal
           currentPlan={organization.plan}
           onClose={() => setShowUpgrade(false)}
-          onUpgraded={(newPlan) => {
-            onUpdated({ ...organization, plan: newPlan as Organization['plan'] });
-            setShowUpgrade(false);
-            toast.success(`Plan mis à jour : ${newPlan}`);
-            api.plan.limits().then(setUsage).catch(() => {});
-          }}
         />
       )}
     </div>
   );
 }
 
-function UpgradeModal({ currentPlan, onClose, onUpgraded }: {
+function UpgradeModal({ currentPlan, onClose }: {
   currentPlan: string;
   onClose: () => void;
-  onUpgraded: (plan: string) => void;
+  onUpgraded?: (plan: string) => void;
 }) {
+  const navigate = useNavigate();
   const [selected, setSelected] = useState(currentPlan === 'free' ? 'pro' : 'enterprise');
-  const [saving, setSaving] = useState(false);
 
-  const handleConfirm = async () => {
-    setSaving(true);
-    try {
-      const updated = await api.auth.updateOrganization({ plan: selected } as Parameters<typeof api.auth.updateOrganization>[0]);
-      onUpgraded(updated.plan);
-    } catch {
-      toast.error('Erreur lors de la mise à jour du plan');
-    } finally {
-      setSaving(false);
-    }
+  const handleConfirm = () => {
+    onClose();
+    navigate('/paiement');
   };
 
   return (
@@ -2572,11 +2560,11 @@ function UpgradeModal({ currentPlan, onClose, onUpgraded }: {
         ) : (
           <button
             onClick={handleConfirm}
-            disabled={saving || selected === currentPlan}
+            disabled={selected === currentPlan}
             className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#534AB7] text-white rounded-xl text-sm font-medium hover:bg-[#3C3489] transition-colors disabled:opacity-60"
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
-            {saving ? 'Mise à jour…' : `Passer à ${PLANS.find(p => p.id === selected)?.label}`}
+            <CreditCard className="w-4 h-4" />
+            Procéder au paiement
           </button>
         )}
       </div>

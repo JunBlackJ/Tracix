@@ -42,7 +42,8 @@ model Organization {
   samlConfig       SamlConfig?
   connectors       Connector[]
   webhookEndpoints WebhookEndpoint[]
-  apiKeys          ApiKey[]
+  apiKeys             ApiKey[]
+  paymentTransactions PaymentTransaction[]
 
   @@map("organizations")
 }
@@ -552,6 +553,27 @@ model ApiKey {
   organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
 
   @@map("api_keys")
+}
+
+model PaymentTransaction {
+  id              String   @id
+  organization_id String
+  cinetpay_txn_id String   @unique
+  plan            String   // 'pro' | 'enterprise'
+  months          Int
+  amount          Int      // en XOF
+  currency        String   @default("XOF")
+  status          String   @default("pending") // 'pending' | 'paid' | 'failed' | 'cancelled'
+  payment_method  String   @default("")        // 'WAVE_CI' | 'OM' | 'MTN' | 'MOOV' | 'VISA' ...
+  initiated_by    String   // email de l'user
+  notify_token    String   @unique             // token secret pour sécuriser le webhook IPN
+  created_at      DateTime @default(now())
+  paid_at         DateTime?
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([organization_id, created_at(sort: Desc)])
+  @@map("payment_transactions")
 }
 
 model AuditTrail {

@@ -31,6 +31,7 @@ import riskSnapshotsRoutes from './routes/risk-snapshots';
 import connectorsRoutes from './routes/connectors';
 import webhooksRoutes from './routes/webhooks';
 import apiKeysRoutes, { scimRouter } from './routes/api-keys';
+import paymentsRoutes from './routes/payments';
 
 const app = express();
 
@@ -96,6 +97,7 @@ app.use('/api/connectors', connectorsRoutes);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/keys', apiKeysRoutes);
 app.use('/api/scim', scimRouter);
+app.use('/api/payments', paymentsRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' });

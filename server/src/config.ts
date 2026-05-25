@@ -29,4 +29,8 @@ export const config = {
     pass: process.env.SMTP_PASS || '',
     from: process.env.SMTP_FROM || (process.env.SMTP_USER ? `Tracix <${process.env.SMTP_USER}>` : 'Tracix <noreply@tracix.io>'),
   },
+  cinetpay: {
+    apiKey: process.env.CINETPAY_API_KEY || '',
+    siteId: process.env.CINETPAY_SITE_ID || '',
+  },
 };

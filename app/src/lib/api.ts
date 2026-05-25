@@ -689,4 +689,16 @@ export const api = {
       return request(`/keys/${id}`, { method: 'DELETE' });
     },
   },
+
+  payments: {
+    initiate(data: { plan: 'pro' | 'enterprise'; months: number }): Promise<{ payment_url: string; transaction_id: string }> {
+      return request('/payments/initiate', { method: 'POST', body: JSON.stringify(data) });
+    },
+    status(txnId: string): Promise<{ status: string; plan: string; months: number; amount: number; payment_method: string; paid_at: string | null }> {
+      return request(`/payments/status/${txnId}`);
+    },
+    history(): Promise<{ id: string; cinetpay_txn_id: string; plan: string; months: number; amount: number; currency: string; status: string; payment_method: string; created_at: string; paid_at: string | null }[]> {
+      return request('/payments/history');
+    },
+  },
 };

@@ -23,6 +23,8 @@ import { Revues } from '@/pages/Revues';
 import { OAuthCallback } from '@/pages/OAuthCallback';
 import { Rejoindre } from '@/pages/Rejoindre';
 import { ResetPassword } from '@/pages/ResetPassword';
+import { Paiement } from '@/pages/Paiement';
+import { PaiementSucces } from '@/pages/PaiementSucces';
 import { Admin } from '@/pages/Admin';
 import { Onboarding } from '@/pages/Onboarding';
 import { useStore } from '@/hooks/useStore';
@@ -278,6 +280,17 @@ function App() {
             path="/modules/:moduleId"
             element={<CustomModulePage modules={store.customModules} />}
           />
+          <Route
+            path="/paiement"
+            element={
+              <Paiement
+                currentPlan={store.organization?.plan ?? 'free'}
+                onBack={() => window.history.back()}
+              />
+            }
+          />
+          <Route path="/paiement/succes" element={<PaiementSucces />} />
+          <Route path="/paiement/echec" element={<PaiementSucces />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
         </ErrorBoundary>

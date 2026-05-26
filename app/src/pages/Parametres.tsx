@@ -2258,8 +2258,8 @@ const PLANS = [
     color: '#6B7280',
     desc: 'Pour découvrir Tracix',
     features: [
-      '10 membres max',
-      '3 plateformes max',
+      '25 membres max',
+      'Plateformes illimitées',
       '5 catégories',
       'Modules de base',
       'Alertes automatiques',

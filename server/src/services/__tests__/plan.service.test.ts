@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { getLimits, checkLimit } from '../plan.service';
 
 describe('getLimits', () => {
-  it('free plan: 25 membres, 3 plateformes, 3 seats', () => {
+  it('free plan: 25 membres, plateformes illimitées, 3 seats', () => {
     const l = getLimits('free');
     expect(l.members).toBe(25);
-    expect(l.platforms).toBe(3);
+    expect(l.platforms).toBe(-1);
     expect(l.seats).toBe(3);
     expect(l.exportEnabled).toBe(false);
   });

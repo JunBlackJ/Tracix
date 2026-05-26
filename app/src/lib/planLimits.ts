@@ -14,7 +14,7 @@ export interface PlanLimits {
 const LIMITS: Record<PlanId, PlanLimits> = {
   free: {
     members: 25,
-    platforms: 3,
+    platforms: -1,
     seats: 3,
     exportEnabled: false,
     customModulesEnabled: false,

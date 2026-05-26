@@ -451,7 +451,7 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
                 <div style={{ fontSize: 22, fontWeight: 700, color: FG, marginBottom: 16 }}>0 <span style={{ fontSize: 12, fontWeight: 400, color: MUTED }}>XOF / mois</span></div>
                 {[
                   '25 membres maximum',
-                  '3 plateformes',
+                  'Plateformes illimitées',
                   '3 sièges Tracix',
                   'Alertes et rapports basiques',
                   '— Import Excel / CSV',

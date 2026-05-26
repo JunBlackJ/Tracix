@@ -1,10 +1,72 @@
 import { useState } from 'react';
 import {
   Crown, Zap, Check, Loader2, CreditCard, ArrowLeft,
-  ArrowRight, Smartphone, Shield, ChevronRight,
+  ArrowRight, Shield,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+
+// ─── Payment method logos (SVG inline) ──────────────────────────────────────
+
+function WaveLogo() {
+  return (
+    <div className="flex items-center justify-center bg-[#1B6DE9] rounded-md px-2 py-1 h-7">
+      <span className="text-white font-black text-xs tracking-tight">Wave</span>
+    </div>
+  );
+}
+
+function OrangeLogo() {
+  return (
+    <div className="flex items-center justify-center bg-[#FF6600] rounded-md px-2 py-1 h-7">
+      <span className="text-white font-black text-xs">Orange</span>
+    </div>
+  );
+}
+
+function MtnLogo() {
+  return (
+    <div className="flex items-center justify-center bg-[#FFCB00] rounded-md px-2 py-1 h-7">
+      <span className="text-[#00338D] font-black text-xs">MTN</span>
+    </div>
+  );
+}
+
+function MoovLogo() {
+  return (
+    <div className="flex items-center justify-center bg-[#0066B3] rounded-md px-2 py-1 h-7">
+      <span className="text-white font-black text-xs">Moov</span>
+    </div>
+  );
+}
+
+function VisaLogo() {
+  return (
+    <div className="flex items-center justify-center bg-[#1A1F71] rounded-md px-2 py-1 h-7">
+      <svg viewBox="0 0 48 16" className="h-4 w-auto fill-white">
+        <path d="M18.7 1.3l-3.4 13.4h-3.9L15 1.3h3.7zm15.4 8.7l2-5.5.9 5.5h-2.9zm4.3 4.7H42l-3.1-13.4H36c-.8 0-1.5.5-1.8 1.2l-5.2 12.2h3.6l.7-2h4.4l.7 2zM29.3 9.8c0-3.5-4.9-3.7-4.9-5.2 0-.5.5-1 1.5-1.1 1.3-.1 2.6.2 3.7.7l.7-3.1C29.2.7 28 .4 26.8.4c-3.3 0-5.7 1.8-5.7 4.3 0 1.9 1.7 2.9 3 3.5 1.3.7 1.8 1.1 1.8 1.7 0 .9-1.1 1.3-2.1 1.3-1.3 0-2.7-.3-3.8-.9l-.7 3.2c1.1.5 2.5.7 3.8.7 3.6.1 5.9-1.7 5.9-4.4h.3zM14.4 1.3L8.7 14.7H5L2.2 4C2 3.2 1.8 2.9 1.2 2.5 0 1.9.6 2 0 1.8L.1 1.3h6c.9 0 1.6.6 1.8 1.4l1.6 8.6 3.3-10h3.6z"/>
+      </svg>
+    </div>
+  );
+}
+
+function MastercardLogo() {
+  return (
+    <div className="flex items-center justify-center bg-[#252525] rounded-md px-2 py-1 h-7 gap-0.5">
+      <div className="w-4 h-4 rounded-full bg-[#EB001B]" />
+      <div className="w-4 h-4 rounded-full bg-[#F79E1B] -ml-2 opacity-90" />
+    </div>
+  );
+}
+
+const PAYMENT_METHOD_LOGOS = [
+  { key: 'wave', label: 'Wave CI', Logo: WaveLogo },
+  { key: 'orange', label: 'Orange Money', Logo: OrangeLogo },
+  { key: 'mtn', label: 'MTN MoMo', Logo: MtnLogo },
+  { key: 'moov', label: 'Moov Money', Logo: MoovLogo },
+  { key: 'visa', label: 'Visa', Logo: VisaLogo },
+  { key: 'mc', label: 'Mastercard', Logo: MastercardLogo },
+];
 
 // ─── Data ───────────────────────────────────────────────────────────────────
 
@@ -65,7 +127,6 @@ const DURATIONS: Duration[] = [
   { months: 36, label: '3 ans',   sublabel: 'Triennal',    discount: 40, badge: 'Meilleur prix', badgeColor: '#F59E0B' },
 ];
 
-const PAYMENT_METHODS = ['Wave CI', 'Orange Money', 'MTN MoMo', 'Moov Money', 'Visa', 'Mastercard'];
 
 // ─── Step indicator ──────────────────────────────────────────────────────────
 
@@ -381,17 +442,10 @@ function StepConfirmation({
 
       {/* Méthodes de paiement */}
       <div className="bg-white/3 border border-white/8 rounded-xl px-4 py-3 mb-6">
-        <p className="text-xs text-white/40 mb-2 flex items-center gap-1.5">
-          <Smartphone className="w-3.5 h-3.5" /> Méthodes acceptées
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {PAYMENT_METHODS.map((m) => (
-            <span
-              key={m}
-              className="text-[11px] bg-white/5 border border-white/8 rounded-lg px-2 py-1 text-white/50"
-            >
-              {m}
-            </span>
+        <p className="text-xs text-white/40 mb-3">Méthodes de paiement acceptées</p>
+        <div className="flex flex-wrap gap-2">
+          {PAYMENT_METHOD_LOGOS.map(({ key, Logo }) => (
+            <Logo key={key} />
           ))}
         </div>
       </div>
@@ -465,17 +519,9 @@ export function Paiement({ currentPlan, onBack }: PaiementProps) {
           className="flex items-center gap-1.5 text-white/40 hover:text-white transition-colors text-sm"
         >
           <ArrowLeft className="w-4 h-4" />
-          {step === 0 ? 'Retour' : ''}
+          Retour
         </button>
-        <div className="flex items-center gap-2">
-          <div
-            className="w-6 h-6 rounded-md flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}
-          >
-            <ChevronRight className="w-3.5 h-3.5 text-white" />
-          </div>
-          <span className="text-white font-bold text-sm">Tracix</span>
-        </div>
+        <img src="/logo.png" alt="Tracix" className="h-8 w-auto" />
         <div className="w-16" />
       </div>
 

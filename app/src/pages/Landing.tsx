@@ -285,7 +285,7 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
               { emoji: '🔔', color: '#EF4444', bg: 'rgba(239,68,68,0.1)', title: 'Alertes automatiques', desc: 'Détection proactive : comptes sans MFA, accès orphelins, abonnements expirants, départs non traités.', img: null },
               { emoji: '👥', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', title: 'Annuaire des membres', desc: "Gérez collaborateurs et équipes. Suivez l'offboarding sans jamais oublier de révoquer un accès.", img: null },
               { emoji: '💳', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', title: 'Suivi des abonnements', desc: 'Centralisez vos SaaS, coûts et renouvellements. Alertes avant expiration.', img: null },
-              { emoji: '📋', color: '#EC4899', bg: 'rgba(236,72,153,0.1)', title: 'Audit & conformité', desc: 'Journal complet de toutes les actions. Exportez vos rapports ISO 27001, SOC 2 prêts pour l'auditeur.', img: null },
+              { emoji: '📋', color: '#EC4899', bg: 'rgba(236,72,153,0.1)', title: 'Audit & conformité', desc: "Journal complet de toutes les actions. Exportez vos rapports ISO 27001, SOC 2 prêts pour l'auditeur.", img: null },
             ].map(f => (
               <div key={f.title} className="group p-6 rounded-2xl border transition-all duration-300 hover:-translate-y-1"
                 style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))', borderColor: 'rgba(255,255,255,0.06)' }}>

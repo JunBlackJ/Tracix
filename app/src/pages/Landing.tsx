@@ -4,10 +4,10 @@
 
 import { useState } from 'react';
 import {
-  Shield, ArrowRight, CheckCircle, Users, BarChart2, Bell,
-  GitBranch, Lock, Mail, Eye, EyeOff, Menu, X,
-  Zap, Star, Crown, TrendingUp, FileText,
-  AlertTriangle, Activity, Database, Building2, ShieldCheck, KeyRound,
+  Shield, ArrowRight, CheckCircle, Users,
+  Lock, Mail, Eye, EyeOff, Menu, X,
+  Star, Crown, Zap, AlertTriangle,
+  ShieldCheck, KeyRound, Building2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -19,161 +19,88 @@ interface LandingProps {
   onRegister: (data: { full_name: string; email: string; password: string; organization_name: string }) => Promise<{ success: boolean; error?: string }>;
 }
 
-const FEATURES = [
-  {
-    icon: GitBranch,
-    gradient: 'from-violet-500 to-purple-600',
-    glow: 'shadow-violet-500/25',
-    title: 'Gestion des habilitations',
-    desc: 'Visualisez et contrôlez tous les droits d\'accès en une matrice claire. Qui a accès à quoi, depuis quand.',
-  },
-  {
-    icon: BarChart2,
-    gradient: 'from-emerald-400 to-teal-600',
-    glow: 'shadow-emerald-500/25',
-    title: 'Score de risque intelligent',
-    desc: 'Chaque membre reçoit un score 0-100 calculé en temps réel selon ses accès, son statut et ses revues.',
-  },
-  {
-    icon: Bell,
-    gradient: 'from-red-400 to-rose-600',
-    glow: 'shadow-red-500/25',
-    title: 'Alertes automatiques',
-    desc: 'Détection proactive : comptes sans MFA, accès orphelins, abonnements expirants, départs non traités.',
-  },
-  {
-    icon: Users,
-    gradient: 'from-amber-400 to-orange-500',
-    glow: 'shadow-amber-500/25',
-    title: 'Annuaire des membres',
-    desc: 'Gérez collaborateurs et équipes. Suivez l\'offboarding sans jamais oublier de révoquer un accès.',
-  },
-  {
-    icon: TrendingUp,
-    gradient: 'from-blue-400 to-indigo-600',
-    glow: 'shadow-blue-500/25',
-    title: 'Suivi des abonnements',
-    desc: 'Centralisez vos SaaS, coûts et renouvellements. Multi-devises avec conversion automatique.',
-  },
-  {
-    icon: FileText,
-    gradient: 'from-pink-400 to-fuchsia-600',
-    glow: 'shadow-pink-500/25',
-    title: 'Modules personnalisés',
-    desc: 'Créez vos propres espaces : contacts, procédures, KPIs, notes. Adaptés à votre organisation.',
-  },
-];
-
-const STATS = [
-  { value: '100%', label: 'Sécurisé', icon: Shield },
-  { value: '<2min', label: 'Pour démarrer', icon: Zap },
-  { value: '7+', label: 'Types d\'alertes', icon: Bell },
-  { value: '4', label: 'Devises', icon: Activity },
-];
+// ─── Pricing data ────────────────────────────────────────────────────────────
 
 const PLANS = [
   {
-    id: 'free', label: 'Starter', price: '0', period: '€ / mois',
-    icon: Zap, color: '#6B7280',
-    desc: 'Découvrez Tracix sans engagement',
-    highlight: false,
-    badge: null,
-    features: ['10 membres', '3 plateformes', 'Alertes automatiques', 'Score de risque', 'Journal d\'audit'],
-    missing: ['Export XLSX', 'Modules personnalisés'],
-    cta: 'Commencer gratuitement',
+    id: 'free', label: 'Free', color: '#6B7280',
+    monthly: 0, annual: 0,
+    desc: 'Idéal pour explorer Tracix et les petites équipes.',
+    features: ['5 membres maximum', '3 plateformes', 'Audit basique (30 jours)', 'Tableau de bord accès', 'Support communautaire'],
+    cta: 'Commencer',
+    popular: false,
   },
   {
-    id: 'pro', label: 'Pro', price: '49', period: '€ / mois',
-    icon: Star, color: '#534AB7',
-    desc: 'Pour les équipes IT actives',
-    highlight: true,
-    badge: 'LE PLUS POPULAIRE',
-    features: ['Membres illimités', 'Plateformes illimitées', 'Modules personnalisés', 'Export XLSX', 'API REST incluse', 'Toutes les intégrations', 'Support prioritaire'],
-    missing: [],
-    cta: 'Démarrer l\'essai',
+    id: 'pro', label: 'Pro', color: '#534AB7',
+    monthly: 30_000, annual: 24_000,
+    desc: 'Pour les équipes en croissance qui veulent une conformité solide.',
+    features: ['Membres illimités', '10 sièges administrateurs', 'Export CSV & rapports IA', 'Alertes email & webhooks', 'Score de risque avancé', 'Audit 12 mois + conformité', 'Support prioritaire'],
+    cta: "Démarrer l'essai",
+    popular: true,
   },
   {
-    id: 'enterprise', label: 'Enterprise', price: 'Sur', period: 'devis',
-    icon: Crown, color: '#EF9F27',
-    desc: 'Pour les grandes organisations',
-    highlight: false,
-    badge: null,
-    features: ['Tout le plan Pro', 'Multi-organisations', 'SSO / LDAP', 'API REST complète', 'Marque blanche', 'SLA garanti'],
-    missing: [],
+    id: 'enterprise', label: 'Enterprise', color: '#F59E0B',
+    monthly: 90_000, annual: 72_000,
+    desc: 'Pour les organisations avec des exigences strictes de sécurité.',
+    features: ['Tout le plan Pro', 'Sièges illimités', 'Multi-organisations', 'SSO / SAML 2.0', 'API REST complète', 'SLA garanti 99.9%', 'Customer Success dédié'],
     cta: 'Nous contacter',
+    popular: false,
   },
 ];
 
-const TESTIMONIALS = [
-  {
-    name: 'Kader K.', role: 'DSI — Fintech Abidjan', avatar: 'K', color: '#534AB7',
-    text: 'Tracix nous a permis de réduire notre surface d\'attaque de 40% en 2 semaines. La gestion des habilitations est enfin centralisée.',
-    stars: 5,
-  },
-  {
-    name: 'Marie T.', role: 'RSSI — Groupe distribution Dakar', avatar: 'M', color: '#1D9E75',
-    text: 'Le score de risque automatique m\'évite des heures d\'audit manuel. Je reçois les alertes avant que les problèmes surviennent.',
-    stars: 5,
-  },
-  {
-    name: 'Roland N.', role: 'IT Manager — ONG Douala', avatar: 'R', color: '#EF9F27',
-    text: 'Interface claire, données bien organisées. On a enfin une vue complète de qui a accès à quoi dans notre organisation.',
-    stars: 5,
-  },
-];
+// ─── Main Landing ─────────────────────────────────────────────────────────────
 
 export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSsoModal, setShowSsoModal] = useState(false);
   const [modalDefaultTab, setModalDefaultTab] = useState<'login' | 'register'>('login');
+  const [billingAnnual, setBillingAnnual] = useState(false);
 
   const openLogin = () => { setModalDefaultTab('login'); setShowLoginModal(true); };
   const openRegister = () => { setModalDefaultTab('register'); setShowLoginModal(true); };
 
   return (
-    <div className="min-h-screen bg-[#07070F] text-white overflow-x-hidden">
+    <div className="min-h-screen text-white overflow-x-hidden" style={{ background: '#0F0E1A', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" }}>
 
       {/* ── Navbar ── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#07070F]/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <a href="#" className="flex items-center gap-2.5 group">
+      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999, background: 'rgba(15,14,26,0.72)', backdropFilter: 'blur(20px) saturate(1.6)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <a href="#" className="flex items-center">
             <img src="/logo.png" alt="Tracix" className="h-8 w-auto object-contain" />
           </a>
 
-          <div className="hidden md:flex items-center gap-8">
-            {[['Fonctionnalités', '#features'], ['Tarifs', '#pricing'], ['À propos', '#about']].map(([l, h]) => (
-              <a key={h} href={h} className="text-sm text-white/60 hover:text-white transition-colors font-medium">{l}</a>
+          <div className="hidden md:flex items-center gap-2">
+            {[['Fonctionnalités', '#features'], ['Tarifs', '#pricing'], ['Intégrations', '#integrations'], ['À propos', '#about']].map(([l, h]) => (
+              <a key={h} href={h} className="text-sm px-3 py-2 rounded-lg transition-colors" style={{ color: 'rgba(255,255,255,0.6)' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.6)')}
+              >{l}</a>
             ))}
           </div>
 
           <div className="hidden md:flex items-center gap-3">
-            <button onClick={() => setShowSsoModal(true)} className="flex items-center gap-1.5 text-sm text-white/40 hover:text-white/70 transition-colors px-3 py-2">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              SSO
+            <button onClick={() => setShowSsoModal(true)} className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-colors" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <ShieldCheck className="w-3.5 h-3.5" /> SSO
             </button>
-            <button onClick={openLogin} className="text-sm text-white/60 hover:text-white transition-colors px-3 py-2">
+            <button onClick={openLogin} className="text-sm px-3 py-2 rounded-lg transition-colors" style={{ color: 'rgba(255,255,255,0.7)' }}>
               Se connecter
             </button>
-            <button
-              onClick={openRegister}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all"
-              style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}
-            >
-              Démarrer gratuitement
-              <ArrowRight className="w-4 h-4" />
+            <button onClick={openRegister} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
+              Démarrer gratuitement <ArrowRight className="w-4 h-4" />
             </button>
           </div>
 
           <button className="md:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X className="w-5 h-5 text-white/70" /> : <Menu className="w-5 h-5 text-white/70" />}
+            {mobileMenuOpen ? <X className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.7)' }} /> : <Menu className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.7)' }} />}
           </button>
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden bg-[#0D0D1A] border-t border-white/5 px-4 py-4 space-y-1">
-            {[['Fonctionnalités', '#features'], ['Tarifs', '#pricing'], ['À propos', '#about']].map(([l, h]) => (
-              <a key={h} href={h} onClick={() => setMobileMenuOpen(false)} className="block text-sm text-white/70 py-2.5 font-medium border-b border-white/5">{l}</a>
+          <div className="md:hidden px-4 py-4 space-y-1" style={{ background: '#0B0A16', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            {[['Fonctionnalités', '#features'], ['Tarifs', '#pricing'], ['Intégrations', '#integrations']].map(([l, h]) => (
+              <a key={h} href={h} onClick={() => setMobileMenuOpen(false)} className="block text-sm py-2.5 font-medium" style={{ color: 'rgba(255,255,255,0.7)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{l}</a>
             ))}
             <button onClick={() => { openRegister(); setMobileMenuOpen(false); }} className="w-full mt-3 py-3 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
               Démarrer gratuitement
@@ -183,145 +110,136 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
       </nav>
 
       {/* ── Hero ── */}
-      <section className="relative pt-28 pb-20 px-4 sm:px-6 overflow-hidden">
-        {/* Background glow blobs */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-10 left-1/4 w-[600px] h-[600px] rounded-full opacity-20 blur-[120px]" style={{ background: 'radial-gradient(circle, #534AB7, transparent)' }} />
-          <div className="absolute top-40 right-1/4 w-[400px] h-[400px] rounded-full opacity-15 blur-[100px]" style={{ background: 'radial-gradient(circle, #7C3AED, transparent)' }} />
-          <div className="absolute bottom-0 left-1/2 w-[500px] h-[300px] rounded-full opacity-10 blur-[100px]" style={{ background: 'radial-gradient(circle, #1D9E75, transparent)' }} />
-          {/* Grid */}
-          <div className="absolute inset-0" style={{
-            backgroundImage: 'linear-gradient(rgba(83,74,183,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(83,74,183,0.07) 1px, transparent 1px)',
-            backgroundSize: '60px 60px',
-          }} />
-        </div>
+      <section style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: '80px', overflow: 'hidden' }}>
+        {/* Photo background */}
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: "url('/Hero landing.jpg')", backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.12 }} />
+        {/* Gradient overlay */}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(15,14,26,0.7) 0%, rgba(15,14,26,0.5) 50%, rgba(15,14,26,0.95) 100%)' }} />
+        {/* Grid */}
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(83,74,183,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(83,74,183,0.07) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
+        {/* Glow blobs */}
+        <div style={{ position: 'absolute', top: '10%', left: '20%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, #534AB7, transparent)', opacity: 0.2, filter: 'blur(120px)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: '30%', right: '15%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, #7C3AED, transparent)', opacity: 0.15, filter: 'blur(100px)', pointerEvents: 'none' }} />
 
-        <div className="relative max-w-6xl mx-auto text-center">
+        <div className="relative max-w-6xl mx-auto px-6 text-center w-full">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border mb-8 text-sm font-medium"
+            style={{ background: 'rgba(83,74,183,0.1)', borderColor: 'rgba(83,74,183,0.3)', color: '#A89FF0' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
+            IAM · IGA · Conformité ISO 27001 · SOC 2
+          </div>
 
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black leading-[1.05] tracking-tight mb-6">
-            Prenez le contrôle{' '}
-            <br />
-            <span className="relative inline-block">
-              <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #818CF8, #534AB7, #A78BFA)' }}>
-                de vos accès IT
-              </span>
+          <h1 className="font-black leading-tight tracking-tight mb-6" style={{ fontSize: 'clamp(2.5rem, 6vw, 5rem)' }}>
+            Prenez le contrôle<br />
+            <span style={{ background: 'linear-gradient(135deg, #818CF8, #534AB7, #A78BFA)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+              de vos accès IT
             </span>
           </h1>
 
-          <p className="text-lg sm:text-xl text-white/50 max-w-2xl mx-auto mb-10 leading-relaxed">
+          <p className="text-lg mb-10 max-w-2xl mx-auto leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
             Tracix centralise la gestion des habilitations, détecte les risques en temps réel et alerte votre équipe avant que les incidents surviennent.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <button
-              onClick={openRegister}
-              className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-base font-bold text-white transition-all hover:scale-105 hover:shadow-2xl"
-              style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)', boxShadow: '0 0 40px rgba(83,74,183,0.4)' }}
-            >
+            <button onClick={openRegister} className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-base font-bold text-white transition-all hover:scale-105"
+              style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)', boxShadow: '0 0 40px rgba(83,74,183,0.4)' }}>
               Démarrer gratuitement
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
-            <a
-              href="#features"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-base font-bold border border-white/10 text-white/70 hover:text-white hover:border-white/20 hover:bg-white/5 transition-all"
-            >
+            <a href="#features" className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-base font-bold border transition-all hover:bg-white/5"
+              style={{ borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}>
               Voir les fonctionnalités
             </a>
           </div>
 
-          {/* Stats row */}
+          {/* Stats */}
           <div className="flex flex-wrap justify-center gap-8 mb-16">
-            {STATS.map((s) => {
-              const Icon = s.icon;
-              return (
-                <div key={s.label} className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
-                    <Icon className="w-4 h-4 text-[#818CF8]" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-lg font-black text-white leading-none">{s.value}</p>
-                    <p className="text-[11px] text-white/40">{s.label}</p>
-                  </div>
-                </div>
-              );
-            })}
+            {[
+              { v: '100%', l: 'Sécurisé' }, { v: '<2 min', l: 'Pour démarrer' },
+              { v: '7+', l: "Types d'alertes" }, { v: 'XOF', l: 'Paiement local' },
+            ].map(s => (
+              <div key={s.l} className="text-center">
+                <p className="text-2xl font-black text-white">{s.v}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>{s.l}</p>
+              </div>
+            ))}
           </div>
 
           {/* App mockup */}
-          <div className="relative max-w-5xl mx-auto">
-            <div className="absolute -inset-4 rounded-3xl opacity-30 blur-2xl" style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED, #1D9E75)' }} />
-            <div className="relative rounded-2xl overflow-hidden border border-white/10" style={{ background: 'linear-gradient(180deg, #0F0F1E, #0A0A16)' }}>
-              {/* Fake browser bar */}
-              <div className="h-9 bg-white/5 border-b border-white/5 flex items-center px-4 gap-2">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-500/60" />
-                  <div className="w-3 h-3 rounded-full bg-amber-500/60" />
-                  <div className="w-3 h-3 rounded-full bg-green-500/60" />
+          <div style={{ position: 'relative', maxWidth: 960, margin: '0 auto' }}>
+            <div style={{ position: 'absolute', inset: -16, borderRadius: 24, background: 'linear-gradient(135deg, #534AB7, #7C3AED, #1D9E75)', opacity: 0.25, filter: 'blur(32px)' }} />
+            <div style={{ position: 'relative', borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', background: 'linear-gradient(180deg, #0F0F1E, #0A0A16)', boxShadow: '0 0 80px rgba(83,74,183,0.3), 0 40px 80px rgba(0,0,0,0.6)' }}>
+              {/* Browser bar */}
+              <div style={{ height: 36, background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(239,68,68,0.6)' }} />
+                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(245,158,11,0.6)' }} />
+                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(16,185,129,0.6)' }} />
                 </div>
-                <div className="mx-4 flex-1 h-5 rounded-md bg-white/5 max-w-xs flex items-center px-3 gap-2">
-                  <Lock className="w-2.5 h-2.5 text-green-400/70" />
-                  <span className="text-[10px] text-white/30">tracix.io/dashboard</span>
+                <div style={{ flex: 1, maxWidth: 280, height: 20, borderRadius: 6, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', padding: '0 10px', gap: 6 }}>
+                  <Lock style={{ width: 10, height: 10, color: 'rgba(16,185,129,0.7)' }} />
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>app.tracix.io/dashboard</span>
                 </div>
               </div>
               {/* App interior */}
-              <div className="flex h-72 sm:h-96">
+              <div style={{ display: 'flex', height: 360 }}>
                 {/* Sidebar */}
-                <div className="w-44 border-r border-white/5 p-3 space-y-0.5 hidden sm:block flex-shrink-0" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <div className="flex items-center gap-2 p-2 mb-4">
-                    <img src="/logo.png" className="w-6 h-6 object-contain" alt="" />
-                    <span className="text-xs font-bold text-white">Tracix</span>
+                <div className="hidden sm:flex flex-col" style={{ width: 168, flexShrink: 0, background: 'rgba(255,255,255,0.02)', borderRight: '1px solid rgba(255,255,255,0.05)', padding: '12px 0' }}>
+                  <div style={{ padding: '0 10px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: 8 }}>
+                    <img src="/logo.png" style={{ height: 22, width: 'auto' }} alt="Tracix" />
                   </div>
                   {[
-                    { l: 'Dashboard', active: true },
-                    { l: 'Habilitations', active: false },
-                    { l: 'Membres', active: false },
-                    { l: 'Score de risque', active: false },
-                    { l: 'Alertes', active: false },
-                    { l: 'Abonnements', active: false },
-                    { l: 'Paramètres', active: false },
-                  ].map((item) => (
-                    <div key={item.l} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] ${item.active ? 'bg-[#534AB7]/20 text-[#A89FF0] font-semibold' : 'text-white/30'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${item.active ? 'bg-[#534AB7]' : 'bg-white/10'}`} />
-                      {item.l}
+                    { l: 'Dashboard', active: true, dot: '#534AB7' },
+                    { l: 'Habilitations', active: false, dot: '' },
+                    { l: 'Membres', active: false, dot: '' },
+                    { l: 'Score de risque', active: false, dot: '' },
+                    { l: 'Alertes', active: false, dot: '', badge: '3' },
+                    { l: 'Abonnements', active: false, dot: '' },
+                    { l: 'Paramètres', active: false, dot: '' },
+                  ].map(item => (
+                    <div key={item.l} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', margin: '1px 6px', borderRadius: 8, background: item.active ? 'rgba(83,74,183,0.15)' : 'transparent', color: item.active ? '#A89FF0' : 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: item.active ? 600 : 400 }}>
+                      <div style={{ width: 5, height: 5, borderRadius: '50%', background: item.active ? '#534AB7' : 'rgba(255,255,255,0.1)', flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>{item.l}</span>
+                      {item.badge && <span style={{ fontSize: 9, background: '#EF4444', color: '#fff', padding: '1px 5px', borderRadius: 99, fontWeight: 700 }}>{item.badge}</span>}
                     </div>
                   ))}
                 </div>
                 {/* Dashboard content */}
-                <div className="flex-1 p-5">
-                  <p className="text-[11px] text-white/30 mb-4 font-semibold uppercase tracking-wider">Vue d'ensemble</p>
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                <div style={{ flex: 1, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vue d'ensemble</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                     {[
-                      { label: 'Score moyen', value: '74', sub: 'Conforme', color: '#1D9E75', bg: 'rgba(29,158,117,0.1)' },
-                      { label: 'Alertes actives', value: '3', sub: 'Critiques', color: '#E24B4A', bg: 'rgba(226,75,74,0.1)' },
-                      { label: 'Membres actifs', value: '8', sub: 'Sur 10 total', color: '#818CF8', bg: 'rgba(129,140,248,0.1)' },
-                    ].map((card) => (
-                      <div key={card.label} className="rounded-xl p-3 border border-white/5" style={{ background: card.bg }}>
-                        <p className="text-[9px] text-white/40 mb-1.5">{card.label}</p>
-                        <p className="text-2xl font-black" style={{ color: card.color }}>{card.value}</p>
-                        <p className="text-[9px] text-white/30 mt-0.5">{card.sub}</p>
+                      { l: 'Score moyen', v: '74', s: 'Conforme', c: '#1D9E75', bg: 'rgba(29,158,117,0.1)' },
+                      { l: 'Alertes actives', v: '3', s: 'Critiques', c: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+                      { l: 'Membres actifs', v: '8', s: 'Sur 10 total', c: '#818CF8', bg: 'rgba(129,140,248,0.1)' },
+                    ].map(card => (
+                      <div key={card.l} style={{ background: card.bg, border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, padding: '10px 12px' }}>
+                        <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>{card.l}</p>
+                        <p style={{ fontSize: 22, fontWeight: 800, color: card.c, lineHeight: 1 }}>{card.v}</p>
+                        <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>{card.s}</p>
                       </div>
                     ))}
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     {[
-                      { label: 'Revues dépassées', value: '2', color: '#EF9F27' },
-                      { label: 'Abonnements suivis', value: '6', color: '#3B82F6' },
-                    ].map((card) => (
-                      <div key={card.label} className="rounded-xl p-3 border border-white/5 bg-white/2">
-                        <p className="text-[9px] text-white/40 mb-1">{card.label}</p>
-                        <p className="text-xl font-black" style={{ color: card.color }}>{card.value}</p>
+                      { l: 'Revues dépassées', v: '2', c: '#EF9F27' },
+                      { l: 'Abonnements suivis', v: '6', c: '#3B82F6' },
+                    ].map(card => (
+                      <div key={card.l} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 10, padding: '10px 12px' }}>
+                        <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{card.l}</p>
+                        <p style={{ fontSize: 20, fontWeight: 800, color: card.c, lineHeight: 1 }}>{card.v}</p>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-3 rounded-xl border border-white/5 p-3" style={{ background: 'rgba(226,75,74,0.05)' }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle className="w-3 h-3 text-red-400" />
-                      <p className="text-[10px] text-white/50 font-semibold">Alertes récentes</p>
+                  <div style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.12)', borderRadius: 10, padding: '10px 12px', flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <AlertTriangle style={{ width: 11, height: 11, color: '#EF4444' }} />
+                      <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Alertes récentes</p>
                     </div>
-                    {['Élodie T. — Départ non traité', 'Cloudflare — Renouvellement dans 8j'].map((a) => (
-                      <div key={a} className="flex items-center gap-2 py-1">
-                        <div className="w-1 h-1 rounded-full bg-red-400" />
-                        <p className="text-[10px] text-white/40">{a}</p>
+                    {['Élodie T. — Départ non traité', 'Cloudflare — Renouvellement dans 8j'].map(a => (
+                      <div key={a} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
+                        <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#EF4444', flexShrink: 0 }} />
+                        <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{a}</p>
                       </div>
                     ))}
                   </div>
@@ -333,113 +251,106 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
       </section>
 
       {/* ── Trusted by ── */}
-      <div className="py-10 border-y border-white/5 bg-white/[0.02]">
+      <div style={{ padding: '32px 0', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
         <div className="max-w-5xl mx-auto px-6 text-center">
-          <p className="text-xs text-white/30 font-semibold uppercase tracking-widest mb-6">Fait pour les équipes IT de</p>
-          <div className="flex flex-wrap justify-center gap-6 sm:gap-12">
-            {['Côte d\'Ivoire 🇨🇮', 'Sénégal 🇸🇳', 'Cameroun 🇨🇲', 'Bénin 🇧🇯', 'France 🇫🇷', 'Et partout ailleurs 🌍'].map((c) => (
-              <span key={c} className="text-sm text-white/30 hover:text-white/60 transition-colors font-medium">{c}</span>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 20 }}>Fait pour les équipes IT de</p>
+          <div className="flex flex-wrap justify-center gap-6 sm:gap-10">
+            {["Côte d'Ivoire 🇨🇮", 'Sénégal 🇸🇳', 'Cameroun 🇨🇲', 'Bénin 🇧🇯', 'France 🇫🇷', 'Et partout ailleurs 🌍'].map(c => (
+              <span key={c} style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', fontWeight: 500 }}>{c}</span>
             ))}
           </div>
         </div>
       </div>
 
       {/* ── Features ── */}
-      <section id="features" className="py-24 px-4 sm:px-6">
+      <section id="features" style={{ padding: '96px 24px' }}>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <p className="text-xs text-[#818CF8] font-bold uppercase tracking-widest mb-4">Fonctionnalités</p>
-            <h2 className="text-4xl sm:text-5xl font-black text-white mb-5 leading-tight">
-              Tout ce dont votre équipe IT
-              <br />
-              <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #818CF8, #534AB7)' }}>
+            <span style={{ fontSize: 11, color: '#818CF8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 16 }}>Fonctionnalités</span>
+            <h2 className="font-black mb-5" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', lineHeight: 1.15 }}>
+              Tout ce dont votre équipe IT<br />
+              <span style={{ background: 'linear-gradient(135deg, #818CF8, #534AB7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
                 a réellement besoin
               </span>
             </h2>
-            <p className="text-lg text-white/40 max-w-xl mx-auto">
+            <p style={{ color: 'rgba(255,255,255,0.4)', maxWidth: 480, margin: '0 auto', fontSize: 16 }}>
               Une plateforme complète pour gouverner vos accès, réduire vos risques et rester conforme.
             </p>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURES.map((f) => {
-              const Icon = f.icon;
-              return (
-                <div
-                  key={f.title}
-                  className="group relative p-6 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 hover:-translate-y-1 overflow-hidden"
-                  style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))' }}
-                >
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ background: 'radial-gradient(circle at 50% 0%, rgba(83,74,183,0.08), transparent 70%)' }} />
-                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${f.gradient} flex items-center justify-center mb-5 shadow-lg ${f.glow}`}>
-                    <Icon className="w-6 h-6 text-white" />
-                  </div>
-                  <h3 className="text-base font-bold text-white mb-2.5">{f.title}</h3>
-                  <p className="text-sm text-white/40 leading-relaxed">{f.desc}</p>
+            {[
+              { emoji: '🔐', color: '#534AB7', bg: 'rgba(83,74,183,0.1)', title: 'Gestion des habilitations', desc: "Visualisez et contrôlez tous les droits d'accès en une matrice claire. Qui a accès à quoi, depuis quand.", img: null },
+              { emoji: '📊', color: '#1D9E75', bg: 'rgba(29,158,117,0.1)', title: 'Score de risque intelligent', desc: 'Chaque membre reçoit un score 0-100 calculé en temps réel selon ses accès, son statut et ses revues.', img: null },
+              { emoji: '🔔', color: '#EF4444', bg: 'rgba(239,68,68,0.1)', title: 'Alertes automatiques', desc: 'Détection proactive : comptes sans MFA, accès orphelins, abonnements expirants, départs non traités.', img: null },
+              { emoji: '👥', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', title: 'Annuaire des membres', desc: "Gérez collaborateurs et équipes. Suivez l'offboarding sans jamais oublier de révoquer un accès.", img: null },
+              { emoji: '💳', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', title: 'Suivi des abonnements', desc: 'Centralisez vos SaaS, coûts et renouvellements. Alertes avant expiration.', img: null },
+              { emoji: '📋', color: '#EC4899', bg: 'rgba(236,72,153,0.1)', title: 'Audit & conformité', desc: 'Journal complet de toutes les actions. Exportez vos rapports ISO 27001, SOC 2 prêts pour l'auditeur.', img: null },
+            ].map(f => (
+              <div key={f.title} className="group p-6 rounded-2xl border transition-all duration-300 hover:-translate-y-1"
+                style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))', borderColor: 'rgba(255,255,255,0.06)' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, background: f.bg, border: `1px solid ${f.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, marginBottom: 20 }}>
+                  {f.emoji}
                 </div>
-              );
-            })}
+                <h3 className="font-bold text-white mb-2.5" style={{ fontSize: 15 }}>{f.title}</h3>
+                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>{f.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* ── How it works ── */}
-      <section className="py-24 px-4 sm:px-6 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] rounded-full opacity-10 blur-[120px]" style={{ background: 'radial-gradient(circle, #534AB7, transparent)' }} />
-        </div>
-        <div className="max-w-5xl mx-auto">
+      <section style={{ padding: '96px 24px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 800, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, #534AB7, transparent)', opacity: 0.08, filter: 'blur(120px)', pointerEvents: 'none' }} />
+        <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <p className="text-xs text-[#818CF8] font-bold uppercase tracking-widest mb-4">Simple par conception</p>
-            <h2 className="text-4xl sm:text-5xl font-black text-white mb-5">Opérationnel en 3 étapes</h2>
+            <span style={{ fontSize: 11, color: '#818CF8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 16 }}>Comment ça marche</span>
+            <h2 className="text-white font-black" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>Opérationnel en 3 étapes</h2>
+            <p style={{ color: 'rgba(255,255,255,0.4)', marginTop: 16, maxWidth: 480, margin: '16px auto 0' }}>
+              Pas de semaines d'intégration. Tracix vous donne une visibilité complète en quelques heures.
+            </p>
           </div>
+
           <div className="grid sm:grid-cols-3 gap-6">
             {[
-              { num: '01', title: 'Créez votre organisation', desc: 'Inscrivez-vous, nommez votre org et invitez votre équipe en moins de 2 minutes.', icon: Database, color: '#534AB7' },
-              { num: '02', title: 'Importez vos données', desc: 'Ajoutez membres, plateformes et droits d\'accès manuellement ou via import CSV.', icon: Users, color: '#1D9E75' },
-              { num: '03', title: 'Pilotez et sécurisez', desc: 'Les alertes s\'activent, les scores se calculent. Vous gardez le contrôle en temps réel.', icon: Shield, color: '#EF9F27' },
-            ].map((step) => {
-              const Icon = step.icon;
-              return (
-                <div key={step.num} className="relative text-center p-8 rounded-2xl border border-white/5" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <div className="text-7xl font-black mb-5 select-none" style={{ color: `${step.color}15` }}>{step.num}</div>
-                  <div className="w-12 h-12 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: `${step.color}20` }}>
-                    <Icon className="w-6 h-6" style={{ color: step.color }} />
-                  </div>
-                  <h3 className="text-base font-bold text-white mb-2">{step.title}</h3>
-                  <p className="text-sm text-white/40 leading-relaxed">{step.desc}</p>
+              { num: '01', title: 'Connectez vos plateformes', desc: "GitHub, AWS, Okta, Google Workspace — connectez vos outils grâce à nos connecteurs OAuth et SCIM.", img: '/Authentication-cuate.svg', color: '#534AB7' },
+              { num: '02', title: 'Analysez les accès', desc: "Tracix cartographie automatiquement tous les droits, détecte les anomalies et calcule les scores de risque.", img: '/undraw_security_0ubl.svg', color: '#1D9E75' },
+              { num: '03', title: 'Agissez et reportez', desc: "Révoquez les accès en un clic, déclenchez des alertes et exportez vos rapports de conformité.", img: '/undraw_two-factor-authentication_ofho.svg', color: '#F59E0B' },
+            ].map(step => (
+              <div key={step.num} className="relative text-center p-8 rounded-2xl border" style={{ background: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)' }}>
+                <div style={{ fontSize: 72, fontWeight: 900, color: `${step.color}15`, lineHeight: 1, marginBottom: 16, userSelect: 'none' }}>{step.num}</div>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: `${step.color}20`, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 22 }}>{step.num === '01' ? '🔌' : step.num === '02' ? '🔍' : '📤'}</span>
                 </div>
-              );
-            })}
+                <h3 className="font-bold text-white mb-2" style={{ fontSize: 15 }}>{step.title}</h3>
+                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6, marginBottom: 20 }}>{step.desc}</p>
+                <img src={step.img} alt={step.title} style={{ height: 120, width: 'auto', margin: '0 auto', opacity: 0.85 }} />
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── Testimonials ── */}
-      <section className="py-24 px-4 sm:px-6 border-y border-white/5 bg-white/[0.015]">
-        <div className="max-w-6xl mx-auto">
+      {/* ── Integrations ── */}
+      <section id="integrations" style={{ padding: '96px 24px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
-            <p className="text-xs text-[#818CF8] font-bold uppercase tracking-widest mb-4">Témoignages</p>
-            <h2 className="text-4xl sm:text-5xl font-black text-white mb-4">Ils font confiance à Tracix</h2>
+            <span style={{ fontSize: 11, color: '#818CF8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 16 }}>Intégrations</span>
+            <h2 className="text-white font-black mb-4" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>S'intègre avec vos outils existants</h2>
+            <p style={{ color: 'rgba(255,255,255,0.4)', maxWidth: 480, margin: '0 auto' }}>Connectez GitHub, Google Workspace, Okta, Slack, Microsoft en quelques clics.</p>
           </div>
-          <div className="grid sm:grid-cols-3 gap-6">
-            {TESTIMONIALS.map((t) => (
-              <div key={t.name} className="p-6 rounded-2xl border border-white/5 flex flex-col" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))' }}>
-                <div className="flex gap-0.5 mb-5">
-                  {Array.from({ length: t.stars }).map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                  ))}
-                </div>
-                <p className="text-sm text-white/60 leading-relaxed flex-1 mb-6 italic">"{t.text}"</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-black flex-shrink-0" style={{ background: `linear-gradient(135deg, ${t.color}, ${t.color}99)` }}>
-                    {t.avatar}
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">{t.name}</p>
-                    <p className="text-xs text-white/30">{t.role}</p>
-                  </div>
-                </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }} className="sm:grid-cols-6">
+            {[
+              { src: '/github.svg', name: 'GitHub' }, { src: '/google.svg', name: 'Google' },
+              { src: '/okta.svg', name: 'Okta' }, { src: '/slack.webp', name: 'Slack' },
+              { src: '/microsoft.webp', name: 'Microsoft' }, { src: '/notion.svg', name: 'Notion' },
+            ].map(item => (
+              <div key={item.name} className="flex flex-col items-center gap-3 p-5 rounded-2xl border transition-all hover:-translate-y-1"
+                style={{ background: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)' }}>
+                <img src={item.src} alt={item.name} style={{ width: 40, height: 40, objectFit: 'contain', opacity: 0.8 }} />
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>{item.name}</span>
               </div>
             ))}
           </div>
@@ -447,135 +358,173 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
       </section>
 
       {/* ── Pricing ── */}
-      <section id="pricing" className="py-24 px-4 sm:px-6">
+      <section id="pricing" style={{ padding: '96px 24px' }}>
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-xs text-[#818CF8] font-bold uppercase tracking-widest mb-4">Tarifs</p>
-            <h2 className="text-4xl sm:text-5xl font-black text-white mb-5">Simples et transparents</h2>
-            <p className="text-lg text-white/40 max-w-xl mx-auto">Commencez gratuitement. Évoluez quand vous êtes prêt.</p>
+          <div className="text-center mb-14">
+            <span style={{ fontSize: 11, color: '#818CF8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 16 }}>Tarifs</span>
+            <h2 className="text-white font-black mb-4" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>Transparent. Prévisible. Accessible.</h2>
+            <p style={{ color: 'rgba(255,255,255,0.4)', maxWidth: 480, margin: '0 auto 32px' }}>Des tarifs pensés pour le marché ouest-africain. Aucune surprise.</p>
+
+            {/* Toggle */}
+            <div className="inline-flex rounded-xl p-1" style={{ background: 'rgba(255,255,255,0.05)' }}>
+              <button onClick={() => setBillingAnnual(false)} className="px-5 py-2 rounded-lg text-sm font-bold transition-all"
+                style={{ background: !billingAnnual ? '#534AB7' : 'transparent', color: !billingAnnual ? '#fff' : 'rgba(255,255,255,0.4)' }}>
+                Mensuel
+              </button>
+              <button onClick={() => setBillingAnnual(true)} className="px-5 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2"
+                style={{ background: billingAnnual ? '#534AB7' : 'transparent', color: billingAnnual ? '#fff' : 'rgba(255,255,255,0.4)' }}>
+                Annuel
+                <span style={{ fontSize: 10, background: '#10B981', color: '#fff', padding: '2px 6px', borderRadius: 99, fontWeight: 700 }}>-20%</span>
+              </button>
+            </div>
           </div>
+
           <div className="grid sm:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {PLANS.map((plan) => {
-              const Icon = plan.icon;
+            {PLANS.map(plan => {
+              const price = billingAnnual ? plan.annual : plan.monthly;
               return (
-                <div
-                  key={plan.id}
-                  className={`relative rounded-2xl p-7 border flex flex-col transition-all ${
-                    plan.highlight
-                      ? 'border-[#534AB7] shadow-2xl'
-                      : 'border-white/5 hover:border-white/10'
-                  }`}
-                  style={plan.highlight ? {
-                    background: 'linear-gradient(135deg, rgba(83,74,183,0.15), rgba(124,58,237,0.08))',
-                    boxShadow: '0 0 60px rgba(83,74,183,0.2)',
-                  } : {
-                    background: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))',
-                  }}
-                >
-                  {plan.badge && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-[10px] font-black text-white" style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
-                      {plan.badge}
+                <div key={plan.id} className="relative rounded-2xl p-7 border flex flex-col transition-all"
+                  style={{
+                    background: plan.popular ? 'linear-gradient(135deg, rgba(83,74,183,0.15), rgba(124,58,237,0.08))' : 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))',
+                    borderColor: plan.popular ? '#534AB7' : 'rgba(255,255,255,0.06)',
+                    boxShadow: plan.popular ? '0 0 60px rgba(83,74,183,0.2)' : 'none',
+                  }}>
+                  {plan.popular && (
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs font-black text-white"
+                      style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
+                      ⭐ POPULAIRE
                     </div>
                   )}
-                  <div className="flex items-center gap-2.5 mb-4">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${plan.color}20` }}>
-                      <Icon className="w-5 h-5" style={{ color: plan.color }} />
-                    </div>
+                  <div className="flex items-center gap-2 mb-4">
                     <span className="font-black text-white text-lg">{plan.label}</span>
                   </div>
                   <div className="mb-1 flex items-end gap-1">
-                    <span className="text-4xl font-black text-white">{plan.price}</span>
-                    <span className="text-sm text-white/30 mb-1.5">{plan.period}</span>
+                    <span className="font-black text-white" style={{ fontSize: 32 }}>{price === 0 ? '0' : price.toLocaleString('fr-FR')}</span>
+                    <span className="text-sm mb-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}> XOF{price > 0 ? '/mois' : ''}</span>
                   </div>
-                  <p className="text-xs text-white/40 mb-6">{plan.desc}</p>
+                  <p className="text-xs mb-6" style={{ color: 'rgba(255,255,255,0.4)' }}>{plan.desc}</p>
                   <ul className="space-y-3 flex-1 mb-7">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2.5 text-sm text-white/70">
-                        <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                        {f}
-                      </li>
-                    ))}
-                    {plan.missing.map((f) => (
-                      <li key={f} className="flex items-start gap-2.5 text-sm text-white/20 line-through">
-                        <X className="w-4 h-4 text-white/15 flex-shrink-0 mt-0.5" />
+                    {plan.features.map(f => (
+                      <li key={f} className="flex items-start gap-2.5 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                        <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#10B981' }} />
                         {f}
                       </li>
                     ))}
                   </ul>
                   <button
-                    onClick={() => plan.id !== 'enterprise' && openRegister()}
-                    className={`w-full py-3.5 rounded-xl text-sm font-bold transition-all ${
-                      plan.highlight
-                        ? 'text-white hover:opacity-90 hover:scale-[1.02]'
-                        : 'border border-white/10 text-white/70 hover:text-white hover:border-white/20 hover:bg-white/5'
-                    }`}
-                    style={plan.highlight ? { background: 'linear-gradient(135deg, #534AB7, #7C3AED)' } : {}}
-                  >
+                    onClick={() => plan.id !== 'enterprise' ? openRegister() : window.open('mailto:contact@agbayagroup.com')}
+                    className="w-full py-3.5 rounded-xl text-sm font-bold transition-all"
+                    style={{
+                      background: plan.popular ? 'linear-gradient(135deg, #534AB7, #7C3AED)' : 'transparent',
+                      border: plan.popular ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                      color: plan.popular ? '#fff' : 'rgba(255,255,255,0.7)',
+                    }}>
                     {plan.cta}
                   </button>
                 </div>
               );
             })}
           </div>
+
+          <p className="text-center mt-8 text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            Renouvellement garanti au même tarif · Paiement Mobile Money, virement ou carte · Facturation en XOF
+          </p>
+        </div>
+      </section>
+
+      {/* ── Testimonial ── */}
+      <section style={{ padding: '96px 24px', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
+        <div className="max-w-3xl mx-auto">
+          <div className="p-10 rounded-3xl border text-center" style={{ background: 'linear-gradient(135deg, rgba(83,74,183,0.1), rgba(124,58,237,0.05))', borderColor: 'rgba(83,74,183,0.2)' }}>
+            <div className="flex justify-center gap-1 mb-6">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star key={i} className="w-5 h-5 fill-amber-400 text-amber-400" />
+              ))}
+            </div>
+            <blockquote className="text-xl font-medium mb-8 leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              "Tracix nous a permis de passer notre audit de sécurité en 2 semaines. La visibilité sur les accès est incomparable avec ce qu'on faisait avant en spreadsheet."
+            </blockquote>
+            <div className="flex items-center justify-center gap-4">
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #534AB7, #7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 16 }}>K</div>
+              <div className="text-left">
+                <p className="font-bold text-white">Kofi A.</p>
+                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>RSSI — Fintech Abidjan 🇨🇮</p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* ── About ── */}
-      <section id="about" className="py-24 px-4 sm:px-6 border-t border-white/5">
+      <section id="about" style={{ padding: '96px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="max-w-4xl mx-auto text-center">
           <img src="/logo.png" alt="Tracix" className="w-16 h-16 object-contain mx-auto mb-6" />
-          <h2 className="text-4xl sm:text-5xl font-black text-white mb-6 leading-tight">
-            Conçu pour l'Afrique,
-            <br />
-            <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #818CF8, #534AB7)' }}>
+          <h2 className="font-black mb-6" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', lineHeight: 1.15 }}>
+            Conçu pour l'Afrique,<br />
+            <span style={{ background: 'linear-gradient(135deg, #818CF8, #534AB7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
               pensé pour le monde
             </span>
           </h2>
-          <p className="text-lg text-white/40 leading-relaxed max-w-2xl mx-auto">
+          <p className="text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: 'rgba(255,255,255,0.4)' }}>
             Tracix est développé par Agbaya Group pour répondre aux besoins réels des équipes IT africaines : simplicité, fiabilité, multi-devises et support des paiements mobiles locaux.
           </p>
         </div>
       </section>
 
       {/* ── CTA Banner ── */}
-      <section className="py-20 px-4 sm:px-6 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED, #1D9E75)' }} />
-          <div className="absolute inset-0" style={{
-            backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
-            backgroundSize: '40px 40px',
-          }} />
-        </div>
+      <section style={{ padding: '80px 24px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #534AB7, #7C3AED, #1D9E75)' }} />
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
         <div className="relative max-w-3xl mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl font-black text-white mb-4">
+          <h2 className="font-black text-white mb-4" style={{ fontSize: 'clamp(1.8rem, 4vw, 2.5rem)' }}>
             Prêt à sécuriser votre gouvernance IT ?
           </h2>
-          <p className="text-white/70 text-lg mb-8">
+          <p className="text-lg mb-8" style={{ color: 'rgba(255,255,255,0.7)' }}>
             Rejoignez des équipes IT qui font confiance à Tracix. Gratuit pour commencer, sans carte bancaire.
           </p>
-          <button
-            onClick={openRegister}
-            className="group inline-flex items-center gap-3 px-8 py-4 bg-white text-[#534AB7] rounded-2xl text-base font-black hover:bg-gray-50 transition-all shadow-2xl hover:scale-105"
-          >
-            Démarrer maintenant — c'est gratuit
-            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-          </button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button onClick={openRegister} className="group inline-flex items-center gap-3 px-8 py-4 bg-white rounded-2xl text-base font-black transition-all shadow-2xl hover:scale-105"
+              style={{ color: '#534AB7' }}>
+              Démarrer maintenant — c'est gratuit
+              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </button>
+            <a href="mailto:contact@agbayagroup.com" className="inline-flex items-center justify-center px-8 py-4 rounded-2xl text-base font-bold border border-white/30 text-white hover:bg-white/10 transition-all">
+              Parler à un expert
+            </a>
+          </div>
         </div>
       </section>
 
       {/* ── Footer ── */}
-      <footer className="py-10 px-4 sm:px-6 border-t border-white/5 bg-black/30">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-5">
-          <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Tracix" className="w-7 h-7 object-contain" />
-            <span className="text-white font-bold">Tracix</span>
-            <span className="text-white/20 text-xs">by Agbaya Group</span>
+      <footer style={{ padding: '48px 24px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.3)' }}>
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-10">
+            <div className="col-span-2 md:col-span-1">
+              <div className="flex items-center gap-2 mb-4">
+                <img src="/logo.png" alt="Tracix" style={{ height: 28, width: 'auto' }} />
+              </div>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', lineHeight: 1.6 }}>
+                La gouvernance des accès, simple et accessible pour les organisations en Afrique de l'Ouest.
+              </p>
+            </div>
+            {[
+              { title: 'Produit', links: ['Fonctionnalités', 'Tarifs', 'Intégrations', 'Sécurité'] },
+              { title: 'Ressources', links: ['Documentation', 'API', 'Changelog', 'Status'] },
+              { title: 'Légal', links: ['Confidentialité', 'CGU', 'Cookies', 'Contact'] },
+            ].map(col => (
+              <div key={col.title}>
+                <h4 style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>{col.title}</h4>
+                <ul style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {col.links.map(l => (
+                    <li key={l}><a href="#" style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>{l}</a></li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
-          <p className="text-white/20 text-xs">© {new Date().getFullYear()} Agbaya Group. Tous droits réservés.</p>
-          <div className="flex gap-6 text-xs text-white/30">
-            <a href="#" className="hover:text-white/60 transition-colors">Confidentialité</a>
-            <a href="#" className="hover:text-white/60 transition-colors">CGU</a>
-            <a href="mailto:contact@agbayagroup.com" className="hover:text-white/60 transition-colors">Contact</a>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }} className="sm:flex-row sm:justify-between">
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>© {new Date().getFullYear()} Agbaya Group. Tous droits réservés.</p>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>Fait avec ❤️ en Côte d'Ivoire 🇨🇮</p>
           </div>
         </div>
       </footer>
@@ -592,13 +541,12 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
         />
       )}
 
-      {/* ── SSO Modal ── */}
       {showSsoModal && <SsoLoginModal onClose={() => setShowSsoModal(false)} />}
     </div>
   );
 }
 
-// ── SVG logos pour les fournisseurs OAuth ──
+// ── SVG OAuth logos ───────────────────────────────────────────────────────────
 
 function GoogleLogo() {
   return (
@@ -630,25 +578,11 @@ function GitHubLogo() {
   );
 }
 
-// ── Modal d'authentification (Connexion + Inscription) ──
-
-interface AuthModalProps {
-  defaultTab: 'login' | 'register';
-  onLogin: (email: string, password: string) => Promise<LoginResult>;
-  onLoginWithMfa: (userId: string, totp: string) => Promise<{ ok: true } | { ok: false; error?: string }>;
-  onRegister: (data: { full_name: string; email: string; password: string; organization_name: string }) => Promise<{ success: boolean; error?: string }>;
-  onClose: () => void;
-  onOpenSso?: () => void;
-}
+// ── SSO Modal ─────────────────────────────────────────────────────────────────
 
 function SsoLoginModal({ onClose }: { onClose: () => void }) {
   const [orgId, setOrgId] = useState('');
   const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
-
-  const handleGo = () => {
-    if (!orgId.trim()) return;
-    window.location.href = `${BASE}/saml/${orgId.trim()}/login`;
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -665,33 +599,32 @@ function SsoLoginModal({ onClose }: { onClose: () => void }) {
           <h2 className="text-lg font-black text-white text-center mb-1">Connexion SSO</h2>
           <p className="text-xs text-white/35 text-center mb-6">Entrez l'identifiant de votre organisation</p>
           <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold text-white/40 mb-1.5">ID d'organisation</label>
-              <input
-                type="text"
-                value={orgId}
-                onChange={(e) => setOrgId(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleGo()}
-                className="w-full px-3 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
-                placeholder="ex: abc123 ou votre-org-id"
-                autoFocus
-              />
-              <p className="text-[11px] text-white/25 mt-1">Fourni par votre administrateur IT</p>
-            </div>
-            <button
-              onClick={handleGo}
+            <input type="text" value={orgId} onChange={e => setOrgId(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && orgId.trim() && (window.location.href = `${BASE}/saml/${orgId.trim()}/login`)}
+              className="w-full px-3 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
+              placeholder="ex: abc123 ou votre-org-id" autoFocus />
+            <button onClick={() => orgId.trim() && (window.location.href = `${BASE}/saml/${orgId.trim()}/login`)}
               disabled={!orgId.trim()}
-              className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-40 transition-all flex items-center justify-center gap-2"
-              style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}
-            >
-              <ArrowRight className="w-4 h-4" />
-              Continuer avec SSO
+              className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-40 flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
+              <ArrowRight className="w-4 h-4" /> Continuer avec SSO
             </button>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+// ── Auth Modal ────────────────────────────────────────────────────────────────
+
+interface AuthModalProps {
+  defaultTab: 'login' | 'register';
+  onLogin: (email: string, password: string) => Promise<LoginResult>;
+  onLoginWithMfa: (userId: string, totp: string) => Promise<{ ok: true } | { ok: false; error?: string }>;
+  onRegister: (data: { full_name: string; email: string; password: string; organization_name: string }) => Promise<{ success: boolean; error?: string }>;
+  onClose: () => void;
+  onOpenSso?: () => void;
 }
 
 function AuthModal({ defaultTab, onLogin, onLoginWithMfa, onRegister, onClose, onOpenSso }: AuthModalProps) {
@@ -700,18 +633,13 @@ function AuthModal({ defaultTab, onLogin, onLoginWithMfa, onRegister, onClose, o
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
-      <div
-        className="relative w-full max-w-md rounded-2xl border border-white/10 overflow-hidden"
-        style={{ background: 'linear-gradient(160deg, #0F0F1E, #0A0A16)' }}
-      >
-        {/* Glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 opacity-20 blur-3xl rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, #534AB7, transparent)' }} />
-
+      <div className="relative w-full max-w-md rounded-2xl border border-white/10 overflow-hidden"
+        style={{ background: 'linear-gradient(160deg, #0F0F1E, #0A0A16)' }}>
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 opacity-20 blur-3xl rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #534AB7, transparent)' }} />
         <button onClick={onClose} className="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-colors">
           <X className="w-4 h-4" />
         </button>
-
-        {/* Header */}
         <div className="px-8 pt-8 pb-0 text-center">
           <img src="/logo.png" alt="Tracix" className="w-10 h-10 object-contain mx-auto mb-3" />
           <h2 className="text-xl font-black text-white">
@@ -720,70 +648,50 @@ function AuthModal({ defaultTab, onLogin, onLoginWithMfa, onRegister, onClose, o
           <p className="text-xs text-white/35 mt-1 mb-6">
             {tab === 'login' ? 'Accédez à votre espace de gouvernance' : 'Gratuit · Sans carte bancaire'}
           </p>
-
-          {/* Tabs */}
           <div className="flex rounded-xl bg-white/5 p-1 mb-6">
-            <button
-              onClick={() => setTab('login')}
-              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'login' ? 'bg-[#534AB7] text-white shadow' : 'text-white/40 hover:text-white/70'}`}
-            >
+            <button onClick={() => setTab('login')}
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'login' ? 'bg-[#534AB7] text-white' : 'text-white/40 hover:text-white/70'}`}>
               Se connecter
             </button>
-            <button
-              onClick={() => setTab('register')}
-              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'register' ? 'bg-[#534AB7] text-white shadow' : 'text-white/40 hover:text-white/70'}`}
-            >
+            <button onClick={() => setTab('register')}
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'register' ? 'bg-[#534AB7] text-white' : 'text-white/40 hover:text-white/70'}`}>
               S'inscrire
             </button>
           </div>
         </div>
-
         <div className="px-8 pb-8">
-          {/* OAuth Buttons */}
           <div className="space-y-2.5 mb-5">
             {[
               { provider: 'google' as const, label: 'Continuer avec Google', logo: <GoogleLogo /> },
               { provider: 'microsoft' as const, label: 'Continuer avec Microsoft', logo: <MicrosoftLogo /> },
               { provider: 'github' as const, label: 'Continuer avec GitHub', logo: <GitHubLogo /> },
             ].map(({ provider, label, logo }) => (
-              <a
-                key={provider}
-                href={api.auth.oauthUrl(provider)}
-                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/8 hover:border-white/20 transition-all text-sm font-medium text-white/80 hover:text-white"
-              >
+              <a key={provider} href={api.auth.oauthUrl(provider)}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/8 hover:border-white/20 transition-all text-sm font-medium text-white/80 hover:text-white">
                 <span className="flex-shrink-0">{logo}</span>
                 <span className="flex-1 text-center">{label}</span>
               </a>
             ))}
             {onOpenSso && (
-              <button
-                type="button"
-                onClick={onOpenSso}
-                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-[#534AB7]/30 bg-[#534AB7]/8 hover:bg-[#534AB7]/15 hover:border-[#534AB7]/50 transition-all text-sm font-medium text-[#818CF8] hover:text-white"
-              >
+              <button type="button" onClick={onOpenSso}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border transition-all text-sm font-medium"
+                style={{ borderColor: 'rgba(83,74,183,0.3)', background: 'rgba(83,74,183,0.08)', color: '#818CF8' }}>
                 <ShieldCheck className="w-5 h-5 flex-shrink-0" />
                 <span className="flex-1 text-center">Se connecter via SSO</span>
               </button>
             )}
           </div>
-
-          {/* Divider */}
           <div className="flex items-center gap-3 mb-5">
             <div className="flex-1 h-px bg-white/10" />
             <span className="text-xs text-white/25 font-medium">ou avec votre email</span>
             <div className="flex-1 h-px bg-white/10" />
           </div>
-
-          {/* Forms */}
-          {tab === 'login' ? (
-            <LoginForm onLogin={onLogin} onLoginWithMfa={onLoginWithMfa} />
-          ) : (
-            <RegisterForm onRegister={onRegister} />
-          )}
-
+          {tab === 'login'
+            ? <LoginForm onLogin={onLogin} onLoginWithMfa={onLoginWithMfa} />
+            : <RegisterForm onRegister={onRegister} />
+          }
           <p className="text-center text-xs text-white/20 mt-4 flex items-center justify-center gap-1.5">
-            <Lock className="w-3 h-3" />
-            Connexion sécurisée — données chiffrées
+            <Lock className="w-3 h-3" /> Connexion sécurisée — données chiffrées
           </p>
         </div>
       </div>
@@ -791,7 +699,7 @@ function AuthModal({ defaultTab, onLogin, onLoginWithMfa, onRegister, onClose, o
   );
 }
 
-// ── Formulaire de connexion ──
+// ── Login Form ────────────────────────────────────────────────────────────────
 
 function LoginForm({ onLogin, onLoginWithMfa }: {
   onLogin: (email: string, password: string) => Promise<LoginResult>;
@@ -802,10 +710,8 @@ function LoginForm({ onLogin, onLoginWithMfa }: {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // MFA step
   const [mfaUserId, setMfaUserId] = useState<string | null>(null);
   const [totp, setTotp] = useState('');
-  // Forgot password
   const [forgotStep, setForgotStep] = useState<'idle' | 'form' | 'sent'>('idle');
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -835,148 +741,93 @@ function LoginForm({ onLogin, onLoginWithMfa }: {
     setIsSubmitting(true);
     try {
       const result = await onLoginWithMfa(mfaUserId, totp);
-      if (!result.ok) {
-        setError(result.error ?? 'Code incorrect ou expiré.');
-        setTotp('');
-      }
+      if (!result.ok) { setError(result.error ?? 'Code incorrect.'); setTotp(''); }
     } catch {
-      setError('Code incorrect ou expiré.');
-      setTotp('');
+      setError('Code incorrect ou expiré.'); setTotp('');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (mfaUserId) {
-    return (
-      <form onSubmit={handleMfa} className="space-y-4">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-[#534AB7]/10 border border-[#534AB7]/20">
-          <KeyRound className="w-5 h-5 text-[#8B82D4] flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-white">Vérification en 2 étapes</p>
-            <p className="text-xs text-white/40">Entrez le code de votre application authenticator</p>
-          </div>
-        </div>
-        {error && (
-          <div className="px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-400 flex items-center gap-2">
-            <X className="w-4 h-4 flex-shrink-0" />{error}
-          </div>
-        )}
-        <div>
-          <label className="block text-xs font-semibold text-white/40 mb-1.5">Code TOTP (6 chiffres)</label>
-          <input
-            type="text" inputMode="numeric" pattern="\d{6}" maxLength={6}
-            value={totp} onChange={(e) => setTotp(e.target.value.replace(/\D/g, ''))}
-            autoFocus
-            className="w-full py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white text-center font-mono tracking-[0.4em] placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
-            placeholder="000000" required
-          />
-        </div>
-        <button type="submit" disabled={isSubmitting || totp.length !== 6}
-          className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
-          style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)', boxShadow: '0 0 30px rgba(83,74,183,0.25)' }}
-        >
-          {isSubmitting ? (
-            <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Vérification…</>
-          ) : (
-            <>Confirmer <ArrowRight className="w-4 h-4" /></>
-          )}
-        </button>
-        <button type="button" onClick={() => { setMfaUserId(null); setTotp(''); setError(null); }}
-          className="w-full text-xs text-white/30 hover:text-white/60 transition-colors">
-          ← Retour
-        </button>
-      </form>
-    );
-  }
-
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotLoading(true);
-    try {
-      await api.auth.forgotPassword(forgotEmail);
-      setForgotStep('sent');
-    } catch {
-      // always show sent state to avoid enumeration
-      setForgotStep('sent');
-    } finally { setForgotLoading(false); }
+    try { await api.auth.forgotPassword(forgotEmail); } catch { /* */ } finally {
+      setForgotStep('sent'); setForgotLoading(false);
+    }
   };
 
-  // ── Forgot password view ──
-  if (forgotStep === 'form') {
-    return (
-      <div className="space-y-4">
-        <button type="button" onClick={() => setForgotStep('idle')}
-          className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors">
-          <ArrowRight className="w-3 h-3 rotate-180" /> Retour à la connexion
-        </button>
-        <p className="text-sm text-white/70">Entrez votre email et nous vous enverrons un lien de réinitialisation.</p>
-        <form onSubmit={handleForgot} className="space-y-3">
-          <div>
-            <label className="block text-xs font-semibold text-white/40 mb-1.5">Email</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-              <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)}
-                required autoFocus
-                className="w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
-                placeholder="vous@entreprise.com" />
-            </div>
-          </div>
-          <button type="submit" disabled={forgotLoading}
-            className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
-            style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
-            {forgotLoading ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Envoi…</> : <>Envoyer le lien <ArrowRight className="w-4 h-4" /></>}
-          </button>
-        </form>
+  if (mfaUserId) return (
+    <form onSubmit={handleMfa} className="space-y-4">
+      <div className="flex items-center gap-3 p-3 rounded-xl bg-[#534AB7]/10 border border-[#534AB7]/20">
+        <KeyRound className="w-5 h-5 text-[#8B82D4] flex-shrink-0" />
+        <div><p className="text-sm font-semibold text-white">Vérification en 2 étapes</p><p className="text-xs text-white/40">Code de votre application authenticator</p></div>
       </div>
-    );
-  }
+      {error && <div className="px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-400 flex items-center gap-2"><X className="w-4 h-4" />{error}</div>}
+      <input type="text" inputMode="numeric" pattern="\d{6}" maxLength={6} value={totp} onChange={e => setTotp(e.target.value.replace(/\D/g, ''))} autoFocus
+        className="w-full py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white text-center font-mono tracking-[0.4em] placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
+        placeholder="000000" required />
+      <button type="submit" disabled={isSubmitting || totp.length !== 6}
+        className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+        style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
+        {isSubmitting ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Vérification…</> : <>Confirmer <ArrowRight className="w-4 h-4" /></>}
+      </button>
+      <button type="button" onClick={() => { setMfaUserId(null); setTotp(''); setError(null); }} className="w-full text-xs text-white/30 hover:text-white/60 transition-colors">← Retour</button>
+    </form>
+  );
 
-  if (forgotStep === 'sent') {
-    return (
-      <div className="space-y-4 text-center">
-        <div className="w-12 h-12 rounded-full bg-green-500/15 flex items-center justify-center mx-auto">
-          <CheckCircle className="w-6 h-6 text-green-400" />
+  if (forgotStep === 'form') return (
+    <div className="space-y-4">
+      <button onClick={() => setForgotStep('idle')} className="flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors">
+        <ArrowRight className="w-3 h-3 rotate-180" /> Retour
+      </button>
+      <form onSubmit={handleForgot} className="space-y-3">
+        <div className="relative">
+          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+          <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required autoFocus
+            className="w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
+            placeholder="vous@entreprise.com" />
         </div>
-        <p className="text-sm text-white/70">Si un compte existe pour <span className="text-white font-medium">{forgotEmail}</span>, un email de réinitialisation a été envoyé.</p>
-        <p className="text-xs text-white/35">Le lien est valable 30 minutes. Vérifiez vos spams.</p>
-        <button type="button" onClick={() => { setForgotStep('idle'); setForgotEmail(''); }}
-          className="text-xs text-[#8B82D4] hover:text-white transition-colors">
-          ← Retour à la connexion
+        <button type="submit" disabled={forgotLoading}
+          className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+          style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)' }}>
+          {forgotLoading ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Envoi…</> : <>Envoyer le lien <ArrowRight className="w-4 h-4" /></>}
         </button>
+      </form>
+    </div>
+  );
+
+  if (forgotStep === 'sent') return (
+    <div className="space-y-4 text-center">
+      <div className="w-12 h-12 rounded-full bg-green-500/15 flex items-center justify-center mx-auto">
+        <CheckCircle className="w-6 h-6 text-green-400" />
       </div>
-    );
-  }
+      <p className="text-sm text-white/70">Si un compte existe pour <span className="text-white font-medium">{forgotEmail}</span>, un email a été envoyé.</p>
+      <button onClick={() => { setForgotStep('idle'); setForgotEmail(''); }} className="text-xs text-[#8B82D4] hover:text-white transition-colors">← Retour à la connexion</button>
+    </div>
+  );
 
   return (
     <form onSubmit={handleCredentials} className="space-y-3.5">
-      {error && (
-        <div className="px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-400 flex items-center gap-2">
-          <X className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
-      )}
+      {error && <div className="px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-400 flex items-center gap-2"><X className="w-4 h-4 flex-shrink-0" />{error}</div>}
       <div>
         <label className="block text-xs font-semibold text-white/40 mb-1.5">Email</label>
         <div className="relative">
           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
             placeholder="vous@entreprise.com" required autoFocus />
         </div>
       </div>
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-xs font-semibold text-white/40">Mot de passe</label>
-          <button type="button" onClick={() => { setForgotEmail(email); setForgotStep('form'); }}
-            className="text-xs text-white/30 hover:text-[#8B82D4] transition-colors">
-            Mot de passe oublié ?
-          </button>
+          <button type="button" onClick={() => { setForgotEmail(email); setForgotStep('form'); }} className="text-xs text-white/30 hover:text-[#8B82D4] transition-colors">Oublié ?</button>
         </div>
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-          <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-            className="w-full pl-10 pr-10 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
+          <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+            className="w-full pl-10 pr-10 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
             placeholder="••••••••" required />
           <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/25 hover:text-white/60 transition-colors">
             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -984,20 +835,15 @@ function LoginForm({ onLogin, onLoginWithMfa }: {
         </div>
       </div>
       <button type="submit" disabled={isSubmitting}
-        className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
-        style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)', boxShadow: '0 0 30px rgba(83,74,183,0.25)' }}
-      >
-        {isSubmitting ? (
-          <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Connexion…</>
-        ) : (
-          <>Se connecter <ArrowRight className="w-4 h-4" /></>
-        )}
+        className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+        style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)', boxShadow: '0 0 30px rgba(83,74,183,0.25)' }}>
+        {isSubmitting ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Connexion…</> : <>Se connecter <ArrowRight className="w-4 h-4" /></>}
       </button>
     </form>
   );
 }
 
-// ── Formulaire d'inscription ──
+// ── Register Form ─────────────────────────────────────────────────────────────
 
 function RegisterForm({ onRegister }: { onRegister: (data: { full_name: string; email: string; password: string; organization_name: string }) => Promise<{ success: boolean; error?: string }> }) {
   const [form, setForm] = useState({ full_name: '', email: '', password: '', organization_name: '' });
@@ -1005,7 +851,7 @@ function RegisterForm({ onRegister }: { onRegister: (data: { full_name: string; 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1013,27 +859,19 @@ function RegisterForm({ onRegister }: { onRegister: (data: { full_name: string; 
     setError(null);
     setIsSubmitting(true);
     const result = await onRegister(form);
-    if (!result.success) {
-      setError(result.error ?? 'Erreur lors de l\'inscription.');
-      setIsSubmitting(false);
-    }
+    if (!result.success) { setError(result.error ?? "Erreur lors de l'inscription."); setIsSubmitting(false); }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {error && (
-        <div className="px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-400 flex items-center gap-2">
-          <X className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
-      )}
+      {error && <div className="px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-400 flex items-center gap-2"><X className="w-4 h-4 flex-shrink-0" />{error}</div>}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-semibold text-white/40 mb-1.5">Nom complet</label>
           <div className="relative">
             <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
             <input type="text" value={form.full_name} onChange={set('full_name')}
-              className="w-full pl-10 pr-3 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
+              className="w-full pl-10 pr-3 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
               placeholder="Kofi Mensah" required autoFocus />
           </div>
         </div>
@@ -1042,7 +880,7 @@ function RegisterForm({ onRegister }: { onRegister: (data: { full_name: string; 
           <div className="relative">
             <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
             <input type="text" value={form.organization_name} onChange={set('organization_name')}
-              className="w-full pl-10 pr-3 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
+              className="w-full pl-10 pr-3 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
               placeholder="Mon entreprise" required />
           </div>
         </div>
@@ -1052,16 +890,16 @@ function RegisterForm({ onRegister }: { onRegister: (data: { full_name: string; 
         <div className="relative">
           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
           <input type="email" value={form.email} onChange={set('email')}
-            className="w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
+            className="w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
             placeholder="vous@entreprise.com" required />
         </div>
       </div>
       <div>
-        <label className="block text-xs font-semibold text-white/40 mb-1.5">Mot de passe <span className="text-white/25 font-normal">(8 caractères min)</span></label>
+        <label className="block text-xs font-semibold text-white/40 mb-1.5">Mot de passe <span className="text-white/25 font-normal">(8 min)</span></label>
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
           <input type={showPassword ? 'text' : 'password'} value={form.password} onChange={set('password')}
-            className="w-full pl-10 pr-10 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
+            className="w-full pl-10 pr-10 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none"
             placeholder="••••••••" required minLength={8} />
           <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/25 hover:text-white/60 transition-colors">
             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -1069,20 +907,12 @@ function RegisterForm({ onRegister }: { onRegister: (data: { full_name: string; 
         </div>
       </div>
       <button type="submit" disabled={isSubmitting}
-        className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
-        style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)', boxShadow: '0 0 30px rgba(83,74,183,0.25)' }}
-      >
-        {isSubmitting ? (
-          <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Création du compte…</>
-        ) : (
-          <>Créer mon compte <ArrowRight className="w-4 h-4" /></>
-        )}
+        className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+        style={{ background: 'linear-gradient(135deg, #534AB7, #7C3AED)', boxShadow: '0 0 30px rgba(83,74,183,0.25)' }}>
+        {isSubmitting ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Création…</> : <>Créer mon compte <ArrowRight className="w-4 h-4" /></>}
       </button>
-      <p className="text-center text-[11px] text-white/20 leading-relaxed">
-        En créant un compte, vous acceptez nos{' '}
-        <a href="#" className="text-white/40 hover:text-white/60 underline">CGU</a>
-        {' '}et notre{' '}
-        <a href="#" className="text-white/40 hover:text-white/60 underline">politique de confidentialité</a>.
+      <p className="text-center text-[11px] text-white/20">
+        En créant un compte, vous acceptez nos <a href="#" className="text-white/40 hover:text-white/60 underline">CGU</a> et notre <a href="#" className="text-white/40 hover:text-white/60 underline">politique de confidentialité</a>.
       </p>
     </form>
   );

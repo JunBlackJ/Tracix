@@ -46,3 +46,4 @@ export function isAtLimit(current: number, limit: number): boolean {
 export const UPGRADE_MSG = 'Passez à Pro pour accéder à cette fonctionnalité.';
 export const LIMIT_MSG = (label: string, limit: number) =>
   `Limite atteinte (${limit} ${label} max sur le plan gratuit). Passez à Pro.`;
+export const EXPORT_USED_MSG = 'Export unique déjà utilisé sur le plan gratuit. Passez à Pro pour des exports illimités.';

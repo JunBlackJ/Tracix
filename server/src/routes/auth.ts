@@ -433,7 +433,19 @@ router.get('/plan-limits', requireAuth, async (req: Request, res: Response): Pro
     plan: org.plan,
     limits,
     usage: { members, platforms, customModules, categories, seats },
+    export_used: (org as any).export_used ?? false,
   });
+});
+
+// POST /api/auth/mark-export-used — consomme le droit d'export unique du plan free
+router.post('/mark-export-used', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { plan: true, export_used: true } as any });
+  if (!org) { res.status(404).json({ error: 'Organization not found' }); return; }
+  if ((org as any).plan !== 'free') { res.json({ ok: true }); return; }
+  if ((org as any).export_used) { res.status(403).json({ error: 'Export unique déjà utilisé. Passez à Pro pour des exports illimités.' }); return; }
+  await prisma.organization.update({ where: { id: orgId }, data: { export_used: true } as any });
+  res.json({ ok: true });
 });
 
 const VALID_MODULES = ['habilitations','membres','plateformes','score-de-risque','systemes','flux-reseau','abonnements','alertes','journal','rapports','import'] as const;

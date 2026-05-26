@@ -11,8 +11,6 @@ import type { Member, Platform, AccessRight, Subscription, System, Alert } from 
 import { ACCESS_LEVEL_CONFIG } from '@/types';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { getPlanLimits, UPGRADE_MSG } from '@/lib/planLimits';
-import { PlanGate } from '@/components/PlanGate';
 
 interface RapportsProps {
   members: Member[];
@@ -26,8 +24,6 @@ interface RapportsProps {
 
 export function Rapports({ members, platforms, accessRights, subscriptions, systems = [], alerts = [], plan }: RapportsProps) {
   const [loading, setLoading] = useState<string | null>(null);
-  const canExport = getPlanLimits(plan).exportEnabled;
-
   const now = new Date();
   const adminCount = accessRights.filter(a => a.level === 'admin').length;
   const overdueCount = accessRights.filter(a => a.next_review_date && new Date(a.next_review_date) < now && a.level !== 'none').length;
@@ -48,6 +44,12 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
   const indicators = { activeMembers, totalMembers: members.length, avgRisk, adminCount, overdueCount, noMfaCount, criticalAlerts, expiringSubs, eolSystems };
 
   const generate = async (id: string) => {
+    try {
+      await api.plan.markExportUsed();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Export non autorisé');
+      return;
+    }
     setLoading(id);
     try {
       switch (id) {
@@ -242,18 +244,16 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
           <div style={{ fontSize: 15, fontWeight: 600, color: FG }}>Rapports</div>
           <div style={{ fontSize: 12, color: MUTED }}>Conformité et analyse</div>
         </div>
-        <PlanGate locked={!canExport} message={UPGRADE_MSG}>
-          <button
-            onClick={() => generate('compliance')}
-            disabled={loading === 'compliance'}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: BRAND, color: '#fff', border: 'none', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', opacity: loading === 'compliance' ? 0.6 : 1 }}
-          >
-            {loading === 'compliance' ? <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" /> : (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            )}
-            {loading === 'compliance' ? 'Rédaction IA…' : 'Générer un rapport'}
-          </button>
-        </PlanGate>
+        <button
+          onClick={() => generate('compliance')}
+          disabled={loading === 'compliance'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: BRAND, color: '#fff', border: 'none', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', opacity: loading === 'compliance' ? 0.6 : 1 }}
+        >
+          {loading === 'compliance' ? <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" /> : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          )}
+          {loading === 'compliance' ? 'Rédaction IA…' : 'Générer un rapport'}
+        </button>
       </div>
 
       {/* Two-col 1fr 2fr */}
@@ -289,18 +289,16 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
                       {t.date ? `Généré le ${t.date}` : 'Jamais généré'}
                     </div>
                   </div>
-                  <PlanGate locked={!canExport} message={UPGRADE_MSG}>
-                    <button
-                      onClick={() => generate(t.id)}
-                      disabled={loading === t.id}
-                      style={{ padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, transition: 'all 0.12s', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.color = BRAND; e.currentTarget.style.borderColor = BRAND; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED; e.currentTarget.style.borderColor = BORDER; }}
-                    >
-                      {loading === t.id ? <Loader2 style={{ width: 11, height: 11 }} className="animate-spin" /> : null}
-                      Générer
-                    </button>
-                  </PlanGate>
+                  <button
+                    onClick={() => generate(t.id)}
+                    disabled={loading === t.id}
+                    style={{ padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, transition: 'all 0.12s', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'oklch(42% 0.18 280 / 0.12)'; e.currentTarget.style.color = BRAND; e.currentTarget.style.borderColor = BRAND; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED; e.currentTarget.style.borderColor = BORDER; }}
+                  >
+                    {loading === t.id ? <Loader2 style={{ width: 11, height: 11 }} className="animate-spin" /> : null}
+                    Générer
+                  </button>
                 </div>
               );
             })}

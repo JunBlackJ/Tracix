@@ -427,8 +427,12 @@ export const api = {
         customModulesEnabled: boolean; invitationsEnabled: boolean;
       };
       usage: { members: number; platforms: number; customModules: number; categories: number; seats: number };
+      export_used: boolean;
     }> {
       return request('/auth/plan-limits');
+    },
+    markExportUsed(): Promise<{ ok: boolean }> {
+      return request('/auth/mark-export-used', { method: 'POST' });
     },
   },
 

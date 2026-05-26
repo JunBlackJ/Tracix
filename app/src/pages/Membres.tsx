@@ -15,7 +15,7 @@ import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
 import type { Member, Platform, Alert, AccessRight, AccountType, MemberStatus, AccessLevel } from '@/types';
 import { RiskGauge } from '@/components/ui/RiskBadge';
 import { toast } from 'sonner';
-import { getPlanLimits, isAtLimit, UPGRADE_MSG, LIMIT_MSG } from '@/lib/planLimits';
+import { getPlanLimits, isAtLimit, LIMIT_MSG } from '@/lib/planLimits';
 import { PlanGate } from '@/components/PlanGate';
 
 interface MembresProps {
@@ -181,7 +181,13 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
     setSelected(next);
   };
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
+    try {
+      await api.plan.markExportUsed();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Export non autorisé');
+      return;
+    }
     const esc = (v: string) => /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
     const ws = XLSX.utils.json_to_sheet(members.map((m) => ({
       Nom: esc(m.full_name), Email: esc(m.email), Département: esc(m.team),
@@ -194,7 +200,6 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
 
   const limits = getPlanLimits(plan);
   const memberLimitReached = isAtLimit(members.length, limits.members);
-  const canExport = limits.exportEnabled;
 
   const iconBtnStyle: React.CSSProperties = {
     display: 'grid', placeItems: 'center', width: 28, height: 28, borderRadius: 6,
@@ -219,11 +224,9 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
           <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>Gestion des utilisateurs et des accès</div>
         </div>
         <div style={{ flex: 1 }} />
-        <PlanGate locked={!canExport} message={UPGRADE_MSG}>
-          <button onClick={exportCsv} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
-            <Download className="w-3.5 h-3.5" /> Exporter CSV
-          </button>
-        </PlanGate>
+        <button onClick={exportCsv} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
+          <Download className="w-3.5 h-3.5" /> Exporter CSV
+        </button>
         <PlanGate locked={memberLimitReached} message={LIMIT_MSG('membres', limits.members)}>
           <button onClick={onNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
             <Plus className="w-3.5 h-3.5" /> Ajouter un membre

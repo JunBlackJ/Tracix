@@ -9,8 +9,6 @@ import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { Subscription, BillingCycle, SubscriptionStatus, Category } from '@/types';
-import { getPlanLimits, UPGRADE_MSG } from '@/lib/planLimits';
-import { PlanGate } from '@/components/PlanGate';
 
 interface AbonnementsProps {
   subscriptions: Subscription[];
@@ -48,7 +46,6 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
   const [editingSub, setEditingSub] = useState<Subscription | null>(null);
   const [displayCurrency, setDisplayCurrency] = useState('EUR');
 
-  const canExport = getPlanLimits(plan).exportEnabled;
 
   const filtered = subscriptions.filter((s) => {
     if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -82,8 +79,14 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
     'en_négociation': { bg: 'bg-blue-100', text: 'text-blue-700' },
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (filtered.length === 0) { toast.error('Aucun abonnement à exporter'); return; }
+    try {
+      await api.plan.markExportUsed();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Export non autorisé');
+      return;
+    }
     const rows = filtered.map((s) => ({
       'Nom': s.name,
       'Catégorie': s.category,
@@ -193,15 +196,13 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
           <p className="text-sm text-gray-500">{subscriptions.length} abonnements suivis</p>
         </div>
         <div className="flex gap-2">
-          <PlanGate locked={!canExport} message={UPGRADE_MSG}>
-            <button
-              onClick={handleExport}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Export XLSX
-            </button>
-          </PlanGate>
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Export XLSX
+          </button>
           <button
             onClick={() => { setEditingSub(null); setShowForm(true); }}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#534AB7] text-white rounded-lg text-sm font-medium hover:bg-[#3C3489] transition-colors"

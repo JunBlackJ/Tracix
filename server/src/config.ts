@@ -33,4 +33,9 @@ export const config = {
     apiKey: process.env.CINETPAY_API_KEY || '',
     siteId: process.env.CINETPAY_SITE_ID || '',
   },
+  fedapay: {
+    secretKey: process.env.FEDAPAY_SECRET_KEY || '',
+    webhookSecret: process.env.FEDAPAY_WEBHOOK_SECRET || '',
+    sandbox: process.env.FEDAPAY_SANDBOX !== 'false',
+  },
 };

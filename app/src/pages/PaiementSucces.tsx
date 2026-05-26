@@ -7,6 +7,7 @@ export function PaiementSucces() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const txnId = params.get('txn') ?? '';
+  const provider = params.get('provider') ?? 'cinetpay';
 
   const [status, setStatus] = useState<'loading' | 'paid' | 'pending' | 'failed'>('loading');
   const [plan, setPlan] = useState('');
@@ -18,15 +19,16 @@ export function PaiementSucces() {
     let attempts = 0;
     const poll = async () => {
       try {
-        const data = await api.payments.status(txnId);
+        const data = provider === 'fedapay'
+          ? await api.fedapay.status(txnId)
+          : await api.payments.status(txnId);
         if (data.status === 'paid') {
           setStatus('paid');
           setPlan(data.plan);
           setMonths(data.months);
         } else if (data.status === 'failed' || data.status === 'cancelled') {
           setStatus('failed');
-        } else if (attempts < 8) {
-          // IPN peut arriver quelques secondes après le retour frontend
+        } else if (attempts < 10) {
           attempts++;
           setTimeout(poll, 2000);
         } else {
@@ -37,7 +39,7 @@ export function PaiementSucces() {
       }
     };
     poll();
-  }, [txnId]);
+  }, [txnId, provider]);
 
   return (
     <div className="min-h-screen bg-[#0F0E1A] flex items-center justify-center px-4">

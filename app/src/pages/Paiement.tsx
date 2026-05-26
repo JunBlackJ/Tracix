@@ -79,7 +79,7 @@ export function Paiement({ currentPlan, onBack }: PaiementProps) {
   async function handlePay() {
     setLoading(true);
     try {
-      const res = await api.payments.initiate({ plan: selectedPlan, months });
+      const res = await api.fedapay.initiate({ plan: selectedPlan, months });
       window.location.href = res.payment_url;
     } catch {
       toast.error("Erreur lors de l'initialisation du paiement. Réessayez.");

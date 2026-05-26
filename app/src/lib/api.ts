@@ -701,4 +701,13 @@ export const api = {
       return request('/payments/history');
     },
   },
+
+  fedapay: {
+    initiate(data: { plan: 'pro' | 'enterprise'; months: number }): Promise<{ payment_url: string; transaction_id: string }> {
+      return request('/fedapay/initiate', { method: 'POST', body: JSON.stringify(data) });
+    },
+    status(internalId: string): Promise<{ status: string; plan: string; months: number; amount: number; payment_method: string; paid_at: string | null }> {
+      return request(`/fedapay/status/${internalId}`);
+    },
+  },
 };

@@ -55,7 +55,7 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSsoModal, setShowSsoModal] = useState(false);
   const [modalDefaultTab, setModalDefaultTab] = useState<'login' | 'register'>('login');
-  const [billingAnnual, setBillingAnnual] = useState(false);
+  const [billingAnnual, setBillingAnnual] = useState(true);
 
   const openLogin = () => { setModalDefaultTab('login'); setShowLoginModal(true); };
   const openRegister = () => { setModalDefaultTab('register'); setShowLoginModal(true); };
@@ -524,7 +524,6 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
           </div>
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }} className="sm:flex-row sm:justify-between">
             <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>© {new Date().getFullYear()} Agbaya Group. Tous droits réservés.</p>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>Fait avec ❤️ en Côte d'Ivoire 🇨🇮</p>
           </div>
         </div>
       </footer>

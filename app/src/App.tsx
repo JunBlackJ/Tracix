@@ -142,6 +142,7 @@ function App() {
                 categories={store.categories.filter((c) => c.type === 'team')}
                 onMemberCreated={store.upsertMember}
                 onMemberUpdated={store.upsertMember}
+                plan={store.organization?.plan}
               />
             }
           />
@@ -158,6 +159,7 @@ function App() {
                 categories={store.categories.filter((c) => c.type === 'team')}
                 onMemberCreated={store.upsertMember}
                 onMemberUpdated={store.upsertMember}
+                plan={store.organization?.plan}
               />
             }
           />
@@ -173,6 +175,7 @@ function App() {
                 onPlatformCreated={store.upsertPlatform}
                 onPlatformUpdated={store.upsertPlatform}
                 onPlatformDeleted={store.removePlatform}
+                plan={store.organization?.plan}
               />
             }
           />
@@ -188,6 +191,7 @@ function App() {
                 onPlatformCreated={store.upsertPlatform}
                 onPlatformUpdated={store.upsertPlatform}
                 onPlatformDeleted={store.removePlatform}
+                plan={store.organization?.plan}
               />
             }
           />
@@ -217,6 +221,7 @@ function App() {
                 categories={store.categories.filter((c) => c.type === 'subscription')}
                 onSubscriptionCreated={store.upsertSubscription}
                 onSubscriptionUpdated={store.upsertSubscription}
+                plan={store.organization?.plan}
               />
             }
           />
@@ -244,6 +249,7 @@ function App() {
                 subscriptions={store.subscriptions}
                 systems={store.systems}
                 alerts={store.alerts}
+                plan={store.organization?.plan}
               />
             }
           />
@@ -278,7 +284,7 @@ function App() {
           <Route path="/import" element={<Import />} />
           <Route
             path="/modules/:moduleId"
-            element={<CustomModulePage modules={store.customModules} />}
+            element={<CustomModulePage modules={store.customModules} plan={store.organization?.plan} />}
           />
           <Route
             path="/paiement"

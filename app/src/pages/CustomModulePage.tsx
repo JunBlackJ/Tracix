@@ -11,9 +11,12 @@ import {
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { CustomModule, CustomEntry, CustomModuleType } from '@/types';
+import { getPlanLimits, UPGRADE_MSG } from '@/lib/planLimits';
+import { PlanGate } from '@/components/PlanGate';
 
 interface CustomModulePageProps {
   modules: CustomModule[];
+  plan?: string;
 }
 
 // ─── Champs par type de module ───
@@ -89,7 +92,7 @@ const TYPE_ICONS: Record<CustomModuleType, React.ElementType> = {
 
 // ─── Composant principal ───
 
-export function CustomModulePage({ modules }: CustomModulePageProps) {
+export function CustomModulePage({ modules, plan }: CustomModulePageProps) {
   const { moduleId } = useParams<{ moduleId: string }>();
   const mod = modules.find((m) => m.id === moduleId);
 
@@ -145,14 +148,16 @@ export function CustomModulePage({ modules }: CustomModulePageProps) {
             <p className="text-sm text-gray-500">{mod.description || TYPE_LABELS[mod.module_type as CustomModuleType]}</p>
           </div>
         </div>
-        <button
-          onClick={() => { setEditingEntry(null); setShowForm(true); }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors flex-shrink-0"
-          style={{ backgroundColor: mod.color }}
-        >
-          <Plus className="w-4 h-4" />
-          Ajouter
-        </button>
+        <PlanGate locked={!getPlanLimits(plan).customModulesEnabled} message={UPGRADE_MSG}>
+          <button
+            onClick={() => { setEditingEntry(null); setShowForm(true); }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors flex-shrink-0"
+            style={{ backgroundColor: mod.color }}
+          >
+            <Plus className="w-4 h-4" />
+            Ajouter
+          </button>
+        </PlanGate>
       </div>
 
       {/* Contenu */}

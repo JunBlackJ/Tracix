@@ -15,6 +15,8 @@ import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
 import type { Member, Platform, Alert, AccessRight, AccountType, MemberStatus, AccessLevel } from '@/types';
 import { RiskGauge } from '@/components/ui/RiskBadge';
 import { toast } from 'sonner';
+import { getPlanLimits, isAtLimit, UPGRADE_MSG, LIMIT_MSG } from '@/lib/planLimits';
+import { PlanGate } from '@/components/PlanGate';
 
 interface MembresProps {
   onRevokeAccess: (id: string, comment?: string) => void;
@@ -26,9 +28,10 @@ interface MembresProps {
   categories?: import('@/types').Category[];
   onMemberUpdated?: (member: Member) => void;
   onMemberCreated?: (member: Member) => void;
+  plan?: string;
 }
 
-export function Membres({ onRevokeAccess, onUpdateAccess, members, platforms, alerts, accessRights = [], categories = [], onMemberUpdated, onMemberCreated }: MembresProps) {
+export function Membres({ onRevokeAccess, onUpdateAccess, members, platforms, alerts, accessRights = [], categories = [], onMemberUpdated, onMemberCreated, plan }: MembresProps) {
   const { id } = useParams<{ id: string }>();
   const [showForm, setShowForm] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
@@ -62,6 +65,7 @@ export function Membres({ onRevokeAccess, onUpdateAccess, members, platforms, al
           members={members}
           accessRights={accessRights}
           onNew={() => { setEditingMember(null); setShowForm(true); }}
+          plan={plan}
         />
       )}
       {showForm && (
@@ -120,7 +124,7 @@ function KpiCard({ label, value, delta, deltaUp, kpiColor, icon }: {
 
 // ─── Liste ───
 
-function MembresList({ members, accessRights = [], onNew }: { members: Member[]; accessRights?: AccessRight[]; onNew: () => void }) {
+function MembresList({ members, accessRights = [], onNew, plan }: { members: Member[]; accessRights?: AccessRight[]; onNew: () => void; plan?: string }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -188,6 +192,10 @@ function MembresList({ members, accessRights = [], onNew }: { members: Member[];
     XLSX.writeFile(wb, 'membres.csv');
   };
 
+  const limits = getPlanLimits(plan);
+  const memberLimitReached = isAtLimit(members.length, limits.members);
+  const canExport = limits.exportEnabled;
+
   const iconBtnStyle: React.CSSProperties = {
     display: 'grid', placeItems: 'center', width: 28, height: 28, borderRadius: 6,
     border: '1px solid oklch(90% 0.006 260)', background: 'transparent', cursor: 'pointer',
@@ -211,12 +219,16 @@ function MembresList({ members, accessRights = [], onNew }: { members: Member[];
           <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>Gestion des utilisateurs et des accès</div>
         </div>
         <div style={{ flex: 1 }} />
-        <button onClick={exportCsv} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
-          <Download className="w-3.5 h-3.5" /> Exporter CSV
-        </button>
-        <button onClick={onNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
-          <Plus className="w-3.5 h-3.5" /> Ajouter un membre
-        </button>
+        <PlanGate locked={!canExport} message={UPGRADE_MSG}>
+          <button onClick={exportCsv} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
+            <Download className="w-3.5 h-3.5" /> Exporter CSV
+          </button>
+        </PlanGate>
+        <PlanGate locked={memberLimitReached} message={LIMIT_MSG('membres', limits.members)}>
+          <button onClick={onNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
+            <Plus className="w-3.5 h-3.5" /> Ajouter un membre
+          </button>
+        </PlanGate>
       </div>
 
       {/* KPI grid */}

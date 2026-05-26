@@ -15,6 +15,8 @@ import type { Platform, Member, Alert, AccessRight, Category } from '@/types';
 import { PlatformIcon } from '@/components/ui/PlatformIcon';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { getPlanLimits, isAtLimit, LIMIT_MSG } from '@/lib/planLimits';
+import { PlanGate } from '@/components/PlanGate';
 
 interface PlateformesProps {
   platforms: Platform[];
@@ -25,9 +27,10 @@ interface PlateformesProps {
   onPlatformCreated?: (p: Platform) => void;
   onPlatformUpdated?: (p: Platform) => void;
   onPlatformDeleted?: (id: string) => void;
+  plan?: string;
 }
 
-export function Plateformes({ platforms, members, alerts, accessRights, categories = [], onPlatformCreated, onPlatformUpdated, onPlatformDeleted }: PlateformesProps) {
+export function Plateformes({ platforms, members, alerts, accessRights, categories = [], onPlatformCreated, onPlatformUpdated, onPlatformDeleted, plan }: PlateformesProps) {
   const { id } = useParams<{ id: string }>();
   const [showForm, setShowForm] = useState(false);
   const [editingPlatform, setEditingPlatform] = useState<Platform | null>(null);
@@ -54,6 +57,7 @@ export function Plateformes({ platforms, members, alerts, accessRights, categori
           onNew={() => setShowForm(true)}
           onEdit={(p) => setEditingPlatform(p)}
           onDeleted={onPlatformDeleted}
+          plan={plan}
         />
       )}
       {showForm && (
@@ -114,7 +118,7 @@ function timeSince(dateStr: string): string {
   return `${Math.floor(hrs / 24)}j`;
 }
 
-function PlateformesList({ platforms, members: _members, alerts: _alerts, accessRights, categories = [], onNew, onEdit, onDeleted }: PlateformesProps & { onNew: () => void; onEdit: (p: Platform) => void; onDeleted?: (id: string) => void }) {
+function PlateformesList({ platforms, members: _members, alerts: _alerts, accessRights, categories = [], onNew, onEdit, onDeleted, plan }: PlateformesProps & { onNew: () => void; onEdit: (p: Platform) => void; onDeleted?: (id: string) => void }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Toutes');
   const [editMode, setEditMode] = useState(false);
@@ -194,9 +198,11 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', border: `1px solid ${editMode ? 'oklch(42% 0.18 280)' : 'oklch(82% 0.008 260)'}`, background: editMode ? 'oklch(42% 0.18 280 / 0.08)' : 'transparent', color: editMode ? 'oklch(42% 0.18 280)' : 'oklch(40% 0.012 260)' }}>
           <Pencil className="w-3.5 h-3.5" /> {editMode ? 'Terminer' : 'Modifier les plateformes'}
         </button>
-        <button onClick={onNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
-          <Plus className="w-3.5 h-3.5" /> Connecter une plateforme
-        </button>
+        <PlanGate locked={isAtLimit(platforms.length, getPlanLimits(plan).platforms)} message={LIMIT_MSG('plateformes', getPlanLimits(plan).platforms)}>
+          <button onClick={onNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
+            <Plus className="w-3.5 h-3.5" /> Connecter une plateforme
+          </button>
+        </PlanGate>
       </div>
 
       {/* KPI grid */}

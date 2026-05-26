@@ -82,7 +82,7 @@ const PLANS = [
     features: [
       'Membres illimités',
       'Plateformes illimitées',
-      '10 sièges utilisateurs',
+      '5 sièges utilisateurs',
       'Export CSV / Excel',
       'Modules personnalisés',
       'Rapports IA',

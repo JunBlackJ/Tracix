@@ -10,11 +10,11 @@ describe('getLimits', () => {
     expect(l.exportEnabled).toBe(false);
   });
 
-  it('pro plan: unlimited members/platforms, 10 seats', () => {
+  it('pro plan: unlimited members/platforms, 5 seats', () => {
     const l = getLimits('pro');
     expect(l.members).toBe(-1);
     expect(l.platforms).toBe(-1);
-    expect(l.seats).toBe(10);
+    expect(l.seats).toBe(5);
     expect(l.exportEnabled).toBe(true);
   });
 

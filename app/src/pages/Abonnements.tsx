@@ -373,6 +373,7 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
         />
       )}
     </div>
+    </>
   );
 }
 

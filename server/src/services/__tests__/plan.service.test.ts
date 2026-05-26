@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { getLimits, checkLimit } from '../plan.service';
 
 describe('getLimits', () => {
-  it('free plan: 10 membres, 3 plateformes, 3 seats', () => {
+  it('free plan: 25 membres, 3 plateformes, 3 seats', () => {
     const l = getLimits('free');
-    expect(l.members).toBe(10);
+    expect(l.members).toBe(25);
     expect(l.platforms).toBe(3);
     expect(l.seats).toBe(3);
     expect(l.exportEnabled).toBe(false);
@@ -26,7 +26,7 @@ describe('getLimits', () => {
 
   it('unknown plan falls back to free', () => {
     const l = getLimits('unknown');
-    expect(l.members).toBe(10);
+    expect(l.members).toBe(25);
   });
 });
 

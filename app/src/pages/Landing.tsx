@@ -26,7 +26,7 @@ const PLANS = [
     id: 'free', label: 'Free', color: '#6B7280',
     monthly: 0, annual: 0,
     desc: 'Idéal pour explorer Tracix et les petites équipes.',
-    features: ['5 membres maximum', '3 plateformes', 'Audit basique (30 jours)', 'Tableau de bord accès', 'Support communautaire'],
+    features: ['25 membres maximum', '3 plateformes', 'Audit basique (30 jours)', 'Tableau de bord accès', 'Support communautaire'],
     cta: 'Commencer',
     popular: false,
   },

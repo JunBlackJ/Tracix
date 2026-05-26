@@ -71,6 +71,19 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
     return;
   }
 
+  // Vérifier si le plan actuel autorise plusieurs organisations
+  const currentOrg = await prisma.organization.findUnique({
+    where: { id: req.user!.organizationId },
+    select: { plan: true },
+  });
+  if (!currentOrg || currentOrg.plan === 'free') {
+    const existingCount = await prisma.userOrganization.count({ where: { user_id: userId } });
+    if (existingCount >= 1) {
+      res.status(403).json({ error: 'Le plan gratuit est limité à 1 organisation. Passez à Pro pour en créer plusieurs.' });
+      return;
+    }
+  }
+
   const orgId = uuidv4();
   const membershipId = uuidv4();
 

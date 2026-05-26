@@ -11,6 +11,7 @@ import type { Member, Platform, AccessRight, Subscription, System, Alert } from 
 import { ACCESS_LEVEL_CONFIG } from '@/types';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { ExportConfirmModal } from '@/components/ExportConfirmModal';
 
 interface RapportsProps {
   members: Member[];
@@ -24,6 +25,7 @@ interface RapportsProps {
 
 export function Rapports({ members, platforms, accessRights, subscriptions, systems = [], alerts = [], plan }: RapportsProps) {
   const [loading, setLoading] = useState<string | null>(null);
+  const [pendingGenerate, setPendingGenerate] = useState<string | null>(null);
   const now = new Date();
   const adminCount = accessRights.filter(a => a.level === 'admin').length;
   const overdueCount = accessRights.filter(a => a.next_review_date && new Date(a.next_review_date) < now && a.level !== 'none').length;
@@ -43,7 +45,8 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
 
   const indicators = { activeMembers, totalMembers: members.length, avgRisk, adminCount, overdueCount, noMfaCount, criticalAlerts, expiringSubs, eolSystems };
 
-  const generate = async (id: string) => {
+  const doGenerate = async (id: string) => {
+    setPendingGenerate(null);
     try {
       await api.plan.markExportUsed();
     } catch (err: any) {
@@ -82,6 +85,11 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
     } finally {
       setLoading(null);
     }
+  };
+
+  const generate = (id: string) => {
+    if (plan === 'free') { setPendingGenerate(id); return; }
+    doGenerate(id);
   };
 
   const REPORTS = [
@@ -236,7 +244,14 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
   const tdStyle: React.CSSProperties = { padding: '12px 20px', verticalAlign: 'middle' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <>
+      {pendingGenerate && (
+        <ExportConfirmModal
+          onConfirm={() => doGenerate(pendingGenerate)}
+          onCancel={() => setPendingGenerate(null)}
+        />
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
       {/* Topbar row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -384,6 +399,7 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
         </div>
       </div>
     </div>
+    </>
   );
 }
 

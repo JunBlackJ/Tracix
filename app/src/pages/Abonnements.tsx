@@ -9,6 +9,7 @@ import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { Subscription, BillingCycle, SubscriptionStatus, Category } from '@/types';
+import { ExportConfirmModal } from '@/components/ExportConfirmModal';
 
 interface AbonnementsProps {
   subscriptions: Subscription[];
@@ -45,6 +46,7 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
   const [showForm, setShowForm] = useState(false);
   const [editingSub, setEditingSub] = useState<Subscription | null>(null);
   const [displayCurrency, setDisplayCurrency] = useState('EUR');
+  const [showExportConfirm, setShowExportConfirm] = useState(false);
 
 
   const filtered = subscriptions.filter((s) => {
@@ -79,7 +81,8 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
     'en_négociation': { bg: 'bg-blue-100', text: 'text-blue-700' },
   };
 
-  const handleExport = async () => {
+  const doExport = async () => {
+    setShowExportConfirm(false);
     if (filtered.length === 0) { toast.error('Aucun abonnement à exporter'); return; }
     try {
       await api.plan.markExportUsed();
@@ -107,6 +110,11 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
     XLSX.utils.book_append_sheet(wb, ws, 'Abonnements');
     XLSX.writeFile(wb, `abonnements_${new Date().toISOString().slice(0, 10)}.xlsx`);
     toast.success(`${filtered.length} abonnements exportés`);
+  };
+
+  const handleExport = () => {
+    if (plan === 'free') { setShowExportConfirm(true); return; }
+    doExport();
   };
 
   const handleSaved = (s: Subscription) => {
@@ -141,6 +149,8 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
   }, 0);
 
   return (
+    <>
+    {showExportConfirm && <ExportConfirmModal onConfirm={doExport} onCancel={() => setShowExportConfirm(false)} />}
     <div className="space-y-4">
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -684,5 +694,6 @@ function SubscriptionFormModal({ subscription, categories, onClose, onSaved }: S
         </form>
       </div>
     </div>
+    </>
   );
 }

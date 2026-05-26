@@ -17,6 +17,7 @@ import { RiskGauge } from '@/components/ui/RiskBadge';
 import { toast } from 'sonner';
 import { getPlanLimits, isAtLimit, LIMIT_MSG } from '@/lib/planLimits';
 import { PlanGate } from '@/components/PlanGate';
+import { ExportConfirmModal } from '@/components/ExportConfirmModal';
 
 interface MembresProps {
   onRevokeAccess: (id: string, comment?: string) => void;
@@ -133,6 +134,7 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
   const [riskSort, setRiskSort] = useState<'none' | 'asc' | 'desc'>('none');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showExportConfirm, setShowExportConfirm] = useState(false);
 
   const hasMfaIssue = (m: Member) => m.risk_factors.some(f => f.label.toLowerCase().includes('mfa'));
 
@@ -181,7 +183,8 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
     setSelected(next);
   };
 
-  const exportCsv = async () => {
+  const doExportCsv = async () => {
+    setShowExportConfirm(false);
     try {
       await api.plan.markExportUsed();
     } catch (err: any) {
@@ -196,6 +199,11 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Membres');
     XLSX.writeFile(wb, 'membres.csv');
+  };
+
+  const exportCsv = () => {
+    if (plan === 'free') { setShowExportConfirm(true); return; }
+    doExportCsv();
   };
 
   const limits = getPlanLimits(plan);
@@ -216,6 +224,8 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
   };
 
   return (
+    <>
+    {showExportConfirm && <ExportConfirmModal onConfirm={doExportCsv} onCancel={() => setShowExportConfirm(false)} />}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Topbar row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -404,6 +414,7 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
         )}
       </div>
     </div>
+    </>
   );
 }
 

@@ -34,7 +34,7 @@ const PLANS = [
     id: 'pro', label: 'Pro', color: '#534AB7',
     monthly: 30_000, annual: 24_000,
     desc: 'Pour les équipes en croissance qui veulent une conformité solide.',
-    features: ['Membres illimités', '10 sièges administrateurs', 'Export CSV & rapports IA', 'Alertes email & webhooks', 'Score de risque avancé', 'Audit 12 mois + conformité', 'Support prioritaire'],
+    features: ['Membres illimités', '5 sièges administrateurs', 'Export CSV & rapports IA', 'Alertes email & webhooks', 'Score de risque avancé', 'Audit 12 mois + conformité', 'Support prioritaire'],
     cta: "Démarrer l'essai",
     popular: true,
   },

@@ -122,13 +122,6 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
         <div style={{ position: 'absolute', top: '30%', right: '15%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, #7C3AED, transparent)', opacity: 0.15, filter: 'blur(100px)', pointerEvents: 'none' }} />
 
         <div className="relative max-w-6xl mx-auto px-6 text-center w-full">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border mb-8 text-sm font-medium"
-            style={{ background: 'rgba(83,74,183,0.1)', borderColor: 'rgba(83,74,183,0.3)', color: '#A89FF0' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
-            IAM · IGA · Conformité ISO 27001 · SOC 2
-          </div>
-
           <h1 className="font-black leading-tight tracking-tight mb-6" style={{ fontSize: 'clamp(2.5rem, 6vw, 5rem)' }}>
             Prenez le contrôle<br />
             <span style={{ background: 'linear-gradient(135deg, #818CF8, #534AB7, #A78BFA)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>

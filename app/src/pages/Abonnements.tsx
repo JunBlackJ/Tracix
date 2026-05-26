@@ -695,6 +695,5 @@ function SubscriptionFormModal({ subscription, categories, onClose, onSaved }: S
         </form>
       </div>
     </div>
-    </>
   );
 }

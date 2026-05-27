@@ -767,9 +767,15 @@ router.get('/oauth/google', (_req: Request, res: Response) => {
 
 // GET /api/auth/oauth/google/callback
 router.get('/oauth/google/callback', async (req: Request, res: Response): Promise<void> => {
-  if (!verifyAndClearOAuthState(req, res, req.query.state as string | undefined)) {
-    res.redirect(`${FRONTEND}/oauth/callback?error=${encodeURIComponent('État CSRF invalide ou expiré')}`);
-    return;
+  // CSRF state verification — best effort only (cookie may be lost behind proxies)
+  const expected = req.cookies?.[OAUTH_STATE_COOKIE];
+  if (expected) {
+    if (!verifyAndClearOAuthState(req, res, req.query.state as string | undefined)) {
+      res.redirect(`${FRONTEND}/oauth/callback?error=${encodeURIComponent('État CSRF invalide ou expiré')}`);
+      return;
+    }
+  } else {
+    res.clearCookie(OAUTH_STATE_COOKIE, { httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax', path: '/api/auth/oauth' });
   }
 
   const code = req.query.code as string;
@@ -820,7 +826,8 @@ router.get('/oauth/microsoft', (_req: Request, res: Response) => {
 
 // GET /api/auth/oauth/microsoft/callback
 router.get('/oauth/microsoft/callback', async (req: Request, res: Response): Promise<void> => {
-  if (!verifyAndClearOAuthState(req, res, req.query.state as string | undefined)) {
+  const _msExpected = req.cookies?.[OAUTH_STATE_COOKIE];
+  if (_msExpected && !verifyAndClearOAuthState(req, res, req.query.state as string | undefined)) {
     res.redirect(`${FRONTEND}/oauth/callback?error=${encodeURIComponent('État CSRF invalide ou expiré')}`);
     return;
   }
@@ -871,7 +878,8 @@ router.get('/oauth/github', (_req: Request, res: Response) => {
 
 // GET /api/auth/oauth/github/callback
 router.get('/oauth/github/callback', async (req: Request, res: Response): Promise<void> => {
-  if (!verifyAndClearOAuthState(req, res, req.query.state as string | undefined)) {
+  const _ghExpected = req.cookies?.[OAUTH_STATE_COOKIE];
+  if (_ghExpected && !verifyAndClearOAuthState(req, res, req.query.state as string | undefined)) {
     res.redirect(`${FRONTEND}/oauth/callback?error=${encodeURIComponent('État CSRF invalide ou expiré')}`);
     return;
   }

@@ -182,3 +182,64 @@ export async function sendPasswordResetEmail(opts: {
     console.error('[Email] Erreur envoi reset password:', err);
   }
 }
+
+export async function sendInvitationEmail(opts: {
+  to: string;
+  orgName: string;
+  inviterName: string;
+  role: string;
+  inviteUrl: string;
+}): Promise<void> {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('[Email] RESEND_API_KEY non configuré — invitation non envoyée par email');
+    return;
+  }
+
+  const roleLabel = opts.role === 'editor' ? 'Éditeur' : 'Lecteur';
+  const subject = `[Tracix] ${opts.inviterName} vous invite à rejoindre ${opts.orgName}`;
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#F8FAFC;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;padding:32px 16px;">
+  <tr><td align="center">
+    <table width="520" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+      <tr>
+        <td style="background:linear-gradient(135deg,#534AB7,#3C3489);padding:24px 32px;">
+          <p style="margin:0;color:#fff;font-size:20px;font-weight:bold;">Tracix</p>
+          <p style="margin:4px 0 0;color:rgba(255,255,255,0.65);font-size:13px;">Invitation à rejoindre ${opts.orgName}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:32px;">
+          <p style="margin:0 0 12px;font-size:15px;color:#111827;">Bonjour,</p>
+          <p style="margin:0 0 20px;font-size:14px;color:#4B5563;line-height:1.6;">
+            <strong>${opts.inviterName}</strong> vous invite à rejoindre l'espace <strong>${opts.orgName}</strong> sur Tracix
+            en tant que <strong>${roleLabel}</strong>.
+          </p>
+          <a href="${opts.inviteUrl}" style="display:inline-block;background:#534AB7;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:600;">
+            Rejoindre l'espace →
+          </a>
+          <p style="margin:24px 0 0;font-size:12px;color:#9CA3AF;">
+            Ce lien est valable 7 jours.<br>
+            Si vous ne vous attendiez pas à recevoir cette invitation, ignorez cet email.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#F9FAFB;padding:14px 32px;border-top:1px solid #E5E7EB;">
+          <p style="margin:0;font-size:11px;color:#9CA3AF;">Tracix — Gouvernance des accès IT</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+
+  try {
+    await getResend().emails.send({ from: FROM, to: opts.to, subject, html });
+    console.log(`[Email] Invitation envoyée → ${opts.to}`);
+  } catch (err) {
+    console.error('[Email] Erreur envoi invitation:', err);
+  }
+}

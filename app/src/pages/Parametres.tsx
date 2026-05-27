@@ -13,7 +13,7 @@ import {
   List, BookOpen, StickyNote, BarChart2, Layers,
   Zap, Star, Crown, Check, ArrowRight, Trash2,
   KeyRound, QrCode, Unlock, Eye, EyeOff,
-  Plug, Key, Hash, Copy, RefreshCw, CheckCircle,
+  Plug, Key, Hash, Copy, RefreshCw, CheckCircle, Mail,
 } from 'lucide-react';
 import type { Connector, WebhookEndpoint, ApiKeyInfo, ApiKeyCreated } from '@/lib/api';
 import { api } from '@/lib/api';
@@ -389,9 +389,10 @@ function MembresSection() {
     try {
       const inv = await api.invitations.create(newRole, newEmail || undefined);
       setInvitations((prev) => [{ ...inv, email: newEmail || null, accepted_at: null }, ...prev]);
+      const emailMsg = newEmail ? ` — email envoyé à ${newEmail}` : '';
       setNewEmail('');
       setShowForm(false);
-      toast.success('Invitation créée');
+      toast.success(`Invitation créée${emailMsg}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -474,24 +475,32 @@ function MembresSection() {
             </div>
           )
         ) : (
-          <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-2 mb-5">
-            <select value={newRole} onChange={(e) => setNewRole(e.target.value as 'viewer' | 'editor')}
-              className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 focus:border-[#534AB7] outline-none">
-              <option value="viewer">Lecteur</option>
-              <option value="editor">Éditeur</option>
-            </select>
-            <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
-              placeholder="Email (optionnel)"
-              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 focus:border-[#534AB7] outline-none" />
-            <button type="submit" disabled={creating}
-              className="px-4 py-2 rounded-lg bg-[#534AB7] text-white text-sm font-medium hover:bg-[#3C3489] disabled:opacity-60 flex items-center gap-1.5">
-              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Créer
-            </button>
-            <button type="button" onClick={() => setShowForm(false)}
-              className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">
-              Annuler
-            </button>
+          <form onSubmit={handleCreate} className="flex flex-col gap-2 mb-5">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select value={newRole} onChange={(e) => setNewRole(e.target.value as 'viewer' | 'editor')}
+                className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 focus:border-[#534AB7] outline-none">
+                <option value="viewer">Lecteur</option>
+                <option value="editor">Éditeur</option>
+              </select>
+              <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="Email du destinataire (recommandé)"
+                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 focus:border-[#534AB7] outline-none" />
+              <button type="submit" disabled={creating}
+                className="px-4 py-2 rounded-lg bg-[#534AB7] text-white text-sm font-medium hover:bg-[#3C3489] disabled:opacity-60 flex items-center gap-1.5">
+                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                {newEmail ? 'Créer & envoyer' : 'Créer'}
+              </button>
+              <button type="button" onClick={() => setShowForm(false)}
+                className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">
+                Annuler
+              </button>
+            </div>
+            {newEmail && (
+              <p className="text-[11px] text-[#534AB7] flex items-center gap-1.5">
+                <Mail className="w-3 h-3" />
+                Le lien sera envoyé automatiquement à <strong>{newEmail}</strong>
+              </p>
+            )}
           </form>
         )}
 
@@ -509,7 +518,12 @@ function MembresSection() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${r.color}`}>{r.label}</span>
-                      {inv.email && <span className="text-xs text-gray-500 truncate">{inv.email}</span>}
+                      {inv.email && (
+                        <span className="flex items-center gap-1 text-xs text-gray-500 truncate">
+                          <Mail className="w-3 h-3 flex-shrink-0" />
+                          {inv.email}
+                        </span>
+                      )}
                       {used && <span className="text-[11px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Acceptée</span>}
                       {!used && expired && <span className="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">Expirée</span>}
                       {!used && !expired && <span className="text-[11px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-medium">En attente</span>}

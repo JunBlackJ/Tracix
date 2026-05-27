@@ -6,6 +6,7 @@ import prisma from '../prisma/client';
 import { requireAuth, generateToken } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits } from '../services/plan.service';
+import { sendInvitationEmail } from '../services/email.service';
 import { config } from '../config';
 
 const router = Router();
@@ -91,6 +92,19 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
   });
 
   const inviteUrl = `${config.frontendUrl}/rejoindre/${token}`;
+
+  // Envoyer l'email d'invitation si une adresse est fournie
+  if (email) {
+    const inviter = await prisma.userApp.findUnique({ where: { id: req.user!.userId }, select: { full_name: true } });
+    sendInvitationEmail({
+      to: email,
+      orgName: org.name,
+      inviterName: inviter?.full_name ?? 'Un administrateur',
+      role,
+      inviteUrl,
+    }).catch(() => {}); // non bloquant
+  }
+
   res.status(201).json({ ...invitation, invite_url: inviteUrl });
 });
 

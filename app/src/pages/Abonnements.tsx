@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Search, Plus, Clock, XCircle, RefreshCw, FileSpreadsheet, X, Save, Loader2, Edit2, CreditCard } from 'lucide-react';
+import { Search, Plus, Clock, XCircle, RefreshCw, FileSpreadsheet, X, Save, Loader2, Edit2, CreditCard, Trash2 } from 'lucide-react';
 import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -16,6 +16,7 @@ interface AbonnementsProps {
   categories?: Category[];
   onSubscriptionCreated?: (s: Subscription) => void;
   onSubscriptionUpdated?: (s: Subscription) => void;
+  onSubscriptionDeleted?: (id: string) => void;
   plan?: string;
 }
 
@@ -40,13 +41,15 @@ function convertAmount(amount: number, fromCurrency: string, toCurrency: string)
   return (amount / fromRate) * toRate;
 }
 
-export function Abonnements({ subscriptions, categories = [], onSubscriptionCreated, onSubscriptionUpdated, plan }: AbonnementsProps) {
+export function Abonnements({ subscriptions, categories = [], onSubscriptionCreated, onSubscriptionUpdated, onSubscriptionDeleted, plan }: AbonnementsProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [editingSub, setEditingSub] = useState<Subscription | null>(null);
   const [displayCurrency, setDisplayCurrency] = useState('EUR');
   const [showExportConfirm, setShowExportConfirm] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
 
   const filtered = subscriptions.filter((s) => {
@@ -127,6 +130,20 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
       toast.success('Abonnement créé');
     }
     setEditingSub(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    setConfirmDeleteId(null);
+    setDeletingId(id);
+    try {
+      await api.subscriptions.delete(id);
+      onSubscriptionDeleted?.(id);
+      toast.success('Abonnement supprimé');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const actifs = subscriptions.filter((s) => s.status === 'actif').length;
@@ -312,13 +329,25 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
                   </td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{s.responsible}</td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => { setEditingSub(s); setShowForm(true); }}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#534AB7] transition-colors"
-                      title="Modifier"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => { setEditingSub(s); setShowForm(true); }}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#534AB7] transition-colors"
+                        title="Modifier"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(s.id)}
+                        disabled={deletingId === s.id}
+                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                        title="Supprimer"
+                      >
+                        {deletingId === s.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Trash2 className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -363,6 +392,41 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
           </tfoot>
         </table>
       </div>
+
+      {confirmDeleteId && (() => {
+        const sub = subscriptions.find((s) => s.id === confirmDeleteId);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Supprimer l'abonnement ?</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    <span className="font-medium text-gray-700">{sub?.name}</span> sera définitivement supprimé. Cette action est irréversible.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setConfirmDeleteId(null)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => handleDelete(confirmDeleteId)}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showForm && (
         <SubscriptionFormModal

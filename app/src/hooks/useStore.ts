@@ -294,6 +294,11 @@ export function useStore() {
     });
   }, []);
 
+  // ─── Remove a subscription from local state ───
+  const removeSubscription = useCallback((id: string) => {
+    setSubscriptions((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
   // ─── Add or update a single system in local state ───
   const upsertSystem = useCallback((s: System) => {
     setSystems((prev) => {
@@ -397,6 +402,7 @@ export function useStore() {
     refreshAlerts,
     upsertMember,
     upsertSubscription,
+    removeSubscription,
     categories,
     addCategory,
     removeCategory,

@@ -221,6 +221,7 @@ function App() {
                 categories={store.categories.filter((c) => c.type === 'subscription')}
                 onSubscriptionCreated={store.upsertSubscription}
                 onSubscriptionUpdated={store.upsertSubscription}
+                onSubscriptionDeleted={store.removeSubscription}
                 plan={store.organization?.plan}
               />
             }

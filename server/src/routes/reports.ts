@@ -94,8 +94,8 @@ Réponds UNIQUEMENT avec du JSON valide :
   const jsonEnd = raw.lastIndexOf('}');
   const sections = JSON.parse(raw.substring(jsonStart, jsonEnd + 1));
 
-  // Decode all HTML entities in every string value
-  const decode = (s: string): string =>
+  // Decode HTML entities (run twice to handle double-encoding like &amp;amp;)
+  const decodeOnce = (s: string): string =>
     s.replace(/&amp;/g, '&')
      .replace(/&lt;/g, '<')
      .replace(/&gt;/g, '>')
@@ -123,9 +123,28 @@ Réponds UNIQUEMENT avec du JSON valide :
      .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
      .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
 
+  // Strip markdown and unwanted symbols
+  const stripMarkdown = (s: string): string =>
+    s.replace(/\*\*/g, '')
+     .replace(/\*/g, '')
+     .replace(/^#{1,6}\s*/gm, '')
+     .replace(/^[-•]\s*/gm, '- ')
+     .replace(/`([^`]+)`/g, '$1')
+     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+
   const clean: Record<string, string> = {};
   for (const [key, val] of Object.entries(sections)) {
-    clean[key] = typeof val === 'string' ? decode(val) : String(val);
+    if (typeof val !== 'string') { clean[key] = String(val); continue; }
+    // Decode twice to handle double-encoded entities
+    let text = decodeOnce(decodeOnce(val));
+    text = stripMarkdown(text);
+    // Remove any remaining &xxx; patterns that look like broken entities
+    text = text.replace(/&[a-zA-Z]{2,10};/g, (match) => {
+      // If it's still an entity after two decode passes, replace with empty or known char
+      const fallback: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>' };
+      return fallback[match] ?? '';
+    });
+    clean[key] = text.trim();
   }
 
   res.json(clean);

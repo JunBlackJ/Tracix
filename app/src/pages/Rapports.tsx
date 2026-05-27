@@ -456,17 +456,31 @@ type Indicators = {
   overdueCount: number; noMfaCount: number; criticalAlerts: number; expiringSubs: number; eolSystems: number;
 };
 
-function decodeHtmlEntities(text: string): string {
+function cleanAIText(text: string): string {
+  // Decode HTML entities via DOM
   const el = document.createElement('textarea');
   el.innerHTML = text;
-  return el.value;
+  let clean = el.value;
+  // Second pass for double-encoded entities
+  el.innerHTML = clean;
+  clean = el.value;
+  // Strip markdown artifacts
+  clean = clean
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  // Remove any remaining broken HTML entities
+  clean = clean.replace(/&[a-zA-Z]{2,10};/g, '');
+  return clean.trim();
 }
 
 function addAIText(doc: jsPDF, text: string, x: number, y: number, maxWidth: number): number {
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(60, 60, 60);
-  const clean = decodeHtmlEntities(text);
+  const clean = cleanAIText(text);
   const lines = doc.splitTextToSize(clean, maxWidth);
   doc.text(lines, x, y);
   doc.setTextColor(0, 0, 0);

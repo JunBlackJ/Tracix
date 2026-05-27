@@ -160,9 +160,10 @@ export function useStore() {
       setIsAuthenticated(true);
       await loadAllData();
       return true;
-    } catch {
+    } catch (err) {
+      console.error('[loginWithToken] /me failed:', err);
       clearToken();
-      return false;
+      throw err;
     }
   }, [loadAllData]);
 

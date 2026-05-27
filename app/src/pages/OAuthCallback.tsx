@@ -25,16 +25,18 @@ export function OAuthCallback({ onLoginWithToken }: OAuthCallbackProps) {
       return;
     }
 
-    // Refresh token is in the HttpOnly cookie set by the server — no need to read it from the URL
-    onLoginWithToken(token).then((ok) => {
-      if (ok) {
-        window.location.href = '/dashboard';
-      } else {
-        setError('Connexion échouée — veuillez réessayer ou contacter le support.');
-      }
-    }).catch((e: unknown) => {
-      setError(e instanceof Error ? e.message : 'Erreur inattendue lors de la connexion OAuth.');
-    });
+    onLoginWithToken(token)
+      .then((ok) => {
+        if (ok) {
+          window.location.href = '/dashboard';
+        } else {
+          setError('Connexion échouée — veuillez réessayer.');
+        }
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg || 'Erreur inattendue lors de la connexion OAuth.');
+      });
   }, [onLoginWithToken, navigate]);
 
   return (

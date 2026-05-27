@@ -171,19 +171,9 @@ function SidebarContent({
         })}
 
         <div className="mb-4">
-          <div className="flex items-center justify-between px-2.5 mb-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'hsl(246 8% 40%)' }}>
-              Mes modules
-            </p>
-            <Link
-              to="/parametres?section=custom-modules"
-              onClick={onClose}
-              title="Créer un module"
-              className="p-0.5 rounded hover:bg-white/10 transition-colors"
-            >
-              <Plus className="w-3 h-3" style={{ color: 'hsl(246 8% 50%)' }} />
-            </Link>
-          </div>
+          <p className="px-2.5 mb-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'hsl(246 8% 40%)' }}>
+            Mes modules
+          </p>
           {customModules.map((m) => {
             const Icon = CUSTOM_MODULE_ICONS[m.module_type as CustomModuleType] ?? FileText;
             const path = `/modules/${m.id}`;

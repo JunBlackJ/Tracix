@@ -31,6 +31,10 @@ export function useStore() {
 
   // ─── Load all data after authentication ───
   const loadAllData = useCallback(async () => {
+    // Helper: extract data array whether response is paginated { data: [] } or a plain array
+    const extract = <T,>(res: unknown): T[] =>
+      Array.isArray(res) ? res : (res as { data: T[] }).data ?? [];
+
     const [
       membersRes,
       platformsRes,
@@ -53,13 +57,13 @@ export function useStore() {
       api.customModules.list(),
     ]);
 
-    setMembers(membersRes.data);
-    setPlatforms(platformsRes.data);
+    setMembers(extract(membersRes));
+    setPlatforms(extract(platformsRes));
     setAccessRights(accessRightsData);
-    setSystems(systemsRes.data);
-    setNetworkFlows(networkFlowsRes.data);
-    setSubscriptions(subscriptionsRes.data);
-    setAlerts(alertsRes.data);
+    setSystems(extract(systemsRes));
+    setNetworkFlows(extract(networkFlowsRes));
+    setSubscriptions(extract(subscriptionsRes));
+    setAlerts(extract(alertsRes));
     setCategories(categoriesData);
     setCustomModules(customModulesData);
 
@@ -197,9 +201,8 @@ export function useStore() {
   const resolveAllAlerts = useCallback(async (alertIds: string[]) => {
     try {
       await api.alerts.resolveAll(alertIds);
-      // Re-fetch alerts to get accurate resolved state
       const res = await api.alerts.list({ limit: 200 });
-      setAlerts(res.data);
+      setAlerts(Array.isArray(res) ? res : res.data ?? []);
     } catch {
       // silently fail
     }
@@ -259,7 +262,7 @@ export function useStore() {
   const refreshAlerts = useCallback(async () => {
     try {
       const res = await api.alerts.list({ limit: 200 });
-      setAlerts(res.data);
+      setAlerts(Array.isArray(res) ? res : res.data ?? []);
     } catch {
       // silently fail
     }
@@ -269,7 +272,7 @@ export function useStore() {
   const refreshMembers = useCallback(async () => {
     try {
       const res = await api.members.list({ limit: 200 });
-      setMembers(res.data);
+      setMembers(Array.isArray(res) ? res : res.data ?? []);
     } catch {
       // silently fail
     }

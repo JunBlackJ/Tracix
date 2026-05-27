@@ -170,32 +170,48 @@ function SidebarContent({
           );
         })}
 
-        {customModules.length > 0 && (
-          <div className="mb-4">
-            <p className="px-2.5 mb-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'hsl(246 8% 40%)' }}>
+        <div className="mb-4">
+          <div className="flex items-center justify-between px-2.5 mb-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'hsl(246 8% 40%)' }}>
               Mes modules
             </p>
-            {customModules.map((m) => {
-              const Icon = CUSTOM_MODULE_ICONS[m.module_type as CustomModuleType] ?? FileText;
-              const path = `/modules/${m.id}`;
-              const active = isActive(path);
-              return (
-                <Link
-                  key={m.id}
-                  to={path}
-                  onClick={onClose}
-                  className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13.5px] transition-all mb-0.5 ${
-                    active ? 'font-medium text-white' : 'text-[hsl(246_8%_72%)] hover:bg-white/6 hover:text-white'
-                  }`}
-                  style={active ? { backgroundColor: `${m.color}22` } : {}}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" style={{ color: m.color }} />
-                  <span className="truncate">{m.title}</span>
-                </Link>
-              );
-            })}
+            <Link
+              to="/parametres?section=custom-modules"
+              onClick={onClose}
+              title="Créer un module"
+              className="p-0.5 rounded hover:bg-white/10 transition-colors"
+            >
+              <Plus className="w-3 h-3" style={{ color: 'hsl(246 8% 50%)' }} />
+            </Link>
           </div>
-        )}
+          {customModules.map((m) => {
+            const Icon = CUSTOM_MODULE_ICONS[m.module_type as CustomModuleType] ?? FileText;
+            const path = `/modules/${m.id}`;
+            const active = isActive(path);
+            return (
+              <Link
+                key={m.id}
+                to={path}
+                onClick={onClose}
+                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13.5px] transition-all mb-0.5 ${
+                  active ? 'font-medium text-white' : 'text-[hsl(246_8%_72%)] hover:bg-white/6 hover:text-white'
+                }`}
+                style={active ? { backgroundColor: `${m.color}22` } : {}}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" style={{ color: m.color }} />
+                <span className="truncate">{m.title}</span>
+              </Link>
+            );
+          })}
+          <Link
+            to="/parametres?section=custom-modules"
+            onClick={onClose}
+            className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13.5px] transition-all mb-0.5 text-[hsl(246_8%_55%)] hover:bg-white/6 hover:text-white"
+          >
+            <Plus className="w-4 h-4 flex-shrink-0 opacity-75" />
+            <span className="truncate">Nouveau module</span>
+          </Link>
+        </div>
       </nav>
 
       {/* Footer utilisateur */}

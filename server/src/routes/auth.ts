@@ -83,6 +83,7 @@ async function issueTokenPair(
     data: {
       id: uuidv4(),
       user_id: userId,
+      organization_id: organizationId,
       token_hash: hash,
       expires_at: expiresAt,
       user_agent: req?.headers['user-agent'] ?? '',
@@ -328,7 +329,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response): Pro
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stored = await (prisma as any).refreshToken.findUnique({
     where: { token_hash: hash },
-  }) as { id: string; user_id: string; expires_at: Date; revoked: boolean } | null;
+  }) as { id: string; user_id: string; organization_id: string; expires_at: Date; revoked: boolean } | null;
 
   if (!stored) {
     res.status(401).json({ error: 'Refresh token invalide ou expiré' });
@@ -369,22 +370,28 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response): Pro
     data: { revoked: true },
   });
 
+  // Utilise l'org stockée dans le refresh token (préserve le contexte multi-org des invités)
+  const orgId = stored.organization_id || user.organization_id;
+  const org = orgId !== user.organization_id
+    ? await prisma.organization.findUnique({ where: { id: orgId } }) ?? user.organization
+    : user.organization;
+
   const { token } = await issueTokenPair(
-    user.id, user.organization_id, user.email, user.role, req, res
+    user.id, orgId, user.email, user.role, req, res
   );
 
   res.json({
     token,
     user: {
       id: user.id,
-      organization_id: user.organization_id,
+      organization_id: orgId,
       full_name: user.full_name,
       email: user.email,
       role: user.role,
       last_login_at: user.last_login_at,
       created_at: user.created_at,
     },
-    organization: serializeOrg(user.organization),
+    organization: serializeOrg(org),
   });
 });
 

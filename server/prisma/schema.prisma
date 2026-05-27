@@ -433,16 +433,17 @@ model PasswordResetToken {
 }
 
 model RefreshToken {
-  id             String   @id
-  user_id        String
-  token_hash     String   @unique
-  expires_at     DateTime
-  revoked        Boolean  @default(false)
-  revoked_reason String   @default("")
-  user_agent     String   @default("")
-  ip_address     String   @default("")
-  last_used_at   DateTime @default(now())
-  created_at     DateTime @default(now())
+  id              String   @id
+  user_id         String
+  organization_id String   @default("")
+  token_hash      String   @unique
+  expires_at      DateTime
+  revoked         Boolean  @default(false)
+  revoked_reason  String   @default("")
+  user_agent      String   @default("")
+  ip_address      String   @default("")
+  last_used_at    DateTime @default(now())
+  created_at      DateTime @default(now())
 
   user UserApp @relation(fields: [user_id], references: [id], onDelete: Cascade)
 

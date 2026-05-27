@@ -155,10 +155,10 @@ export function Rejoindre({ onLoginWithToken }: RejoindreProps) {
 
             {mode === 'new' && (
               <div>
-                <label className="block text-xs font-semibold text-white/40 mb-1.5">Mot de passe <span className="font-normal text-white/25">(8 car. min)</span></label>
+                <label className="block text-xs font-semibold text-white/40 mb-1.5">Mot de passe <span className="font-normal text-white/25">(10 car. min, 1 majuscule, 1 chiffre)</span></label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                  <input type={showPassword ? 'text' : 'password'} value={form.password} onChange={set('password')} required minLength={8}
+                  <input type={showPassword ? 'text' : 'password'} value={form.password} onChange={set('password')} required minLength={10}
                     className="w-full pl-10 pr-10 py-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:border-[#534AB7]/60 outline-none transition-colors"
                     placeholder="••••••••" />
                   <button type="button" onClick={() => setShowPassword(!showPassword)}

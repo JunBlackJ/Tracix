@@ -62,8 +62,8 @@ const RegisterSchema = z.object({
   organization_name: z.string().min(1).max(100),
 });
 
-const MAX_ATTEMPTS = 5;         // tentatives avant verrouillage
-const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_ATTEMPTS = 10;
+const LOCK_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
 // ─── Helper: issue access token + refresh token pair ───
 // Writes the refresh token into an HttpOnly cookie (path=/api/auth) and returns
@@ -1396,6 +1396,23 @@ router.post('/reset-password', authLimiter, async (req, res) => {
   });
 
   res.json({ ok: true });
+});
+
+// POST /api/auth/unlock — déverrouille un compte verrouillé (clé admin requise)
+router.post('/unlock', async (req: Request, res: Response): Promise<void> => {
+  const { email, secret } = req.body as { email?: string; secret?: string };
+  if (!secret || secret !== process.env.SUPER_ADMIN_SECRET) {
+    res.status(403).json({ error: 'Non autorisé' });
+    return;
+  }
+  if (!email) { res.status(400).json({ error: 'Email requis' }); return; }
+  const user = await prisma.userApp.findUnique({ where: { email } });
+  if (!user) { res.status(404).json({ error: 'Utilisateur introuvable' }); return; }
+  await (prisma.userApp.update as any)({
+    where: { email },
+    data: { locked_until: null, failed_login_attempts: 0 },
+  });
+  res.json({ ok: true, message: `Compte ${email} déverrouillé.` });
 });
 
 export default router;

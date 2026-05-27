@@ -97,18 +97,22 @@ async function issueTokenPair(
 const REFRESH_COOKIE = '__rt';
 const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+const isProd = config.nodeEnv === 'production';
+// cross-domain (frontend ≠ API domain) requires sameSite:'none' + secure:true
+const COOKIE_SAME_SITE = isProd ? 'none' : 'lax';
+
 function setRefreshCookie(res: Response, token: string, expiresAt: Date): void {
   res.cookie(REFRESH_COOKIE, token, {
     httpOnly: true,
-    secure: config.nodeEnv === 'production',
-    sameSite: 'strict',
+    secure: isProd,
+    sameSite: COOKIE_SAME_SITE,
     expires: expiresAt,
     path: '/api/auth',
   });
 }
 
 function clearRefreshCookie(res: Response): void {
-  res.clearCookie(REFRESH_COOKIE, { httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'strict', path: '/api/auth' });
+  res.clearCookie(REFRESH_COOKIE, { httpOnly: true, secure: isProd, sameSite: COOKIE_SAME_SITE, path: '/api/auth' });
 }
 
 const PLATFORM_NAMES: Record<string, { name: string; category: string; auth_method: string }> = {
@@ -737,8 +741,8 @@ function setOAuthStateCookie(res: Response): string {
   const state = crypto.randomBytes(32).toString('hex');
   res.cookie(OAUTH_STATE_COOKIE, state, {
     httpOnly: true,
-    secure: config.nodeEnv === 'production',
-    sameSite: 'lax',
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: OAUTH_STATE_TTL_MS,
     path: '/api/auth/oauth',
   });
@@ -747,7 +751,7 @@ function setOAuthStateCookie(res: Response): string {
 
 function verifyAndClearOAuthState(req: Request, res: Response, receivedState: string | undefined): boolean {
   const expected = req.cookies?.[OAUTH_STATE_COOKIE];
-  res.clearCookie(OAUTH_STATE_COOKIE, { httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'lax', path: '/api/auth/oauth' });
+  res.clearCookie(OAUTH_STATE_COOKIE, { httpOnly: true, secure: isProd, sameSite: isProd ? 'none' : 'lax', path: '/api/auth/oauth' });
   if (!expected || !receivedState) return false;
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(receivedState));
 }

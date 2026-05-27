@@ -106,7 +106,7 @@ export function Parametres({ user, organization, categories, customModules, onCa
               onRemoved={onCustomModuleRemoved}
             />
           )}
-          {section === 'membres' && <MembresSection />}
+          {section === 'membres' && <MembresSection organizationPlan={organization?.plan ?? 'free'} />}
           {section === 'categories' && (
             <CategoriesSection
               categories={categories}
@@ -358,7 +358,7 @@ function ModulesSection({ organization, onUpdated }: { organization: Organizatio
   );
 }
 
-function MembresSection() {
+function MembresSection({ organizationPlan }: { organizationPlan: string }) {
   const [invitations, setInvitations] = useState<{ id: string; email: string | null; role: string; token: string; expires_at: string; accepted_at: string | null; invite_url: string }[]>([]);
   const [planInfo, setPlanInfo] = useState<{ seats: number; seats_used: number; invitationsEnabled: boolean; plan: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -452,7 +452,7 @@ function MembresSection() {
 
         {/* Bouton invitation — toujours visible */}
         {!showForm ? (
-          planInfo?.invitationsEnabled ? (
+          (planInfo?.invitationsEnabled ?? organizationPlan !== 'free') ? (
             <button onClick={() => setShowForm(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-[#534AB7]/40 text-[#534AB7] text-sm font-medium hover:bg-[#534AB7]/5 transition-colors mb-5">
               <Plus className="w-4 h-4" />

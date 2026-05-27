@@ -171,7 +171,7 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
       </div>
 
       {/* KPI grid — 4 cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Membres actifs" value={totalMembers} delta={stats ? `${totalMembers} au total` : '—'} kpiColor="oklch(42% 0.18 280)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(42% 0.18 280)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>}
         />
@@ -187,7 +187,7 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
       </div>
 
       {/* row-3: 2fr 1fr */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
         {/* Risk distribution */}
         <div style={cardStyle}>
           <div style={cardHeaderStyle}>
@@ -246,7 +246,7 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
       </div>
 
       {/* row-2: 1fr 1fr */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Alertes récentes */}
         <div style={cardStyle}>
           <div style={cardHeaderStyle}>

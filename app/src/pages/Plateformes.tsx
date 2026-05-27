@@ -206,7 +206,7 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
       </div>
 
       {/* KPI grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiSimpleCard label="Plateformes actives" value={String(activeCount)} delta={activeDelta} deltaUp={newThisMonth > 0} kpiColor="oklch(42% 0.18 280)" />
         <KpiSimpleCard label="En erreur / inactives" value={String(errorCount)} delta={errorCount > 0 ? 'Attention requise' : 'Tout est opérationnel'} deltaUp={errorCount === 0} kpiColor="oklch(55% 0.22 25)" />
         <KpiSimpleCard label="Disponibilité" value={disponibilite} delta={platforms.length > 0 ? `${activeCount} / ${platforms.length} opérationnelles` : 'Aucune plateforme'} kpiColor="oklch(62% 0.16 155)" />
@@ -240,7 +240,7 @@ function PlateformesList({ platforms, members: _members, alerts: _alerts, access
         {filtered.length === 0 && platforms.length === 0 && (
           <EmptyState icon={Server} title="Aucune plateforme" description="Référencez vos outils SaaS, applications internes et systèmes pour commencer à gérer les accès." action={{ label: '+ Connecter une plateforme', onClick: onNew }} hint="Conseil : importez votre inventaire via le module Import IA." />
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(p => {
             const totalUsers = getPlatformAccess(p.id).length;
             const color = monogramColor(p.name);

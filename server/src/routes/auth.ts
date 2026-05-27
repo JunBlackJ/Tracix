@@ -390,12 +390,14 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response): Pro
 
 // GET /api/auth/me
 router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
-  const user = await prisma.userApp.findUnique({
-    where: { id: req.user!.userId },
-    include: { organization: true },
-  });
+  const orgIdFromToken = req.user!.organizationId;
 
-  if (!user) {
+  const [user, org] = await Promise.all([
+    prisma.userApp.findUnique({ where: { id: req.user!.userId } }),
+    prisma.organization.findUnique({ where: { id: orgIdFromToken } }),
+  ]);
+
+  if (!user || !org) {
     res.status(404).json({ error: 'User not found' });
     return;
   }
@@ -403,14 +405,14 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
   res.json({
     user: {
       id: user.id,
-      organization_id: user.organization_id,
+      organization_id: orgIdFromToken,
       full_name: user.full_name,
       email: user.email,
-      role: user.role,
+      role: req.user!.role,
       last_login_at: user.last_login_at,
       created_at: user.created_at,
     },
-    organization: serializeOrg(user.organization),
+    organization: serializeOrg(org),
   });
 });
 

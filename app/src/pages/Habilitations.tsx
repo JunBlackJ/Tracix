@@ -193,15 +193,15 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
       </div>
 
       {/* KPI grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Habilitations actives" value={totalActive.toLocaleString('fr-FR')} delta="→ Stable sur 30 j" deltaDir="neutral" color="oklch(42% 0.18 280)" path="M3 11h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V11z M7 11V7a5 5 0 0110 0v4" />
         <KpiCard label="Droits Admin" value={adminCount} delta={`↑ +${Math.max(0, adminCount - 200)} ce mois-ci`} deltaDir="down" color="oklch(55% 0.22 25)" path="M12 3L4 7v5c0 4.418 3.582 8 8 9 4.418-1 8-4.582 8-9V7l-8-4z" />
         <KpiCard label="À renouveler sous 30 j" value={soon30} delta={`Expirent avant 30/06`} deltaDir="neutral" color="oklch(70% 0.14 88)" path="M12 2a10 10 0 100 20A10 10 0 0012 2z M12 6v6l4 2" />
         <KpiCard label="Plateformes couvertes" value={activePlatforms.length} delta={`↑ +${Math.max(0, activePlatforms.length - 16)} nouveaux services`} deltaDir="up" color="oklch(62% 0.16 155)" path="M2 3h20v14a2 2 0 01-2 2H4a2 2 0 01-2-2V3z M8 21h8 M12 17v4" />
       </div>
 
-      {/* Main layout: 300px platform list + 1fr permissions table */}
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '16px' }}>
+      {/* Main layout: platform list + permissions table */}
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4">
         {/* Platform list */}
         <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: '10px' }}>

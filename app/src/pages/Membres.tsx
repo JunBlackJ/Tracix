@@ -245,7 +245,7 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
       </div>
 
       {/* KPI grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Membres totaux" value={String(members.length)} delta={`${activeCount} actifs · ${members.length - activeCount} inactifs/suspendus`} kpiColor="oklch(42% 0.18 280)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(42% 0.18 280)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>}
         />
@@ -661,7 +661,8 @@ function MemberAccessTable({ memberId, member, platforms, onRevokeAccess, onUpda
       {accessRights.length === 0 ? (
         <p className="text-sm text-gray-400">Aucun droit d'accès trouvé</p>
       ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[500px]">
           <thead>
             <tr className="border-b border-gray-200">
               <th className="px-3 py-2 text-left font-medium text-gray-600">Plateforme</th>
@@ -754,6 +755,7 @@ function MemberAccessTable({ memberId, member, platforms, onRevokeAccess, onUpda
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
 

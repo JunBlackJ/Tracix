@@ -399,20 +399,26 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response): Pro
 router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const orgIdFromToken = req.user!.organizationId;
 
-  const [user, org] = await Promise.all([
-    prisma.userApp.findUnique({ where: { id: req.user!.userId } }),
-    prisma.organization.findUnique({ where: { id: orgIdFromToken } }),
-  ]);
+  const user = await prisma.userApp.findUnique({
+    where: { id: req.user!.userId },
+    include: { organization: true },
+  });
 
-  if (!user || !org) {
+  if (!user) {
     res.status(404).json({ error: 'User not found' });
     return;
   }
 
+  // Use the org from the JWT if it exists, otherwise fall back to the user's own org
+  let org = orgIdFromToken !== user.organization_id
+    ? await prisma.organization.findUnique({ where: { id: orgIdFromToken } })
+    : null;
+  if (!org) org = user.organization;
+
   res.json({
     user: {
       id: user.id,
-      organization_id: orgIdFromToken,
+      organization_id: org.id,
       full_name: user.full_name,
       email: user.email,
       role: req.user!.role,

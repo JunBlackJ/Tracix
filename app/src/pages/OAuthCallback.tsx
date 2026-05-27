@@ -30,8 +30,10 @@ export function OAuthCallback({ onLoginWithToken }: OAuthCallbackProps) {
       if (ok) {
         window.location.href = '/dashboard';
       } else {
-        setError('Impossible de valider la session OAuth.');
+        setError('Connexion échouée — veuillez réessayer ou contacter le support.');
       }
+    }).catch((e: unknown) => {
+      setError(e instanceof Error ? e.message : 'Erreur inattendue lors de la connexion OAuth.');
     });
   }, [onLoginWithToken, navigate]);
 

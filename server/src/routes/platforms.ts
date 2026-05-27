@@ -21,7 +21,14 @@ const PlatformSchema = z.object({
   responsible: z.string().default(''),
   target_population: z.string().default(''),
   sla: z.string().default(''),
-  status: z.enum(['actif', 'inactif', 'déprécié']).default('actif'),
+  status: z.string().transform((v) => {
+    const map: Record<string, string> = {
+      '✅ opérationnel': 'actif', 'opérationnel': 'actif', 'operational': 'actif', 'active': 'actif',
+      '⚠️ inactif': 'inactif', 'inactive': 'inactif',
+      '🚫 déprécié': 'déprécié', 'deprecated': 'déprécié',
+    };
+    return map[v.toLowerCase()] ?? (['actif','inactif','déprécié'].includes(v) ? v : 'actif');
+  }).default('actif'),
   last_check_date: z.string().default(''),
   notes: z.string().default(''),
 });

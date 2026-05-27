@@ -22,7 +22,14 @@ const SystemSchema = z.object({
   owner: z.string().default(''),
   tech_responsible: z.string().default(''),
   criticality: z.enum(['critique', 'élevée', 'normale', 'faible']).default('normale'),
-  status: z.enum(['actif', 'inactif', 'maintenance']).default('actif'),
+  status: z.string().transform((v) => {
+    const map: Record<string, string> = {
+      'active': 'actif', '✅ actif': 'actif', '✅ opérationnel': 'actif', 'opérationnel': 'actif',
+      'inactive': 'inactif', '⚠️ inactif': 'inactif',
+      'en maintenance': 'maintenance',
+    };
+    return map[v.toLowerCase()] ?? (['actif','inactif','maintenance'].includes(v) ? v : 'actif');
+  }).default('actif'),
   deployment_date: z.string().default(''),
   end_of_support_date: z.string().default(''),
   backup_policy: z.string().default(''),

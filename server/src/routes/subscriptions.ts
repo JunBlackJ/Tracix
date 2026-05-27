@@ -21,7 +21,15 @@ const SubscriptionSchema = z.object({
   renewal_date: z.string().default(''),
   auto_renew: z.boolean().default(false),
   responsible: z.string().default(''),
-  status: z.enum(['actif', 'à_résilier', 'expiré', 'en_négociation']).default('actif'),
+  status: z.string().transform((v) => {
+    const map: Record<string, string> = {
+      'active': 'actif', '✅ actif': 'actif',
+      'à résilier': 'à_résilier', 'a_résilier': 'à_résilier',
+      'expired': 'expiré',
+      'en negociation': 'en_négociation', 'en négociation': 'en_négociation',
+    };
+    return map[v.toLowerCase()] ?? (['actif','à_résilier','expiré','en_négociation'].includes(v) ? v : 'actif');
+  }).default('actif'),
   contract_url: z.string().default(''),
   notes: z.string().default(''),
 });

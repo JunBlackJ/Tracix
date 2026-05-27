@@ -32,34 +32,34 @@ export function useStore() {
   // ─── Load all data after authentication ───
   const loadAllData = useCallback(async () => {
     const [
-      membersData,
-      platformsData,
+      membersRes,
+      platformsRes,
       accessRightsData,
-      systemsData,
-      networkFlowsData,
-      subscriptionsData,
-      alertsData,
+      systemsRes,
+      networkFlowsRes,
+      subscriptionsRes,
+      alertsRes,
       categoriesData,
       customModulesData,
     ] = await Promise.all([
-      api.members.list(),
-      api.platforms.list(),
+      api.members.list({ limit: 200 }),
+      api.platforms.list({ limit: 200 }),
       api.accessRights.list(),
-      api.systems.list(),
-      api.networkFlows.list(),
-      api.subscriptions.list(),
-      api.alerts.list(),
+      api.systems.list({ limit: 200 }),
+      api.networkFlows.list({ limit: 200 }),
+      api.subscriptions.list({ limit: 200 }),
+      api.alerts.list({ limit: 200 }),
       api.categories.list(),
       api.customModules.list(),
     ]);
 
-    setMembers(membersData);
-    setPlatforms(platformsData);
+    setMembers(membersRes.data);
+    setPlatforms(platformsRes.data);
     setAccessRights(accessRightsData);
-    setSystems(systemsData);
-    setNetworkFlows(networkFlowsData);
-    setSubscriptions(subscriptionsData);
-    setAlerts(alertsData);
+    setSystems(systemsRes.data);
+    setNetworkFlows(networkFlowsRes.data);
+    setSubscriptions(subscriptionsRes.data);
+    setAlerts(alertsRes.data);
     setCategories(categoriesData);
     setCustomModules(customModulesData);
 
@@ -198,8 +198,8 @@ export function useStore() {
     try {
       await api.alerts.resolveAll(alertIds);
       // Re-fetch alerts to get accurate resolved state
-      const updated = await api.alerts.list();
-      setAlerts(updated);
+      const res = await api.alerts.list({ limit: 200 });
+      setAlerts(res.data);
     } catch {
       // silently fail
     }
@@ -258,8 +258,8 @@ export function useStore() {
   // ─── Refresh alerts ───
   const refreshAlerts = useCallback(async () => {
     try {
-      const updated = await api.alerts.list();
-      setAlerts(updated);
+      const res = await api.alerts.list({ limit: 200 });
+      setAlerts(res.data);
     } catch {
       // silently fail
     }
@@ -268,8 +268,8 @@ export function useStore() {
   // ─── Refresh members (scores de risque recalculés côté serveur) ───
   const refreshMembers = useCallback(async () => {
     try {
-      const updated = await api.members.list();
-      setMembers(updated);
+      const res = await api.members.list({ limit: 200 });
+      setMembers(res.data);
     } catch {
       // silently fail
     }

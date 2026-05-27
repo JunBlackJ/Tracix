@@ -30,13 +30,26 @@ describe('Members lifecycle — CRUD + RBAC', () => {
     await cleanupOrg(orgId);
   });
 
-  it('GET /api/members returns 200 for admin', async () => {
+  it('GET /api/members returns 200 with paginated response for admin', async () => {
     const res = await request(app)
       .get('/api/members')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.data).toBeDefined();
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.pagination).toBeDefined();
+    expect(res.body.pagination.total).toBeGreaterThanOrEqual(0);
+    expect(res.body.pagination.page).toBe(1);
+  });
+
+  it('GET /api/members supports pagination params', async () => {
+    const res = await request(app)
+      .get('/api/members?page=1&limit=5')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.limit).toBe(5);
   });
 
   it('GET /api/members returns 200 for viewer (members.read)', async () => {
@@ -45,6 +58,7 @@ describe('Members lifecycle — CRUD + RBAC', () => {
       .set('Authorization', `Bearer ${viewerToken}`);
 
     expect(res.status).toBe(200);
+    expect(res.body.data).toBeDefined();
   });
 
   it('GET /api/members returns 401 without token', async () => {

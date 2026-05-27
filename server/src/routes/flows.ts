@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
+import { parsePagination, paginatedResult } from '../utils/pagination';
 
 const router = Router();
 router.use(requireAuth);
@@ -29,6 +30,7 @@ const NetworkFlowSchema = z.object({
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { search, status, direction } = req.query;
+  const pagination = parsePagination(req);
 
   const where: Record<string, unknown> = { organization_id: orgId };
   if (status) where.status = status;
@@ -42,12 +44,17 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     ];
   }
 
-  const flows = await prisma.networkFlow.findMany({
-    where,
-    orderBy: { flow_id: 'asc' },
-  });
+  const [total, flows] = await Promise.all([
+    prisma.networkFlow.count({ where }),
+    prisma.networkFlow.findMany({
+      where,
+      orderBy: { flow_id: 'asc' },
+      take: pagination.limit,
+      skip: pagination.skip,
+    }),
+  ]);
 
-  res.json(flows);
+  res.json(paginatedResult(flows, total, pagination));
 });
 
 // GET /api/network-flows/:id

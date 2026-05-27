@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { generateAlerts } from '../services/alert.service';
+import { parsePagination, paginatedResult } from '../utils/pagination';
 
 const router = Router();
 router.use(requireAuth);
@@ -32,6 +33,7 @@ const ALERT_TYPE_LABELS: Record<string, string> = {
 router.get('/', requirePermission('alerts.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { is_resolved, severity, type, source_module } = req.query;
+  const pagination = parsePagination(req, 100);
 
   const where: Record<string, unknown> = { organization_id: orgId };
   if (is_resolved !== undefined) where.is_resolved = is_resolved === 'true';
@@ -39,12 +41,17 @@ router.get('/', requirePermission('alerts.read'), async (req: Request, res: Resp
   if (type) where.type = type;
   if (source_module) where.source_module = source_module;
 
-  const alerts = await prisma.alert.findMany({
-    where,
-    orderBy: [{ is_resolved: 'asc' }, { created_at: 'desc' }],
-  });
+  const [total, alerts] = await Promise.all([
+    prisma.alert.count({ where }),
+    prisma.alert.findMany({
+      where,
+      orderBy: [{ is_resolved: 'asc' }, { created_at: 'desc' }],
+      take: pagination.limit,
+      skip: pagination.skip,
+    }),
+  ]);
 
-  res.json(alerts);
+  res.json(paginatedResult(alerts, total, pagination));
 });
 
 // GET /api/alerts/:id

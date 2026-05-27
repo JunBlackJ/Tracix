@@ -5,6 +5,7 @@ import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits, checkLimit } from '../services/plan.service';
+import { parsePagination, paginatedResult } from '../utils/pagination';
 
 const router = Router();
 router.use(requireAuth);
@@ -29,6 +30,7 @@ const PlatformSchema = z.object({
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { search, status, environment, category } = req.query;
+  const pagination = parsePagination(req);
 
   const where: Record<string, unknown> = { organization_id: orgId };
   if (status) where.status = status;
@@ -41,17 +43,22 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     ];
   }
 
-  const platforms = await prisma.platform.findMany({
-    where,
-    include: {
-      accessRights: {
-        include: { member: { select: { id: true, full_name: true, username: true } } },
+  const [total, platforms] = await Promise.all([
+    prisma.platform.count({ where }),
+    prisma.platform.findMany({
+      where,
+      include: {
+        accessRights: {
+          include: { member: { select: { id: true, full_name: true, username: true } } },
+        },
       },
-    },
-    orderBy: { name: 'asc' },
-  });
+      orderBy: { name: 'asc' },
+      take: pagination.limit,
+      skip: pagination.skip,
+    }),
+  ]);
 
-  res.json(platforms);
+  res.json(paginatedResult(platforms, total, pagination));
 });
 
 // GET /api/platforms/:id

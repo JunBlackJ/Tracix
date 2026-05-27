@@ -32,6 +32,17 @@ export function setRefreshToken(_t: string): void { /* cookie-managed */ }
 export function clearRefreshToken(): void { /* cleared by server on logout */ }
 export function setTokenPair(token: string, _refreshToken?: string): void { setToken(token); }
 
+// ─── Paginated response ───
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+  };
+}
+
 // ─── Risk snapshot ───
 export interface RiskSnapshot {
   date: string;
@@ -246,8 +257,13 @@ export const api = {
   },
 
   members: {
-    list(): Promise<Member[]> {
-      return request('/members');
+    list(params?: { page?: number; limit?: number; search?: string; status?: string }): Promise<PaginatedResponse<Member>> {
+      const qs = params
+        ? '?' + new URLSearchParams(
+            Object.fromEntries(Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]))
+          ).toString()
+        : '';
+      return request(`/members${qs}`);
     },
     get(id: string): Promise<Member> {
       return request(`/members/${id}`);
@@ -270,8 +286,13 @@ export const api = {
   },
 
   platforms: {
-    list(): Promise<Platform[]> {
-      return request('/platforms');
+    list(params?: { page?: number; limit?: number; search?: string; status?: string }): Promise<PaginatedResponse<Platform>> {
+      const qs = params
+        ? '?' + new URLSearchParams(
+            Object.fromEntries(Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]))
+          ).toString()
+        : '';
+      return request(`/platforms${qs}`);
     },
     get(id: string): Promise<Platform> {
       return request(`/platforms/${id}`);
@@ -321,8 +342,13 @@ export const api = {
   },
 
   systems: {
-    list(): Promise<System[]> {
-      return request('/systems');
+    list(params?: { page?: number; limit?: number; search?: string; status?: string }): Promise<PaginatedResponse<System>> {
+      const qs = params
+        ? '?' + new URLSearchParams(
+            Object.fromEntries(Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]))
+          ).toString()
+        : '';
+      return request(`/systems${qs}`);
     },
     get(id: string): Promise<System> {
       return request(`/systems/${id}`);
@@ -339,8 +365,13 @@ export const api = {
   },
 
   networkFlows: {
-    list(): Promise<NetworkFlow[]> {
-      return request('/network-flows');
+    list(params?: { page?: number; limit?: number; search?: string; status?: string }): Promise<PaginatedResponse<NetworkFlow>> {
+      const qs = params
+        ? '?' + new URLSearchParams(
+            Object.fromEntries(Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]))
+          ).toString()
+        : '';
+      return request(`/network-flows${qs}`);
     },
     get(id: string): Promise<NetworkFlow> {
       return request(`/network-flows/${id}`);
@@ -357,8 +388,13 @@ export const api = {
   },
 
   subscriptions: {
-    list(): Promise<Subscription[]> {
-      return request('/subscriptions');
+    list(params?: { page?: number; limit?: number }): Promise<PaginatedResponse<Subscription>> {
+      const qs = params
+        ? '?' + new URLSearchParams(
+            Object.fromEntries(Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]))
+          ).toString()
+        : '';
+      return request(`/subscriptions${qs}`);
     },
     get(id: string): Promise<Subscription> {
       return request(`/subscriptions/${id}`);
@@ -375,11 +411,11 @@ export const api = {
   },
 
   alerts: {
-    list(params?: { is_resolved?: boolean; severity?: string }): Promise<Alert[]> {
+    list(params?: { is_resolved?: boolean; severity?: string; page?: number; limit?: number }): Promise<PaginatedResponse<Alert>> {
       const qs = params
         ? '?' + new URLSearchParams(
             Object.fromEntries(
-              Object.entries(params).map(([k, v]) => [k, String(v)])
+              Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])
             )
           ).toString()
         : '';

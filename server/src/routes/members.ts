@@ -8,6 +8,7 @@ import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { updateMemberRiskScore, recomputeAllRiskScores } from '../services/risk.service';
 import { getLimits, checkLimit } from '../services/plan.service';
 import { processOffboarding } from '../services/cron.service';
+import { parsePagination, paginatedResult } from '../utils/pagination';
 
 const router = Router();
 router.use(requireAuth);
@@ -27,6 +28,7 @@ const MemberSchema = z.object({
 router.get('/', requirePermission('members.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { search, status, team, account_type } = req.query;
+  const pagination = parsePagination(req);
 
   const where: Record<string, unknown> = { organization_id: orgId };
   if (status) where.status = status;
@@ -40,13 +42,18 @@ router.get('/', requirePermission('members.read'), async (req: Request, res: Res
     ];
   }
 
-  const members = await prisma.member.findMany({
-    where,
-    include: { accessRights: true },
-    orderBy: { full_name: 'asc' },
-  });
+  const [total, members] = await Promise.all([
+    prisma.member.count({ where }),
+    prisma.member.findMany({
+      where,
+      include: { accessRights: true },
+      orderBy: { full_name: 'asc' },
+      take: pagination.limit,
+      skip: pagination.skip,
+    }),
+  ]);
 
-  res.json(members);
+  res.json(paginatedResult(members, total, pagination));
 });
 
 // GET /api/members/:id

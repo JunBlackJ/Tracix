@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
+import { parsePagination, paginatedResult } from '../utils/pagination';
 
 const router = Router();
 router.use(requireAuth);
@@ -33,6 +34,7 @@ const SystemSchema = z.object({
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { search, status, environment, criticality } = req.query;
+  const pagination = parsePagination(req);
 
   const where: Record<string, unknown> = { organization_id: orgId };
   if (status) where.status = status;
@@ -46,12 +48,17 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     ];
   }
 
-  const systems = await prisma.system.findMany({
-    where,
-    orderBy: { hostname: 'asc' },
-  });
+  const [total, systems] = await Promise.all([
+    prisma.system.count({ where }),
+    prisma.system.findMany({
+      where,
+      orderBy: { hostname: 'asc' },
+      take: pagination.limit,
+      skip: pagination.skip,
+    }),
+  ]);
 
-  res.json(systems);
+  res.json(paginatedResult(systems, total, pagination));
 });
 
 // GET /api/systems/:id

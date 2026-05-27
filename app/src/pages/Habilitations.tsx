@@ -67,6 +67,11 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
   const [editRight, setEditRight] = useState<AccessRight | null>(null);
   const [editLevel, setEditLevel] = useState<AccessLevel>('ro');
   const [editNote, setEditNote] = useState('');
+  const [showAttribuer, setShowAttribuer] = useState(false);
+  const [attribMemberId, setAttribMemberId] = useState('');
+  const [attribLevel, setAttribLevel] = useState<AccessLevel>('ro');
+  const [attribNote, setAttribNote] = useState('');
+  const [attribLoading, setAttribLoading] = useState(false);
 
   const activePlatforms = useMemo(() => platforms.filter((p) => p.status === 'actif'), [platforms]);
 
@@ -118,6 +123,35 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
     onRevokeAccess(right.id, 'Révocation via habilitations');
   };
 
+  const openAttribuer = () => {
+    setAttribMemberId('');
+    setAttribLevel('ro');
+    setAttribNote('');
+    setShowAttribuer(true);
+  };
+
+  const handleSaveAttribuer = async () => {
+    if (!attribMemberId || !selectedPlatformId) return;
+    setAttribLoading(true);
+    try {
+      await api.accessRights.create({
+        member_id: attribMemberId,
+        platform_id: selectedPlatformId,
+        level: attribLevel,
+        granted_by: 'Manuel',
+        comment: attribNote || undefined,
+      });
+      toast.success('Habilitation attribuée');
+      setShowAttribuer(false);
+      // Refresh the page data
+      window.location.reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'attribution');
+    } finally {
+      setAttribLoading(false);
+    }
+  };
+
   const ROLE_MAP: Record<AccessLevel, { variant: 'crit' | 'high' | 'brand'; label: string }> = {
     admin: { variant: 'crit', label: 'Admin' },
     rw:    { variant: 'high', label: 'Opérateur' },
@@ -150,7 +184,7 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
             <Download style={{ width: '14px', height: '14px' }} />
             Exporter
           </button>
-          <button
+          <button onClick={openAttribuer}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
             <Plus style={{ width: '14px', height: '14px' }} />
             Nouvelle habilitation
@@ -205,7 +239,7 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
                 <RotateCcw style={{ width: '13px', height: '13px' }} />
                 Révision de masse
               </button>
-              <button style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, cursor: 'pointer' }}>
+              <button onClick={openAttribuer} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, cursor: 'pointer' }}>
                 <Plus style={{ width: '13px', height: '13px' }} />
                 Attribuer
               </button>
@@ -359,6 +393,63 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
           </div>
         );
       })()}
+
+      {/* Modale Attribuer */}
+      {showAttribuer && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'oklch(0% 0 0 / 0.4)' }}>
+          <div style={{ background: 'oklch(100% 0 0)', borderRadius: '10px', boxShadow: '0 20px 60px oklch(0% 0 0 / 0.3)', width: '100%', maxWidth: '420px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '14px', fontWeight: 600 }}>Attribuer une habilitation</span>
+              <button onClick={() => setShowAttribuer(false)} style={{ padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                <X style={{ width: '16px', height: '16px', color: 'oklch(52% 0.012 260)' }} />
+              </button>
+            </div>
+            <div style={{ fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>
+              Plateforme : <strong>{selectedPlatform?.name ?? '—'}</strong>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'oklch(52% 0.012 260)', marginBottom: '8px' }}>Membre *</label>
+              <select value={attribMemberId} onChange={(e) => setAttribMemberId(e.target.value)}
+                style={{ width: '100%', padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', outline: 'none', fontFamily: 'inherit' }}>
+                <option value="">— Sélectionner un membre —</option>
+                {members
+                  .filter((m) => m.status === 'actif')
+                  .filter((m) => !platformRights.some((r) => r.member_id === m.id))
+                  .sort((a, b) => a.full_name.localeCompare(b.full_name))
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>{m.full_name} ({m.team || m.email})</option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'oklch(52% 0.012 260)', marginBottom: '8px' }}>Niveau d'accès *</label>
+              <select value={attribLevel} onChange={(e) => setAttribLevel(e.target.value as AccessLevel)}
+                style={{ width: '100%', padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', outline: 'none', fontFamily: 'inherit' }}>
+                {(['admin', 'rw', 'ro', 'req'] as AccessLevel[]).map((l) => (
+                  <option key={l} value={l}>{ACCESS_LEVEL_CONFIG[l].label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'oklch(52% 0.012 260)', marginBottom: '8px' }}>Commentaire (optionnel)</label>
+              <input value={attribNote} onChange={(e) => setAttribNote(e.target.value)}
+                style={{ width: '100%', padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', outline: 'none', fontFamily: 'inherit' }}
+                placeholder="Raison de l'attribution…" />
+            </div>
+            <div style={{ display: 'flex', gap: '8px', paddingTop: '4px' }}>
+              <button onClick={() => setShowAttribuer(false)}
+                style={{ flex: 1, padding: '8px 16px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '13px', color: 'oklch(52% 0.012 260)', background: 'transparent', cursor: 'pointer' }}>
+                Annuler
+              </button>
+              <button onClick={handleSaveAttribuer} disabled={!attribMemberId || attribLoading}
+                style={{ flex: 1, padding: '8px 16px', background: !attribMemberId || attribLoading ? 'oklch(80% 0.01 260)' : 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 600, cursor: !attribMemberId || attribLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                {attribLoading && <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} />}
+                Attribuer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showRevue && (
         <RevueModal

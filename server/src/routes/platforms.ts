@@ -17,7 +17,10 @@ const PlatformSchema = z.object({
   url: z.string().default(''),
   auth_method: z.string().default(''),
   has_mfa: z.boolean().default(false),
-  environment: z.enum(['production', 'staging', 'dev']).default('production'),
+  environment: z.string().transform((v) => {
+    const n = v.toLowerCase();
+    return (['production','staging','dev'].includes(n) ? n : 'production');
+  }).default('production'),
   responsible: z.string().default(''),
   target_population: z.string().default(''),
   sla: z.string().default(''),

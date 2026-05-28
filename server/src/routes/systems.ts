@@ -13,7 +13,10 @@ const SystemSchema = z.object({
   system_id: z.string().min(1),
   hostname: z.string().min(1),
   type: z.string().default(''),
-  environment: z.enum(['production', 'staging', 'dev']).default('production'),
+  environment: z.string().transform((v) => {
+    const n = v.toLowerCase();
+    return (['production','staging','dev'].includes(n) ? n : 'production');
+  }).default('production'),
   os_version: z.string().default(''),
   ip_address: z.string().default(''),
   vlan: z.string().default(''),
@@ -21,7 +24,11 @@ const SystemSchema = z.object({
   role_usage: z.string().default(''),
   owner: z.string().default(''),
   tech_responsible: z.string().default(''),
-  criticality: z.enum(['critique', 'élevée', 'normale', 'faible']).default('normale'),
+  criticality: z.string().transform((v) => {
+    const norm = v.toLowerCase();
+    const map: Record<string, string> = { 'critical': 'critique', 'high': 'élevée', 'elevée': 'élevée', 'normal': 'normale', 'low': 'faible' };
+    return map[norm] ?? (['critique','élevée','normale','faible'].includes(norm) ? norm : 'normale');
+  }).default('normale'),
   status: z.string().transform((v) => {
     const map: Record<string, string> = {
       'active': 'actif', '✅ actif': 'actif', '✅ opérationnel': 'actif', 'opérationnel': 'actif',

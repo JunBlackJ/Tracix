@@ -17,7 +17,11 @@ const MemberSchema = z.object({
   full_name: z.string().min(1),
   username: z.string().min(1),
   team: z.string().default(''),
-  account_type: z.enum(['privilégié', 'nominatif', 'service', 'partagé']),
+  account_type: z.string().transform((v) => {
+    const n = v.toLowerCase();
+    const map: Record<string, string> = { 'privilegié': 'privilégié', 'privileged': 'privilégié', 'nominal': 'nominatif', 'shared': 'partagé' };
+    return map[n] ?? (['privilégié','nominatif','service','partagé'].includes(n) ? n : 'nominatif');
+  }),
   status: z.string().transform((v) => {
     const map: Record<string, string> = {
       'active': 'actif', '✅ actif': 'actif',

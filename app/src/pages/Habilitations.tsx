@@ -8,6 +8,7 @@ import {
   Shield, Search, FileText, RotateCcw, X, ChevronRight, Clock, UserCheck, UserX, Edit3,
   CheckCircle2, AlertTriangle, Loader2, Plus, Download,
 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { ACCESS_LEVEL_CONFIG, getRiskColor } from '@/types';
 import type { AccessLevel, Member, Platform, AccessRight } from '@/types';
 import { api } from '@/lib/api';
@@ -59,6 +60,7 @@ function KpiCard({ label, value, delta, deltaDir, color, path }: { label: string
 
 export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platforms, accessRights }: HabilitationsProps) {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [selectedPlatformId, setSelectedPlatformId] = useState<string>(platforms[0]?.id ?? '');
   const [search, setSearch] = useState('');
   const [levelFilter, setLevelFilter] = useState('all');
@@ -202,7 +204,28 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
 
       {/* Main layout: platform list + permissions table */}
       <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4">
-        {/* Platform list */}
+        {/* Platform list — vertical sidebar on desktop, horizontal strip on mobile */}
+        {isMobile ? (
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4">
+            {activePlatforms.map((p) => {
+              const count = accessRights.filter((a) => a.platform_id === p.id && a.level !== 'none').length;
+              const isSelected = p.id === selectedPlatformId;
+              return (
+                <button key={p.id} onClick={() => setSelectedPlatformId(p.id)}
+                  className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors min-h-[40px]"
+                  style={{
+                    background: isSelected ? 'oklch(42% 0.18 280 / 0.12)' : 'oklch(100% 0 0)',
+                    border: `1px solid ${isSelected ? 'oklch(42% 0.18 280 / 0.3)' : 'oklch(90% 0.006 260)'}`,
+                    color: isSelected ? 'oklch(42% 0.18 280)' : 'oklch(40% 0.02 260)',
+                  }}>
+                  <Shield style={{ width: 14, height: 14 }} />
+                  {p.name}
+                  <span className="ml-1 text-[10px] opacity-60">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
         <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: '10px' }}>
             <span style={{ fontSize: '13px', fontWeight: 600 }}>Plateformes</span>
@@ -227,6 +250,7 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
             })}
           </div>
         </div>
+        )}
 
         {/* Permissions table */}
         <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'column' }}>
@@ -269,7 +293,64 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
             </select>
           </div>
 
-          {/* Table */}
+          {/* Table (desktop) / Cards (mobile) */}
+          {isMobile ? (
+            <div>
+              {filteredRights.map((right) => {
+                const m = memberById.get(right.member_id);
+                if (!m) return null;
+                const role = ROLE_MAP[right.level];
+                const isExpired = right.next_review_date && new Date(right.next_review_date) < new Date();
+                const expiresSoon = !isExpired && right.next_review_date && new Date(right.next_review_date) <= new Date(Date.now() + 30 * 86400000);
+                let statusPill: { variant: 'crit' | 'med' | 'low'; label: string };
+                if (isExpired) statusPill = { variant: 'crit', label: 'Expiré' };
+                else if (expiresSoon) statusPill = { variant: 'med', label: 'Expire bientôt' };
+                else statusPill = { variant: 'low', label: 'Actif' };
+
+                return (
+                  <div key={right.id} className="p-4 border-b" style={{ borderColor: 'oklch(90% 0.006 260)' }}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'oklch(42% 0.18 280 / 0.12)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, color: 'oklch(42% 0.18 280)', flexShrink: 0 }}>
+                        {m.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">{m.full_name}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <Pill variant={role.variant}>{role.label}</Pill>
+                          <Pill variant={statusPill.variant}>{statusPill.label}</Pill>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+                      {right.granted_by && <span>Par: {right.granted_by}</span>}
+                      {right.next_review_date && (
+                        <span style={{ color: isExpired ? 'oklch(55% 0.22 25)' : expiresSoon ? 'oklch(62% 0.18 52)' : undefined }}>
+                          Exp: {new Date(right.next_review_date).toLocaleDateString('fr-FR')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleEdit(right)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium min-h-[44px]"
+                        style={{ border: '1px solid oklch(90% 0.006 260)', color: 'oklch(42% 0.18 280)' }}>
+                        <Edit3 style={{ width: 14, height: 14 }} /> Modifier
+                      </button>
+                      <button onClick={() => handleRevoke(right)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium min-h-[44px]"
+                        style={{ border: '1px solid oklch(55% 0.22 25 / 0.3)', color: 'oklch(55% 0.22 25)', background: 'oklch(55% 0.22 25 / 0.05)' }}>
+                        <X style={{ width: 14, height: 14 }} /> Révoquer
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredRights.length === 0 && (
+                <div style={{ padding: '48px 20px', textAlign: 'center', color: 'oklch(52% 0.012 260)', fontSize: '13px' }}>
+                  Aucune habilitation pour cette plateforme
+                </div>
+              )}
+            </div>
+          ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
@@ -356,6 +437,7 @@ export function Habilitations({ onUpdateAccess, onRevokeAccess, members, platfor
               </tbody>
             </table>
           </div>
+          )}
         </div>
       </div>
 

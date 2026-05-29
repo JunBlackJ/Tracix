@@ -94,18 +94,24 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
   const inviteUrl = `${config.frontendUrl}/rejoindre/${token}`;
 
   // Envoyer l'email d'invitation si une adresse est fournie
+  let emailSent = false;
   if (email) {
     const inviter = await prisma.userApp.findUnique({ where: { id: req.user!.userId }, select: { full_name: true } });
-    sendInvitationEmail({
-      to: email,
-      orgName: org.name,
-      inviterName: inviter?.full_name ?? 'Un administrateur',
-      role,
-      inviteUrl,
-    }).catch(() => {}); // non bloquant
+    try {
+      await sendInvitationEmail({
+        to: email,
+        orgName: org.name,
+        inviterName: inviter?.full_name ?? 'Un administrateur',
+        role,
+        inviteUrl,
+      });
+      emailSent = true;
+    } catch {
+      emailSent = false;
+    }
   }
 
-  res.status(201).json({ ...invitation, invite_url: inviteUrl });
+  res.status(201).json({ ...invitation, invite_url: inviteUrl, email_sent: emailSent });
 });
 
 // DELETE /api/invitations/:id — révoquer une invitation
@@ -143,92 +149,108 @@ router.post('/accept/:token', async (req: Request, res: Response): Promise<void>
   const { full_name, email, password } = req.body;
   const { token } = req.params;
 
-  const inv = await prisma.invitation.findUnique({
-    where: { token },
-    include: { organization: true },
-  });
+  if (!email) { res.status(400).json({ error: 'Email requis.' }); return; }
 
-  if (!inv) { res.status(404).json({ error: 'Invitation invalide.' }); return; }
-  if (inv.expires_at < new Date()) { res.status(410).json({ error: 'Cette invitation a expiré.' }); return; }
-  if (inv.accepted_at) { res.status(409).json({ error: 'Cette invitation a déjà été utilisée.' }); return; }
-
-  let user = await prisma.userApp.findUnique({ where: { email } });
-
-  if (!user) {
-    // Créer un compte
+  // Validation mot de passe pour nouveau compte (avant la transaction)
+  const existingUser = await prisma.userApp.findUnique({ where: { email } });
+  if (!existingUser) {
     if (!full_name || !password || password.length < 10 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
       res.status(400).json({ error: 'Mot de passe requis : 10 caractères min, 1 majuscule, 1 chiffre.' });
       return;
     }
-    const password_hash = await bcrypt.hash(password, 10);
-    // L'org principale de ce nouvel user sera son propre espace (créé plus tard si besoin)
-    // Pour l'instant, on le rattache directement à l'org de l'invitation
-    user = await prisma.userApp.create({
-      data: {
-        id: uuidv4(),
-        organization_id: inv.organization_id,
-        full_name,
-        email,
-        password_hash,
-        role: inv.role,
-      },
-    });
-  } else {
-    // Utilisateur existant — vérifier qu'il n'est pas déjà dans cette org
-    const existing = await prisma.userOrganization.findUnique({
-      where: { user_id_organization_id: { user_id: user.id, organization_id: inv.organization_id } },
-    });
-    if (user.organization_id === inv.organization_id || existing) {
-      res.status(409).json({ error: 'Vous faites déjà partie de cette organisation.' });
-      return;
-    }
-    // Ajouter l'utilisateur existant à l'org via user_organizations
-    await prisma.userOrganization.create({
-      data: {
-        id: uuidv4(),
-        user_id: user.id,
-        organization_id: inv.organization_id,
-        role: inv.role,
-      },
-    });
   }
 
-  // Marquer l'invitation comme acceptée
-  await prisma.invitation.update({
-    where: { token },
-    data: { accepted_at: new Date(), accepted_by: user.id },
-  });
+  // Transaction pour éviter les race conditions
+  let user: any;
+  let org: any;
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const inv = await tx.invitation.findUnique({
+        where: { token },
+        include: { organization: true },
+      });
+
+      if (!inv) throw new Error('NOT_FOUND');
+      if (inv.expires_at < new Date()) throw new Error('EXPIRED');
+      if (inv.accepted_at) throw new Error('ALREADY_USED');
+
+      let txUser = existingUser;
+
+      if (!txUser) {
+        const password_hash = await bcrypt.hash(password, 10);
+        txUser = await tx.userApp.create({
+          data: {
+            id: uuidv4(),
+            organization_id: inv.organization_id,
+            full_name,
+            email,
+            password_hash,
+            role: inv.role,
+          },
+        });
+      } else {
+        const existing = await tx.userOrganization.findUnique({
+          where: { user_id_organization_id: { user_id: txUser.id, organization_id: inv.organization_id } },
+        });
+        if (txUser.organization_id === inv.organization_id || existing) {
+          throw new Error('ALREADY_MEMBER');
+        }
+        await tx.userOrganization.create({
+          data: {
+            id: uuidv4(),
+            user_id: txUser.id,
+            organization_id: inv.organization_id,
+            role: inv.role,
+          },
+        });
+      }
+
+      await tx.invitation.update({
+        where: { token },
+        data: { accepted_at: new Date(), accepted_by: txUser.id },
+      });
+
+      return { user: txUser, org: inv.organization, role: inv.role, orgId: inv.organization_id };
+    });
+
+    user = result.user;
+    org = result.org;
+  } catch (err: any) {
+    if (err.message === 'NOT_FOUND') { res.status(404).json({ error: 'Invitation invalide.' }); return; }
+    if (err.message === 'EXPIRED') { res.status(410).json({ error: 'Cette invitation a expiré.' }); return; }
+    if (err.message === 'ALREADY_USED') { res.status(409).json({ error: 'Cette invitation a déjà été utilisée.' }); return; }
+    if (err.message === 'ALREADY_MEMBER') { res.status(409).json({ error: 'Vous faites déjà partie de cette organisation.' }); return; }
+    throw err;
+  }
 
   await createAuditEntry({
-    organizationId: inv.organization_id,
+    organizationId: org.id,
     actor: email,
     action: 'invitation.accept',
     targetType: 'user',
     targetId: user.id,
     targetLabel: user.full_name,
     oldValue: {},
-    newValue: { role: inv.role },
+    newValue: { role: user.role },
     ipAddress: req.ip ?? '',
     userAgent: req.headers['user-agent'] ?? '',
   });
 
-  // Générer un token pour l'org de l'invitation
   const jwtToken = generateToken({
     userId: user.id,
-    organizationId: inv.organization_id,
+    organizationId: org.id,
     email: user.email,
-    role: inv.role,
+    role: user.role,
   });
 
-  const org = inv.organization;
   res.json({
     token: jwtToken,
     user: {
       id: user.id,
-      organization_id: inv.organization_id,
+      organization_id: org.id,
       full_name: user.full_name,
       email: user.email,
-      role: inv.role,
+      role: user.role,
       last_login_at: user.last_login_at,
       created_at: user.created_at,
     },

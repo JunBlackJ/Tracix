@@ -1282,8 +1282,8 @@ router.post('/change-password', requireAuth, async (req, res) => {
   if (!current_password || !new_password) {
     res.status(400).json({ error: 'Champs requis manquants' }); return;
   }
-  if (new_password.length < 8) {
-    res.status(400).json({ error: 'Le nouveau mot de passe doit faire au moins 8 caractères' }); return;
+  if (new_password.length < 10 || !/[A-Z]/.test(new_password) || !/[0-9]/.test(new_password)) {
+    res.status(400).json({ error: 'Le mot de passe doit faire au moins 10 caractères, avec 1 majuscule et 1 chiffre.' }); return;
   }
 
   const user = await prisma.userApp.findUnique({ where: { id: req.user!.userId } });
@@ -1362,8 +1362,8 @@ router.post('/reset-password', authLimiter, async (req, res) => {
   if (!token || !new_password) {
     res.status(400).json({ error: 'Token et nouveau mot de passe requis' }); return;
   }
-  if (new_password.length < 8) {
-    res.status(400).json({ error: 'Le mot de passe doit faire au moins 8 caractères' }); return;
+  if (new_password.length < 10 || !/[A-Z]/.test(new_password) || !/[0-9]/.test(new_password)) {
+    res.status(400).json({ error: 'Le mot de passe doit faire au moins 10 caractères, avec 1 majuscule et 1 chiffre.' }); return;
   }
 
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');

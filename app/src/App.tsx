@@ -112,6 +112,7 @@ function App() {
             element={
               <Dashboard
                 onResolveAlert={store.resolveAlert}
+                onClearResolved={store.clearResolvedAlerts}
                 alerts={store.alerts}
                 auditTrail={store.auditTrail}
               />

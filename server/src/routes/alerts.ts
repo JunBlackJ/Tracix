@@ -155,6 +155,30 @@ router.patch('/:id/resolve', requirePermission('alerts.resolve'), async (req: Re
   res.json(alert);
 });
 
+// DELETE /api/alerts/resolved — supprimer toutes les alertes clôturées
+router.delete('/resolved', requirePermission('alerts.resolve'), async (req: Request, res: Response): Promise<void> => {
+  const orgId = req.user!.organizationId;
+
+  const result = await prisma.alert.deleteMany({
+    where: { organization_id: orgId, is_resolved: true },
+  });
+
+  await createAuditEntry({
+    organizationId: orgId,
+    actor: req.user!.email,
+    action: 'alert.purge_resolved',
+    targetType: 'alert',
+    targetId: '',
+    targetLabel: `${result.count} alertes clôturées supprimées`,
+    oldValue: {},
+    newValue: { deleted_count: result.count },
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] ?? '',
+  });
+
+  res.json({ deleted: result.count });
+});
+
 // POST /api/alerts/:id/advice — AI advice for an alert
 router.post('/:id/advice', requirePermission('alerts.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;

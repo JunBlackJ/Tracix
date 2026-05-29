@@ -433,6 +433,9 @@ export const api = {
     getAdvice(id: string): Promise<{ advice: string; remaining: number; limit: number }> {
       return request(`/alerts/${id}/advice`, { method: 'POST' });
     },
+    deleteResolved(): Promise<{ deleted: number }> {
+      return request('/alerts/resolved', { method: 'DELETE' });
+    },
   },
 
   auditTrail: {

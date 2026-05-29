@@ -209,6 +209,16 @@ export function useStore() {
     }
   }, []);
 
+  // ─── Clear resolved alerts ───
+  const clearResolvedAlerts = useCallback(async () => {
+    try {
+      await api.alerts.deleteResolved();
+      setAlerts((prev) => prev.filter((a) => !a.is_resolved));
+    } catch {
+      // silently fail
+    }
+  }, []);
+
   // ─── Update access level ───
   const updateAccessLevel = useCallback(async (
     accessRightId: string,
@@ -398,6 +408,7 @@ export function useStore() {
     logout,
     resolveAlert,
     resolveAllAlerts,
+    clearResolvedAlerts,
     updateAccessLevel,
     revokeAccess,
     refreshAlerts,

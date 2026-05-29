@@ -13,6 +13,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 interface DashboardProps {
   onResolveAlert: (id: string) => void;
+  onClearResolved?: () => void;
   alerts: Alert[];
   auditTrail: AuditTrail[];
 }
@@ -115,7 +116,7 @@ function StatusPill({ resolved }: { resolved: boolean }) {
 
 // ─── Dashboard ───
 
-export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail }: DashboardProps) {
+export function Dashboard({ onResolveAlert: _onResolveAlert, onClearResolved, alerts, auditTrail }: DashboardProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -256,7 +257,12 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
           <div style={cardHeaderStyle}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Alertes récentes</span>
             <span style={{ fontSize: 11, color: 'oklch(52% 0.012 260)' }}>— {openAlerts} ouvertes</span>
-            <div style={{ marginLeft: 'auto' }}>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+              {onClearResolved && alerts.some(a => a.is_resolved) && (
+                <button onClick={onClearResolved} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(55% 0.22 25 / 0.08)', color: 'oklch(55% 0.22 25)', border: '1px solid oklch(55% 0.22 25 / 0.2)' }}>
+                  Vider clôturées
+                </button>
+              )}
               <Link to="/alertes" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 7, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', textDecoration: 'none' }}>
                 Tout voir →
               </Link>

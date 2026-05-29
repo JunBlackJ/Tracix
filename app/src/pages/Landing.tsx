@@ -336,9 +336,9 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }} className="sm:grid-cols-6">
             {[
-              { src: '/github.svg', name: 'GitHub' }, { src: '/google.svg', name: 'Google' },
-              { src: '/okta.svg', name: 'Okta' }, { src: '/slack.webp', name: 'Slack' },
-              { src: '/microsoft.webp', name: 'Microsoft' }, { src: '/notion.svg', name: 'Notion' },
+              { src: '/githublogo.webp', name: 'GitHub' }, { src: '/googlelogo.webp', name: 'Google' },
+              { src: '/oktalogo.webp', name: 'Okta' }, { src: '/slack.webp', name: 'Slack' },
+              { src: '/microsoft.webp', name: 'Microsoft' }, { src: '/notionlogo.webp', name: 'Notion' },
             ].map(item => (
               <div key={item.name} className="flex flex-col items-center gap-3 p-5 rounded-2xl border transition-all hover:-translate-y-1"
                 style={{ background: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)' }}>

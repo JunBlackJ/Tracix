@@ -188,10 +188,10 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
       </aside>
 
       {/* ── Right content ── */}
-      <main style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 40px 80px', position: 'relative' }}>
+      <main className="flex-1 overflow-y-auto flex flex-col items-center px-5 py-8 sm:px-10 sm:py-14 md:px-10 md:py-[60px] relative">
 
         {/* Background glow */}
-        <div style={{ position: 'fixed', top: '20%', left: '55%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(83,74,183,0.12) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
+        <div className="hidden sm:block" style={{ position: 'fixed', top: '20%', left: '55%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(83,74,183,0.12) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
 
         {/* Progress bar */}
         <div style={{ width: '100%', maxWidth: 560, marginBottom: 8, position: 'relative', zIndex: 1 }}>
@@ -245,7 +245,7 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
                   placeholder="ex. DSSI Groupe Nexia, Acme Corp…"
                   style={inputStyle} />
               </Field>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
                 <Field label="Secteur d'activité">
                   <select value={sector} onChange={e => setSector(e.target.value)} style={inputStyle}>
                     <option value="">Sélectionner…</option>
@@ -273,7 +273,7 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
             </div>
             <div>
               <p style={{ fontSize: 12.5, fontWeight: 600, color: FG, marginBottom: 12 }}>Objectif principal avec Tracix</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {OBJECTIVES.map(o => (
                   <div key={o.key}
                     onClick={() => setObjective(o.key)}
@@ -444,7 +444,7 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
             </div>
 
             {/* Free vs Pro */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Free */}
               <div style={{ border: `1.5px solid ${BORDER}`, borderRadius: 14, padding: '20px 18px', background: CARD, backdropFilter: 'blur(8px)' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Gratuit</div>
@@ -561,7 +561,7 @@ export function Onboarding({ organization, onComplete }: OnboardingProps) {
                 </div>
               )}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {[
                 { path: '/dashboard',  title: "Vue d'ensemble",  sub: 'KPIs, alertes actives, score de risque',   icon: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z' },
                 { path: '/membres',    title: 'Membres',          sub: 'Gérer les utilisateurs et leurs accès',    icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 7a4 4 0 100 8 4 4 0 000-8z' },
@@ -646,7 +646,7 @@ function TipBox({ children, icon = 'info' }: { children: React.ReactNode; icon?:
 }
 
 function Actions({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 4 }}>{children}</div>;
+  return <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-1">{children}</div>;
 }
 
 function PrimaryBtn({ onClick, children, disabled }: { onClick?: () => void; children: React.ReactNode; disabled?: boolean }) {

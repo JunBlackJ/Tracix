@@ -66,7 +66,7 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
       {/* ── Navbar ── */}
       <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999, background: 'rgba(15,14,26,0.72)', backdropFilter: 'blur(20px) saturate(1.6)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <a href="#" className="flex items-center">
+          <a href="/" className="flex items-center">
             <img src="/logo.png" alt="Tracix" className="h-8 w-auto object-contain" />
           </a>
 
@@ -494,22 +494,37 @@ export function Landing({ onLogin, onLoginWithMfa, onRegister }: LandingProps) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-10">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-4">
-                <img src="/logo.png" alt="Tracix" style={{ height: 28, width: 'auto' }} />
+                <a href="/"><img src="/logo.png" alt="Tracix" style={{ height: 28, width: 'auto' }} /></a>
               </div>
               <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', lineHeight: 1.6 }}>
                 La gouvernance des accès, simple et accessible pour les organisations en Afrique de l'Ouest.
               </p>
             </div>
             {[
-              { title: 'Produit', links: ['Fonctionnalités', 'Tarifs', 'Intégrations', 'Sécurité'] },
-              { title: 'Ressources', links: ['Documentation', 'API', 'Changelog', 'Status'] },
-              { title: 'Légal', links: ['Confidentialité', 'CGU', 'Cookies', 'Contact'] },
+              { title: 'Produit', links: [
+                { label: 'Fonctionnalités', href: '#features' },
+                { label: 'Tarifs', href: '#pricing' },
+                { label: 'Intégrations', href: '#integrations' },
+                { label: 'Sécurité', href: '#features' },
+              ]},
+              { title: 'Ressources', links: [
+                { label: 'Documentation', href: '#about' },
+                { label: 'API', href: '#about' },
+                { label: 'Changelog', href: '#about' },
+                { label: 'Status', href: '#about' },
+              ]},
+              { title: 'Légal', links: [
+                { label: 'Confidentialité', href: '#about' },
+                { label: 'CGU', href: '#about' },
+                { label: 'Cookies', href: '#about' },
+                { label: 'Contact', href: '#about' },
+              ]},
             ].map(col => (
               <div key={col.title}>
                 <h4 style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>{col.title}</h4>
                 <ul style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {col.links.map(l => (
-                    <li key={l}><a href="#" style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>{l}</a></li>
+                    <li key={l.label}><a href={l.href} style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>{l.label}</a></li>
                   ))}
                 </ul>
               </div>

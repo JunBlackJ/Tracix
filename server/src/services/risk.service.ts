@@ -65,7 +65,7 @@ export async function computeMemberRisk(memberId: string): Promise<RiskResult> {
       )
     );
     // Retard < 30j → −15 pts | Retard 30–90j → −25 pts | Retard > 90j → −35 pts
-    const overdueDays = maxDays - reviewDelay;
+    const overdueDays = Math.max(0, maxDays - reviewDelay);
     const penalty = overdueDays < 30 ? 15 : overdueDays <= 90 ? 25 : 35;
     score -= penalty;
     factors.push({

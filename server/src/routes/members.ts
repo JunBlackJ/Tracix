@@ -206,23 +206,20 @@ router.post('/:id/offboard', requirePermission('members.write'), async (req: Req
   });
   if (!member) { res.status(404).json({ error: 'Member not found' }); return; }
 
-  // Revoke all active access rights
   const revokedCount = member.accessRights.length;
-  if (revokedCount > 0) {
-    await prisma.accessRight.updateMany({
+
+  // Atomic: revoke access + update status + resolve alerts in one transaction
+  await prisma.$transaction([
+    ...(revokedCount > 0 ? [prisma.accessRight.updateMany({
       where: { member_id: member.id, level: { not: 'none' } },
       data: { level: 'none', notes: `Révoqué lors de l'offboarding par ${req.user!.email}` },
-    });
-  }
-
-  // Set member status to inactif
-  await prisma.member.update({ where: { id: member.id }, data: { status: 'inactif' } });
-
-  // Resolve open member_offboarding alerts
-  await prisma.alert.updateMany({
-    where: { organization_id: orgId, source_id: member.id, type: 'member_offboarding', is_resolved: false },
-    data: { is_resolved: true, resolved_by: req.user!.email, resolved_at: new Date().toISOString() },
-  });
+    })] : []),
+    prisma.member.update({ where: { id: member.id }, data: { status: 'inactif' } }),
+    prisma.alert.updateMany({
+      where: { organization_id: orgId, source_id: member.id, type: 'member_offboarding', is_resolved: false },
+      data: { is_resolved: true, resolved_by: req.user!.email, resolved_at: new Date().toISOString() },
+    }),
+  ]);
 
   await createAuditEntry({
     organizationId: orgId,

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { parsePagination, paginatedResult } from '../utils/pagination';
 
@@ -45,7 +46,7 @@ const SystemSchema = z.object({
 });
 
 // GET /api/systems
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('systemes.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { search, status, environment, criticality } = req.query;
   const pagination = parsePagination(req);
@@ -76,7 +77,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/systems/:id
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', requirePermission('systemes.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const system = await prisma.system.findFirst({
     where: { id: req.params.id, organization_id: orgId },
@@ -91,7 +92,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/systems
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requirePermission('systemes.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const body = SystemSchema.parse(req.body);
 
@@ -120,7 +121,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // PUT /api/systems/:id
-router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+router.put('/:id', requirePermission('systemes.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await prisma.system.findFirst({
@@ -155,7 +156,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // DELETE /api/systems/:id
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requirePermission('systemes.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await prisma.system.findFirst({

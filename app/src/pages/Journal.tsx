@@ -66,6 +66,8 @@ export function Journal({ auditTrail: initialTrail }: JournalProps) {
     if (search && !e.actor.toLowerCase().includes(search.toLowerCase()) && !e.action.toLowerCase().includes(search.toLowerCase())) return false;
     if (dateFrom && new Date(e.created_at) < new Date(dateFrom)) return false;
     if (dateTo && new Date(e.created_at) > new Date(dateTo + 'T23:59:59')) return false;
+    if (catFilter && e.target_type !== catFilter) return false;
+    if (resultFilter && !e.action.toLowerCase().includes(resultFilter.toLowerCase())) return false;
     return true;
   });
 

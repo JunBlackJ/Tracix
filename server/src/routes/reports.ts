@@ -82,17 +82,32 @@ Réponds UNIQUEMENT avec du JSON valide :
     awsSecretKey: awsSecretAccessKey,
   });
 
-  const message = await client.messages.create({
-    model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
-    max_tokens: 4000,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  let message;
+  try {
+    message = await client.messages.create({
+      model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+  } catch (aiErr: any) {
+    res.status(503).json({ error: 'Service IA indisponible. Veuillez réessayer.' });
+    return;
+  }
 
   const raw = (message.content[0] as { type: string; text: string }).text.trim();
-  console.log('[Reports] Raw AI response (first 500 chars):', raw.substring(0, 500));
   const jsonStart = raw.indexOf('{');
   const jsonEnd = raw.lastIndexOf('}');
-  const sections = JSON.parse(raw.substring(jsonStart, jsonEnd + 1));
+  if (jsonStart === -1 || jsonEnd === -1) {
+    res.status(500).json({ error: 'Format de réponse IA invalide.' });
+    return;
+  }
+  let sections: any;
+  try {
+    sections = JSON.parse(raw.substring(jsonStart, jsonEnd + 1));
+  } catch {
+    res.status(500).json({ error: 'Format de réponse IA invalide.' });
+    return;
+  }
 
   // Decode HTML entities (run twice to handle double-encoding like &amp;amp;)
   const decodeOnce = (s: string): string =>

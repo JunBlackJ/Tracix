@@ -3,7 +3,11 @@
 
 const ICON_MAP: Record<string, string> = {
   // By platform name (lowercase)
-  'github':      'https://cdn.simpleicons.org/github/181717',
+  'github':      '/githublogo.webp',
+  'google':      '/googlelogo.webp',
+  'google workspace': '/googlelogo.webp',
+  'okta':        '/oktalogo.webp',
+  'notion':      '/notionlogo.webp',
   'cloudflare':  'https://cdn.simpleicons.org/cloudflare/F38020',
   'mailjet':     'https://cdn.simpleicons.org/mailjet/9B59B6',
   'aws':         'https://cdn.simpleicons.org/amazonaws/FF9900',
@@ -13,7 +17,6 @@ const ICON_MAP: Record<string, string> = {
   'gitlab':      'https://cdn.simpleicons.org/gitlab/FC6D26',
   'jira':        'https://cdn.simpleicons.org/jira/0052CC',
   'slack':       'https://cdn.simpleicons.org/slack/4A154B',
-  'notion':      'https://cdn.simpleicons.org/notion/000000',
   'linear':      'https://cdn.simpleicons.org/linear/5E6AD2',
   'figma':       'https://cdn.simpleicons.org/figma/F24E1E',
   'vercel':      'https://cdn.simpleicons.org/vercel/000000',

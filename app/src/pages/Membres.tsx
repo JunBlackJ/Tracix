@@ -14,6 +14,7 @@ import { api } from '@/lib/api';
 import { ACCESS_LEVEL_CONFIG, SEVERITY_CONFIG } from '@/types';
 import type { Member, Platform, Alert, AccessRight, AccountType, MemberStatus, AccessLevel } from '@/types';
 import { RiskGauge } from '@/components/ui/RiskBadge';
+import { PlatformIcon } from '@/components/ui/PlatformIcon';
 import { toast } from 'sonner';
 import { getPlanLimits, isAtLimit, LIMIT_MSG } from '@/lib/planLimits';
 import { PlanGate } from '@/components/PlanGate';
@@ -682,7 +683,12 @@ function MemberAccessTable({ memberId, member, platforms, onRevokeAccess, onUpda
               const isOpen = actionMenu === a.id;
               return (
                 <tr key={a.id} className={`border-b border-gray-100 hover:bg-gray-50 ${a.level === 'none' ? 'opacity-40' : ''}`}>
-                  <td className="px-3 py-2.5 font-medium text-gray-800">{platform?.name || a.platform_id}</td>
+                  <td className="px-3 py-2.5 font-medium text-gray-800">
+                    <div className="flex items-center gap-2">
+                      <PlatformIcon name={platform?.name || a.platform_id} size={20} />
+                      {platform?.name || a.platform_id}
+                    </div>
+                  </td>
                   <td className="px-3 py-2.5 text-center">
                     <div className="inline-flex items-center gap-1.5 justify-center">
                       <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${cfg.bg} ${cfg.text}`}>

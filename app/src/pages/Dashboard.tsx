@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import type { DashboardStats } from '@/lib/api';
 import { SEVERITY_CONFIG } from '@/types';
 import type { Alert, AuditTrail } from '@/types';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface DashboardProps {
   onResolveAlert: (id: string) => void;
@@ -22,13 +23,13 @@ function KpiCard({ label, value, delta, deltaUp, kpiColor, icon }: {
   label: string; value: string | number; delta: string; deltaUp?: boolean; kpiColor: string; icon: React.ReactNode;
 }) {
   return (
-    <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10, position: 'relative', overflow: 'hidden' }}>
+    <div className="relative overflow-hidden" style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, padding: '14px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: kpiColor, borderRadius: '10px 10px 0 0' }} />
-      <div style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: 8, background: kpiColor, opacity: 0.12 }} />
-      <div style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, display: 'grid', placeItems: 'center' }}>{icon}</div>
-      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'oklch(52% 0.012 260)' }}>{label}</div>
-      <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(18% 0.02 260)' }}>{value}</div>
-      <div style={{ fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: deltaUp === true ? 'oklch(62% 0.16 155)' : deltaUp === false ? 'oklch(55% 0.22 25)' : 'oklch(52% 0.012 260)' }}>{delta}</div>
+      <div className="hidden sm:block" style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: 8, background: kpiColor, opacity: 0.12 }} />
+      <div className="hidden sm:grid" style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, placeItems: 'center' }}>{icon}</div>
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'oklch(52% 0.012 260)' }}>{label}</div>
+      <div className="text-2xl sm:text-[32px]" style={{ fontWeight: 700, lineHeight: 1, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(18% 0.02 260)' }}>{value}</div>
+      <div className="text-[10px] sm:text-[11.5px]" style={{ fontFamily: 'JetBrains Mono, monospace', color: deltaUp === true ? 'oklch(62% 0.16 155)' : deltaUp === false ? 'oklch(55% 0.22 25)' : 'oklch(52% 0.012 260)' }}>{delta}</div>
     </div>
   );
 }
@@ -38,12 +39,12 @@ function KpiCard({ label, value, delta, deltaUp, kpiColor, icon }: {
 function RiskBar({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
   const pct = total > 0 ? (count / total) * 100 : 0;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontSize: 12, fontWeight: 500, color: 'oklch(18% 0.02 260)', width: 70, flexShrink: 0 }}>{label}</span>
+    <div className="flex items-center gap-2 sm:gap-3">
+      <span className="text-[11px] sm:text-xs font-medium text-gray-900 w-[55px] sm:w-[70px] flex-shrink-0">{label}</span>
       <div style={{ flex: 1, height: 8, background: 'oklch(90% 0.006 260)', borderRadius: 999, overflow: 'hidden' }}>
         <div style={{ height: '100%', borderRadius: 999, background: color, width: `${pct}%`, transition: 'width 0.6s cubic-bezier(.16,1,.3,1)' }} />
       </div>
-      <span style={{ fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(52% 0.012 260)', width: 36, textAlign: 'right', flexShrink: 0 }}>{count}</span>
+      <span className="text-[10px] sm:text-[11.5px] font-mono text-gray-500 w-[28px] sm:w-[36px] text-right flex-shrink-0">{count}</span>
     </div>
   );
 }
@@ -64,8 +65,8 @@ function Gauge({ score }: { score: number }) {
     : { background: 'oklch(62% 0.16 155 / 0.12)', color: 'oklch(62% 0.16 155)' };
 
   return (
-    <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flex: 1 }}>
-      <svg width="140" height="84" viewBox="0 0 140 84">
+    <div className="flex flex-col items-center gap-2 flex-1 p-4 sm:p-5">
+      <svg className="w-[100px] h-[60px] sm:w-[140px] sm:h-[84px]" viewBox="0 0 140 84" preserveAspectRatio="xMidYMid meet">
         <path d="M14 77 A56 56 0 0 1 126 77" stroke="oklch(90% 0.006 260)" strokeWidth="10" fill="none" strokeLinecap="round" />
         <path d="M14 77 A56 56 0 0 1 126 77" stroke="url(#gGrad)" strokeWidth="10" fill="none" strokeLinecap="round" strokeDasharray={arc} strokeDashoffset={dash} />
         <defs>
@@ -76,9 +77,9 @@ function Gauge({ score }: { score: number }) {
           </linearGradient>
         </defs>
       </svg>
-      <div style={{ fontSize: 36, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(18% 0.02 260)' }}>{score}</div>
+      <div className="text-2xl sm:text-4xl" style={{ fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(18% 0.02 260)' }}>{score}</div>
       <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>/ 100</div>
-      <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '3px 10px', borderRadius: 999, ...labelStyle }}>{riskLabel}</span>
+      <span className="text-[10px] sm:text-[11px]" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '3px 10px', borderRadius: 999, ...labelStyle }}>{riskLabel}</span>
     </div>
   );
 }
@@ -116,6 +117,7 @@ function StatusPill({ resolved }: { resolved: boolean }) {
 
 export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail }: DashboardProps) {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
@@ -231,14 +233,14 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
             <span style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Score global</span>
           </div>
           <Gauge score={avgScore} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 16 }}>
+          <div className="flex flex-col gap-2 pb-4 px-3 sm:px-5">
             {[
-              { label: 'Accès privilégiés (admin)', val: adminCount,     color: 'oklch(62% 0.18 52)' },
-              { label: 'MFA désactivé',             val: mfaDisabled,    color: 'oklch(62% 0.18 52)' },
-              { label: 'Inactifs avec accès',       val: inactiveAccess, color: 'oklch(70% 0.14 88)' },
-              { label: 'Accès multi-plateformes',   val: multiPlatform,  color: 'oklch(70% 0.14 88)' },
+              { label: 'Accès privilégiés', val: adminCount,     color: 'oklch(62% 0.18 52)' },
+              { label: 'MFA désactivé',     val: mfaDisabled,    color: 'oklch(62% 0.18 52)' },
+              { label: 'Inactifs avec accès', val: inactiveAccess, color: 'oklch(70% 0.14 88)' },
+              { label: 'Multi-plateformes', val: multiPlatform,  color: 'oklch(70% 0.14 88)' },
             ].map(row => (
-              <div key={row.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, padding: '0 20px' }}>
+              <div key={row.label} className="flex items-center justify-between text-[11px] sm:text-xs">
                 <span style={{ color: 'oklch(52% 0.012 260)' }}>{row.label}</span>
                 <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: row.color }}>{row.val}</span>
               </div>
@@ -261,6 +263,24 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
             </div>
           </div>
           {recentAlerts.length > 0 ? (
+            isMobile ? (
+              <div>
+                {recentAlerts.map((alert) => (
+                  <div key={alert.id} onClick={() => navigate('/alertes')}
+                    className="flex items-start gap-3 p-3 border-b active:bg-gray-50 cursor-pointer"
+                    style={{ borderColor: 'oklch(90% 0.006 260)' }}>
+                    <div style={{ width: 6, borderRadius: 999, alignSelf: 'stretch', flexShrink: 0, background: alert.severity === 'critical' ? 'oklch(55% 0.22 25)' : alert.severity === 'warning' ? 'oklch(62% 0.18 52)' : 'oklch(70% 0.14 88)' }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-gray-900 line-clamp-2">{alert.message}</div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <SevPill sev={alert.severity} />
+                        <span className="text-[10px] font-mono text-gray-400">{new Date(alert.created_at).toLocaleDateString('fr-FR')}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
@@ -295,6 +315,7 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
                 </tbody>
               </table>
             </div>
+            )
           ) : (
             <div style={{ padding: '48px 20px', textAlign: 'center' }}>
               <CheckCircle2 style={{ width: 40, height: 40, color: 'oklch(62% 0.16 155)', margin: '0 auto 8px' }} />

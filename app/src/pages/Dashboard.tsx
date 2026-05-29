@@ -156,18 +156,20 @@ export function Dashboard({ onResolveAlert: _onResolveAlert, alerts, auditTrail 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Topbar row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div>
           <div style={{ fontSize: 15, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Vue d'ensemble</div>
           <div style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>Tracix — Plateforme de gestion des accès</div>
         </div>
-        <div style={{ flex: 1 }} />
-        <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
-          <SlidersHorizontal size={14} /> Filtres
-        </button>
-        <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
-          <Download size={14} /> Exporter
-        </button>
+        <div className="flex-1" />
+        <div className="flex gap-2">
+          <button className="hidden sm:inline-flex" style={{ alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)' }}>
+            <SlidersHorizontal size={14} /> Filtres
+          </button>
+          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none' }}>
+            <Download size={14} /> Exporter
+          </button>
+        </div>
       </div>
 
       {/* KPI grid — 4 cards */}

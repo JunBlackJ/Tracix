@@ -6,8 +6,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, ArrowLeft, Shield, AlertTriangle,
-  TrendingUp, Edit2, X, Save, Loader2, ShieldAlert, Download, UserX, Users,
+  TrendingUp, Edit2, X, Save, Loader2, ShieldAlert, Download, UserX, Users, ChevronRight,
 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { EmptyState, FilterEmpty } from '@/components/ui/EmptyState';
 import * as XLSX from 'xlsx';
 import { api } from '@/lib/api';
@@ -128,6 +129,7 @@ function KpiCard({ label, value, delta, deltaUp, kpiColor, icon }: {
 
 function MembresList({ members, accessRights = [], onNew, plan }: { members: Member[]; accessRights?: AccessRight[]; onNew: () => void; plan?: string }) {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
@@ -304,7 +306,48 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
           </select>
         </div>
 
-        {/* Table */}
+        {/* Table (desktop) / Cards (mobile) */}
+        {isMobile ? (
+          <div>
+            {pageItems.map((m) => {
+              const mfaOk = !hasMfaIssue(m);
+              return (
+                <div key={m.id} onClick={() => navigate(`/membres/${m.id}`)}
+                  className="flex items-center gap-3 p-4 active:bg-gray-50 transition-colors"
+                  style={{ borderBottom: '1px solid oklch(90% 0.006 260)', cursor: 'pointer' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'oklch(42% 0.12 280 / 0.12)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: 'oklch(42% 0.18 280)', flexShrink: 0 }}>
+                    {m.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900 truncate">{m.full_name}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 28, height: 18, borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', background: scoreBg(m.risk_score), color: scoreColor(m.risk_score), padding: '0 4px' }}>{m.risk_score}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 truncate mt-0.5">{m.email}</div>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: 'oklch(42% 0.18 280 / 0.08)', color: 'oklch(42% 0.18 280)' }}>{ROLE_LABEL[m.account_type]}</span>
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium" style={statusStyle(m.status)}>
+                        <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor' }} />
+                        {m.status.charAt(0).toUpperCase() + m.status.slice(1)}
+                      </span>
+                      {mfaOk
+                        ? <span className="text-[10px] font-semibold" style={{ color: 'oklch(62% 0.16 155)' }}>MFA ✓</span>
+                        : <span className="text-[10px] font-semibold" style={{ color: 'oklch(62% 0.18 52)' }}>MFA ✗</span>
+                      }
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                </div>
+              );
+            })}
+            {members.length === 0 && (
+              <EmptyState icon={Users} title="Aucun membre" description="Ajoutez votre premier membre ou importez une liste via le module Import." action={{ label: '+ Ajouter un membre', onClick: onNew }} hint="Conseil : utilisez l'Import IA pour charger un fichier Excel en quelques secondes." />
+            )}
+            {members.length > 0 && filtered.length === 0 && (
+              <FilterEmpty onReset={() => { setSearch(''); setRoleFilter(''); setRiskFilter(''); setStatusFilter(''); setRiskSort('none'); setPage(1); }} />
+            )}
+          </div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
@@ -395,6 +438,7 @@ function MembresList({ members, accessRights = [], onNew, plan }: { members: Mem
             </tbody>
           </table>
         </div>
+        )}
 
         {/* Pagination */}
         {totalPages > 1 && (

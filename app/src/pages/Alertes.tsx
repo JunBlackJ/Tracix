@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { Search, X, Sparkles, Loader2, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import type { Alert, Platform, Member, System, NetworkFlow, Subscription } from '@/types';
 import { api } from '@/lib/api';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface AlertesProps {
   onResolveAlert: (id: string) => void;
@@ -431,10 +432,11 @@ function AdviceModal({ alert, onClose, onResolve }: { alert: Alert; onClose: () 
 type TabFilter = 'all' | 'critical' | 'warning' | 'closed';
 
 export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) {
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState<TabFilter>('all');
   const [search, setSearch] = useState('');
   const [sevFilter, setSevFilter] = useState('all');
-  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(alerts[0] ?? null);
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(isMobile ? null : (alerts[0] ?? null));
   const [adviceAlert, setAdviceAlert] = useState<Alert | null>(null);
   const [revokeAlert, setRevokeAlert] = useState<Alert | null>(null);
 
@@ -466,16 +468,17 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Topbar row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
         <div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>Alertes</div>
           <div style={{ fontSize: '12px', color: 'oklch(52% 0.012 260)' }}>
             {openAlerts.length} alertes ouvertes · priorité critique en tête
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="flex gap-2 flex-wrap">
           <Link to="/parametres?section=organisation"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }}>
+            className="hidden sm:inline-flex"
+            style={{ alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }}>
             Configurer les règles
           </Link>
           {unresolvedIds.length > 0 && (
@@ -488,7 +491,7 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
       </div>
 
       {/* KPI grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <KpiCard label="Alertes ouvertes" value={openAlerts.length} delta={`↑ +${Math.max(0, openAlerts.length - 4)} depuis hier`} deltaColor="oklch(55% 0.22 25)" color="oklch(55% 0.22 25)" svgPath="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 01-3.46 0" />
         <KpiCard label="Critiques" value={critiques.length} delta="Action immédiate requise" deltaColor="oklch(55% 0.22 25)" color="oklch(55% 0.22 25)" svgPath="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01" />
         <KpiCard label="En cours d'analyse" value={alerts.filter((a) => !a.is_resolved && a.severity === 'warning').length} delta="Assignées à l'équipe" deltaColor="oklch(52% 0.012 260)" color="oklch(62% 0.18 52)" svgPath="M12 2a10 10 0 100 20A10 10 0 0012 2z M12 6v6l4 2" />
@@ -496,13 +499,14 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
       </div>
 
       {/* Alert list + detail panel */}
-      <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'row', overflow: 'hidden', minHeight: '500px' }}>
+      <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'row', overflow: 'hidden', minHeight: isMobile ? undefined : '500px' }}>
         {/* Alert list column */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
           {/* Tab bar */}
-          <div style={{ display: 'flex', gap: '2px', padding: '12px 20px', borderBottom: '1px solid oklch(90% 0.006 260)' }}>
+          <div className="flex gap-0.5 px-4 lg:px-5 py-3 overflow-x-auto scrollbar-none" style={{ borderBottom: '1px solid oklch(90% 0.006 260)' }}>
             {TABS.map(({ id, label, count }) => (
               <button key={id} onClick={() => setTab(id)}
+                className="flex-shrink-0"
                 style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '12.5px', fontWeight: tab === id ? 600 : 500, cursor: 'pointer', color: tab === id ? 'oklch(42% 0.18 280)' : 'oklch(52% 0.012 260)', background: tab === id ? 'oklch(42% 0.18 280 / 0.12)' : 'transparent', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', transition: 'all 0.12s' }}>
                 {label}
                 {count != null && (
@@ -515,25 +519,30 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
           </div>
 
           {/* Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', borderBottom: '1px solid oklch(90% 0.006 260)', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '200px', maxWidth: '320px' }}>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 p-3 lg:px-4 lg:py-3" style={{ borderBottom: '1px solid oklch(90% 0.006 260)' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
               <Search style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', color: 'oklch(52% 0.012 260)', pointerEvents: 'none' }} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une alerte…"
                 style={{ width: '100%', padding: '7px 12px 7px 32px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(97% 0.005 260)', color: 'oklch(18% 0.02 260)', outline: 'none', fontFamily: 'inherit' }} />
             </div>
-            <select value={sevFilter} onChange={(e) => setSevFilter(e.target.value)}
-              style={{ padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-              <option value="all">Toutes les sévérités</option>
-              <option value="critical">Critique</option>
-              <option value="warning">Élevé</option>
-              <option value="info">Moyen</option>
-            </select>
-            <select style={{ padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-              <option>Tous les types</option>
-              <option>MFA manquant</option>
-              <option>Compte orphelin</option>
-              <option>Revue dépassée</option>
-            </select>
+            <div className="flex gap-2">
+              <select value={sevFilter} onChange={(e) => setSevFilter(e.target.value)}
+                className="flex-1 sm:flex-none"
+                style={{ padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                <option value="all">Toutes les sévérités</option>
+                <option value="critical">Critique</option>
+                <option value="warning">Élevé</option>
+                <option value="info">Moyen</option>
+              </select>
+              <select
+                className="flex-1 sm:flex-none"
+                style={{ padding: '7px 12px', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', background: 'oklch(100% 0 0)', color: 'oklch(18% 0.02 260)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                <option>Tous les types</option>
+                <option>MFA manquant</option>
+                <option>Compte orphelin</option>
+                <option>Revue dépassée</option>
+              </select>
+            </div>
           </div>
 
           {/* Alert rows */}
@@ -578,8 +587,8 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
           </div>
         </div>
 
-        {/* Detail panel */}
-        {sel && (
+        {/* Detail panel — desktop inline, mobile overlay */}
+        {sel && !isMobile && (
           <div style={{ width: '360px', flexShrink: 0, borderLeft: '1px solid oklch(90% 0.006 260)', background: 'oklch(100% 0 0)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
             <div style={{ padding: '20px', borderBottom: '1px solid oklch(90% 0.006 260)' }}>
               <div style={{ fontSize: '14px', fontWeight: 600, color: 'oklch(18% 0.02 260)', lineHeight: 1.4, marginBottom: '12px' }}>{sel.source_label}</div>
@@ -648,6 +657,58 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
           </div>
         )}
       </div>
+
+      {/* Mobile detail sheet */}
+      {isMobile && sel && (
+        <div className="fixed inset-0 z-40" onClick={() => setSelectedAlert(null)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl overflow-y-auto"
+            style={{ maxHeight: '85vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'oklch(90% 0.006 260)' }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>{sel.source_label}</div>
+              <button onClick={() => setSelectedAlert(null)} className="p-2 rounded-lg hover:bg-gray-100">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="flex gap-2 flex-wrap mb-4">
+                <Pill style={sevPillStyle(sel.severity)}>{sevLabel(sel.severity)}</Pill>
+                <Pill style={statusPillStyle(statusKey(sel))}>{statusLabel(sel)}</Pill>
+              </div>
+              <div className="space-y-2 mb-4">
+                {[
+                  { label: 'Module', value: sel.source_module },
+                  { label: 'Type', value: TYPE_LABELS[sel.type] ?? sel.type },
+                  { label: 'Message', value: sel.message },
+                  { label: 'Détectée', value: new Date(sel.created_at).toLocaleString('fr-FR') },
+                ].map((f, i) => (
+                  <div key={i} className="flex gap-2 text-xs">
+                    <span className="text-gray-500 min-w-[80px]">{f.label}</span>
+                    <span className="text-gray-900 font-medium">{f.value}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => setAdviceAlert(sel)}
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-medium text-white"
+                  style={{ background: 'oklch(42% 0.18 280)' }}>
+                  <Sparkles className="w-4 h-4" /> Conseiller IA
+                </button>
+                {!sel.is_resolved && (
+                  <button onClick={() => setRevokeAlert(sel)}
+                    className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-medium"
+                    style={{ background: 'oklch(55% 0.22 25 / 0.1)', color: 'oklch(55% 0.22 25)', border: '1px solid oklch(55% 0.22 25 / 0.2)' }}>
+                    Traiter / Révoquer
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {adviceAlert && (
         <AdviceModal

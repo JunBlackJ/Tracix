@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { UserApp, Organization, ModuleId, CustomModule, CustomModuleType } from '@/types';
 import type { OrgEntry } from '@/hooks/useStore';
+import { BottomTabBar } from './BottomTabBar';
 
 const CUSTOM_MODULE_ICONS: Record<CustomModuleType, React.ElementType> = {
   liste: BarChart2,
@@ -401,8 +402,14 @@ export function AppLayout({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-7">{children}</main>
+        <main className="flex-1 p-4 lg:p-7 pb-20 lg:pb-7">{children}</main>
       </div>
+
+      {/* Bottom Tab Bar mobile */}
+      <BottomTabBar
+        unresolvedAlerts={unresolvedAlerts}
+        onMoreClick={() => setSidebarOpen(true)}
+      />
 
       {/* Modal nouvelle org */}
       {showNewOrgModal && (

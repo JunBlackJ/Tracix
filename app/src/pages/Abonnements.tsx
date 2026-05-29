@@ -276,7 +276,7 @@ export function Abonnements({ subscriptions, categories = [], onSubscriptionCrea
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm min-w-[900px]">
+        <table className="w-full text-sm min-w-[700px]">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
               <th className="px-4 py-3 text-left font-semibold text-gray-700">Nom</th>

@@ -276,7 +276,7 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
       </div>
 
       {/* KPI grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <KpiCard label="Score moyen global" value={avgScore} delta={members.length > 0 ? `${members.length} membres évalués` : '—'} deltaDir={avgScore <= 59 ? 'down' : avgScore >= 80 ? 'up' : 'neutral'} color={riskScoreColor(avgScore)} svgPath="M22 12h-4l-3 9-6-18-3 9H2" />
         <KpiCard label="Score le plus bas (≤ 39)" value={critiques} delta={critiques > 0 ? `${((critiques / Math.max(1, members.length)) * 100).toFixed(1)}% des membres` : '→ Aucun'} deltaDir={critiques > 0 ? 'down' : 'neutral'} color="oklch(55% 0.22 25)" svgPath="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01" />
         <KpiCard label="Score risqué (40–59)" value={elevated} delta={elevated > 0 ? `${((elevated / Math.max(1, members.length)) * 100).toFixed(1)}% des membres` : '→ Aucun'} deltaDir={elevated > 0 ? 'down' : 'neutral'} color="oklch(62% 0.18 52)" svgPath="M12 2a10 10 0 100 20A10 10 0 0012 2z M12 8v4 M12 16h.01" />
@@ -284,7 +284,7 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
       </div>
 
       {/* Row 2/3 + 1/3 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
         {/* Evolution / Facteurs card */}
         <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)', gap: '10px', flexWrap: 'wrap' }}>
@@ -325,7 +325,7 @@ export function ScoreRisque({ members, platforms, accessRights }: ScoreRisquePro
       </div>
 
       {/* Row 1/2 + 1/2 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Factor list */}
         <div style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '10px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid oklch(90% 0.006 260)' }}>

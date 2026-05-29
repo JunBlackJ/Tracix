@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, FileText, Search } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { AuditTrail } from '@/types';
 
 interface JournalProps {
@@ -38,6 +39,7 @@ function resultPill(result?: string): React.ReactNode {
 }
 
 export function Journal({ auditTrail: initialTrail }: JournalProps) {
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -145,13 +147,13 @@ export function Journal({ auditTrail: initialTrail }: JournalProps) {
       </div>
 
       {/* Stats row */}
-      <div style={{ display: 'flex', gap: 16 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
           { label: "Entrées aujourd'hui", value: todayCount, color: 'oklch(42% 0.18 280)' },
           { label: "Échecs d'authentification", value: failCount, color: 'oklch(55% 0.22 25)' },
           { label: 'Actions admin', value: adminCount, color: 'oklch(18% 0.02 260)' },
         ].map(s => (
-          <div key={s.label} style={{ flex: 1, background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, padding: '18px 20px' }}>
+          <div key={s.label} style={{ background: 'oklch(100% 0 0)', border: '1px solid oklch(90% 0.006 260)', borderRadius: 10, padding: '18px 20px' }}>
             <div style={{ fontSize: 11, color: 'oklch(52% 0.012 260)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{s.label}</div>
             <div style={{ fontSize: 26, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '-0.02em', color: s.color }}>{s.value.toLocaleString('fr-FR')}</div>
           </div>
@@ -164,53 +166,83 @@ export function Journal({ auditTrail: initialTrail }: JournalProps) {
           <span style={{ fontSize: 13, fontWeight: 600, color: 'oklch(18% 0.02 260)' }}>Entrées du journal</span>
           <span style={{ fontSize: 11, color: 'oklch(52% 0.012 260)' }}>— {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr>
-                {['Horodatage', 'Acteur', 'Catégorie', 'Action', 'Ressource cible', 'IP source', 'Résultat'].map(h => (
-                  <th key={h} style={thStyle}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {pageItems.map((entry) => (
-                <tr key={entry.id} style={{ borderBottom: '1px solid oklch(90% 0.006 260)', transition: 'background 0.1s' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                  <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>
-                    {new Date(entry.created_at).toLocaleString('fr-FR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </td>
-                  <td style={tdStyle}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <span style={{ fontSize: 12.5, fontWeight: 500 }}>{entry.actor}</span>
-                      <span style={{ fontSize: 10.5, color: 'oklch(52% 0.012 260)' }}>{entry.target_type || 'Utilisateur'}</span>
-                    </div>
-                  </td>
-                  <td style={tdStyle}>{catPill(entry.action)}</td>
-                  <td style={{ ...tdStyle, color: 'oklch(18% 0.02 260)' }}>{entry.action}</td>
-                  <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{entry.target_label}</td>
-                  <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{entry.ip_address || '—'}</td>
-                  <td style={tdStyle}>{resultPill(
+
+        {isMobile ? (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {pageItems.map((entry) => (
+              <div key={entry.id} style={{ padding: '14px 16px', borderBottom: '1px solid oklch(90% 0.006 260)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: 'oklch(52% 0.012 260)' }}>
+                    {new Date(entry.created_at).toLocaleString('fr-FR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  {resultPill(
                     entry.action.toLowerCase().includes('fail') || entry.action.toLowerCase().includes('échec') || entry.action.toLowerCase().includes('error')
                       ? 'fail'
                       : entry.action.toLowerCase().includes('deny') || entry.action.toLowerCase().includes('refus') || entry.action.toLowerCase().includes('reject')
                       ? 'deny'
                       : 'success'
-                  )}</td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
+                  )}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'oklch(18% 0.02 260)', marginBottom: 4 }}>{entry.actor}</div>
+                <div style={{ fontSize: 12, color: 'oklch(42% 0.012 260)' }}>{entry.action}</div>
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <div style={{ padding: '48px 20px', textAlign: 'center', color: 'oklch(52% 0.012 260)', fontSize: 13 }}>
+                Aucune entrée trouvée
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
                 <tr>
-                  <td colSpan={7} style={{ padding: '48px 20px', textAlign: 'center', color: 'oklch(52% 0.012 260)', fontSize: 13 }}>
-                    Aucune entrée trouvée
-                  </td>
+                  {['Horodatage', 'Acteur', 'Catégorie', 'Action', 'Ressource cible', 'IP source', 'Résultat'].map(h => (
+                    <th key={h} style={thStyle}>{h}</th>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid oklch(90% 0.006 260)' }}>
+              </thead>
+              <tbody>
+                {pageItems.map((entry) => (
+                  <tr key={entry.id} style={{ borderBottom: '1px solid oklch(90% 0.006 260)', transition: 'background 0.1s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'oklch(97% 0.005 260)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                    <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>
+                      {new Date(entry.created_at).toLocaleString('fr-FR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </td>
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 500 }}>{entry.actor}</span>
+                        <span style={{ fontSize: 10.5, color: 'oklch(52% 0.012 260)' }}>{entry.target_type || 'Utilisateur'}</span>
+                      </div>
+                    </td>
+                    <td style={tdStyle}>{catPill(entry.action)}</td>
+                    <td style={{ ...tdStyle, color: 'oklch(18% 0.02 260)' }}>{entry.action}</td>
+                    <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{entry.target_label}</td>
+                    <td style={{ ...tdStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'oklch(52% 0.012 260)' }}>{entry.ip_address || '—'}</td>
+                    <td style={tdStyle}>{resultPill(
+                      entry.action.toLowerCase().includes('fail') || entry.action.toLowerCase().includes('échec') || entry.action.toLowerCase().includes('error')
+                        ? 'fail'
+                        : entry.action.toLowerCase().includes('deny') || entry.action.toLowerCase().includes('refus') || entry.action.toLowerCase().includes('reject')
+                        ? 'deny'
+                        : 'success'
+                    )}</td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '48px 20px', textAlign: 'center', color: 'oklch(52% 0.012 260)', fontSize: 13 }}>
+                      Aucune entrée trouvée
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid oklch(90% 0.006 260)', flexWrap: 'wrap', gap: 8 }}>
           <span style={{ fontSize: 12, color: 'oklch(52% 0.012 260)' }}>
             Affichage de {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} / {filtered.length.toLocaleString('fr-FR')} entrées
           </span>

@@ -272,7 +272,7 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
       </div>
 
       {/* Two-col 1fr 2fr */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 20, alignItems: 'start' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-5 items-start">
 
         {/* Left: template list */}
         <div style={card}>
@@ -385,7 +385,7 @@ export function Rapports({ members, platforms, accessRights, subscriptions, syst
             <div style={cardHeader}>
               <span style={{ fontSize: 13, fontWeight: 600, color: FG }}>Indicateurs clés</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            <div className="grid grid-cols-2 sm:grid-cols-3">
               {KPI_CELLS.map((k, i) => (
                 <div key={i} style={{ padding: '18px 20px', borderRight: i % 3 !== 2 ? `1px solid ${BORDER}` : 'none', borderBottom: i < 3 ? `1px solid ${BORDER}` : 'none' }}>
                   <div style={{ fontSize: 11, color: MUTED, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{k.label}</div>

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 import { createAuditEntry, getClientIp } from '../middleware/audit';
 import { getLimits, checkLimit } from '../services/plan.service';
 import { parsePagination, paginatedResult } from '../utils/pagination';
@@ -37,7 +38,7 @@ const PlatformSchema = z.object({
 });
 
 // GET /api/platforms
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', requirePermission('platforms.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const { search, status, environment, category } = req.query;
   const pagination = parsePagination(req);
@@ -72,7 +73,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/platforms/:id
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', requirePermission('platforms.read'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const platform = await prisma.platform.findFirst({
     where: { id: req.params.id, organization_id: orgId },
@@ -92,7 +93,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/platforms
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requirePermission('platforms.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
   const body = PlatformSchema.parse(req.body);
 
@@ -128,7 +129,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // PUT /api/platforms/:id
-router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+router.put('/:id', requirePermission('platforms.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await prisma.platform.findFirst({
@@ -163,7 +164,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // DELETE /api/platforms/:id
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', requirePermission('platforms.write'), async (req: Request, res: Response): Promise<void> => {
   const orgId = req.user!.organizationId;
 
   const existing = await prisma.platform.findFirst({

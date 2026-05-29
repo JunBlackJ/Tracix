@@ -12,6 +12,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 interface AlertesProps {
   onResolveAlert: (id: string) => void;
   onResolveAll: (ids: string[]) => void;
+  onClearResolved?: () => void;
   alerts: Alert[];
 }
 
@@ -431,7 +432,7 @@ function AdviceModal({ alert, onClose, onResolve }: { alert: Alert; onClose: () 
 
 type TabFilter = 'all' | 'critical' | 'warning' | 'closed';
 
-export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) {
+export function Alertes({ onResolveAlert, onResolveAll, onClearResolved, alerts }: AlertesProps) {
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<TabFilter>('all');
   const [search, setSearch] = useState('');
@@ -481,6 +482,12 @@ export function Alertes({ onResolveAlert, onResolveAll, alerts }: AlertesProps) 
             style={{ alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'transparent', color: 'oklch(52% 0.012 260)', border: '1px solid oklch(90% 0.006 260)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }}>
             Configurer les règles
           </Link>
+          {onClearResolved && closedAlerts.length > 0 && (
+            <button onClick={onClearResolved}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(55% 0.22 25 / 0.08)', color: 'oklch(55% 0.22 25)', border: '1px solid oklch(55% 0.22 25 / 0.2)', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>
+              Vider clôturées ({closedAlerts.length})
+            </button>
+          )}
           {unresolvedIds.length > 0 && (
             <button onClick={() => onResolveAll(unresolvedIds)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: 'oklch(42% 0.18 280)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12.5px', fontWeight: 500, cursor: 'pointer' }}>

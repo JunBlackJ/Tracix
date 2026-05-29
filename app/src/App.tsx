@@ -233,6 +233,7 @@ function App() {
               <Alertes
                 onResolveAlert={store.resolveAlert}
                 onResolveAll={store.resolveAllAlerts}
+                onClearResolved={store.clearResolvedAlerts}
                 alerts={store.alerts}
               />
             }
